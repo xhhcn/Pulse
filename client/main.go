@@ -1699,11 +1699,13 @@ func getVirtualizationType() string {
 		}
 	}
 	
-	// Check /proc/cpuinfo for virtualization flags
-	cmd = exec.Command("sh", "-c", "grep -E 'hypervisor|vmx|svm' /proc/cpuinfo | head -1")
+	// Check /proc/cpuinfo for hypervisor flag (indicates running in VM)
+	// Note: vmx/svm flags indicate CPU *supports* virtualization, NOT that we're in a VM
+	// Only 'hypervisor' flag in the flags line indicates we're running in a VM
+	cmd = exec.Command("sh", "-c", "grep '^flags' /proc/cpuinfo | head -1 | grep -w 'hypervisor'")
 	output, err = cmd.Output()
 	if err == nil && len(strings.TrimSpace(string(output))) > 0 {
-		// Found virtualization flags - it's a VPS
+		// Found hypervisor flag - it's a VPS
 		result := "VPS"
 		cacheMutex.Lock()
 		virtualizationTypeCache = result
