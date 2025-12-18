@@ -1552,19 +1552,28 @@ func getVirtualizationType() string {
 	}
 	cacheMutex.RUnlock()
 	
-	// Use gopsutil for cross-platform support
+	// Windows virtualization detection
 	if runtime.GOOS == "windows" {
 		
-		// Method 1: Check ComputerSystem Model (most reliable)
-		// Virtual machines have specific model names
+		// Method 1: Check ComputerSystem Model (most reliable for VM detection)
+		// Virtual machines have specific model names that physical servers never have
 		cmd := exec.Command("wmic", "computersystem", "get", "model", "/format:list")
 		output, err := cmd.Output()
 		if err == nil {
 			outputStr := strings.ToLower(string(output))
-			// Only check for definite VM model names
+			// Exact VM model names - these are ONLY used by virtual machines
 			vmModels := []string{
-				"vmware virtual platform", "virtual machine", "virtualbox",
-				"kvm", "qemu", "xen", "hvm domu", "bochs",
+				"vmware virtual platform",  // VMware
+				"vmware7,1",                // VMware Fusion
+				"virtual machine",          // Hyper-V VM
+				"virtualbox",               // VirtualBox
+				"kvm",                       // KVM
+				"qemu",                      // QEMU
+				"hvm domu",                 // Xen HVM
+				"bochs",                    // Bochs
+				"amazon ec2",               // AWS
+				"google compute engine",    // GCP
+				"droplet",                  // DigitalOcean
 			}
 			for _, model := range vmModels {
 				if strings.Contains(outputStr, model) {
@@ -1578,36 +1587,21 @@ func getVirtualizationType() string {
 			}
 		}
 		
-		// Method 2: Check BIOS SerialNumber for VM patterns
-		cmd = exec.Command("wmic", "bios", "get", "serialnumber", "/format:list")
+		// Method 2: Check BIOS Manufacturer (not SerialNumber)
+		cmd = exec.Command("wmic", "bios", "get", "manufacturer", "/format:list")
 		output, err = cmd.Output()
 		if err == nil {
 			outputStr := strings.ToLower(string(output))
-			// VMware uses specific serial number patterns
-			vmSerials := []string{"vmware", "parallels", "virtualbox"}
-			for _, serial := range vmSerials {
-				if strings.Contains(outputStr, serial) {
-					result := "VPS"
-					cacheMutex.Lock()
-					virtualizationTypeCache = result
-					virtualizationTypeCacheTime = time.Now()
-					cacheMutex.Unlock()
-					return result
-				}
+			// BIOS manufacturers that are VM-specific
+			vmBiosManufacturers := []string{
+				"vmware",      // VMware
+				"innotek",     // VirtualBox
+				"parallels",   // Parallels
+				"seabios",     // QEMU/KVM
+				"xen",         // Xen
+				"amazon ec2",  // AWS
 			}
-		}
-		
-		// Method 3: Check System Manufacturer for known VM vendors
-		cmd = exec.Command("wmic", "computersystem", "get", "manufacturer", "/format:list")
-		output, err = cmd.Output()
-		if err == nil {
-			outputStr := strings.ToLower(string(output))
-			// Only VM-specific manufacturers (not "Microsoft Corporation" which is used by Surface, etc.)
-			vmManufacturers := []string{
-				"vmware", "innotek", "qemu", "xen", "parallels", "amazon ec2",
-				"google compute engine", "digitalocean", "vultr",
-			}
-			for _, mfr := range vmManufacturers {
+			for _, mfr := range vmBiosManufacturers {
 				if strings.Contains(outputStr, mfr) {
 					result := "VPS"
 					cacheMutex.Lock()
@@ -1619,22 +1613,34 @@ func getVirtualizationType() string {
 			}
 		}
 		
-		// Method 4: Use gopsutil host.Info() as final check
-		hostInfo, err := host.Info()
+		// Method 3: Check BaseBoard (motherboard) Manufacturer
+		cmd = exec.Command("wmic", "baseboard", "get", "manufacturer", "/format:list")
+		output, err = cmd.Output()
 		if err == nil {
-			if hostInfo.VirtualizationSystem != "" && 
-			   hostInfo.VirtualizationSystem != "none" && 
-			   hostInfo.VirtualizationSystem != "physical" {
-				result := "VPS"
-				cacheMutex.Lock()
-				virtualizationTypeCache = result
-				virtualizationTypeCacheTime = time.Now()
-				cacheMutex.Unlock()
-				return result
+			outputStr := strings.ToLower(string(output))
+			// Motherboard manufacturers that are VM-specific
+			vmBaseboardMfrs := []string{
+				"vmware",
+				"oracle corporation",  // VirtualBox
+				"microsoft corporation virtual", // Azure VM (contains "virtual")
+				"qemu",
+				"xen",
+			}
+			for _, mfr := range vmBaseboardMfrs {
+				if strings.Contains(outputStr, mfr) {
+					result := "VPS"
+					cacheMutex.Lock()
+					virtualizationTypeCache = result
+					virtualizationTypeCacheTime = time.Now()
+					cacheMutex.Unlock()
+					return result
+				}
 			}
 		}
 		
-		// No virtualization detected - it's a physical server
+		// If none of the above detected VM, it's a physical server
+		// Note: We intentionally do NOT use gopsutil host.Info() here because
+		// it can return "hyperv" on physical Windows machines with Hyper-V enabled
 		result := "DS"
 		cacheMutex.Lock()
 		virtualizationTypeCache = result
