@@ -1683,13 +1683,38 @@ func getVirtualizationType() string {
 		return result
 	}
 	
-	// Check for hypervisor vendor (most reliable method) - Linux
-	cmd := exec.Command("sh", "-c", "lscpu | grep 'Hypervisor vendor' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
+	// Linux virtualization detection
+	// Method 1: systemd-detect-virt (most reliable on modern Linux)
+	cmd := exec.Command("systemd-detect-virt")
 	output, err := cmd.Output()
+	if err == nil {
+		virtType := strings.TrimSpace(string(output))
+		// "none" means physical machine, anything else means virtualized
+		if virtType != "" && virtType != "none" {
+			result := "VPS"
+			cacheMutex.Lock()
+			virtualizationTypeCache = result
+			virtualizationTypeCacheTime = time.Now()
+			cacheMutex.Unlock()
+			return result
+		}
+		// If systemd-detect-virt returns "none", it's definitely a physical server
+		if virtType == "none" {
+			result := "DS"
+			cacheMutex.Lock()
+			virtualizationTypeCache = result
+			virtualizationTypeCacheTime = time.Now()
+			cacheMutex.Unlock()
+			return result
+		}
+	}
+	
+	// Method 2: Check for hypervisor vendor in lscpu (fallback if systemd-detect-virt not available)
+	cmd = exec.Command("sh", "-c", "lscpu 2>/dev/null | grep -i 'Hypervisor vendor' | cut -d':' -f2")
+	output, err = cmd.Output()
 	if err == nil {
 		hypervisor := strings.TrimSpace(string(output))
 		if hypervisor != "" {
-			// Has hypervisor - it's a VPS
 			result := "VPS"
 			cacheMutex.Lock()
 			virtualizationTypeCache = result
@@ -1699,13 +1724,10 @@ func getVirtualizationType() string {
 		}
 	}
 	
-	// Check /proc/cpuinfo for hypervisor flag (indicates running in VM)
-	// Note: vmx/svm flags indicate CPU *supports* virtualization, NOT that we're in a VM
-	// Only 'hypervisor' flag in the flags line indicates we're running in a VM
-	cmd = exec.Command("sh", "-c", "grep '^flags' /proc/cpuinfo | head -1 | grep -w 'hypervisor'")
+	// Method 3: Check /proc/cpuinfo for hypervisor flag
+	cmd = exec.Command("sh", "-c", "grep -w 'hypervisor' /proc/cpuinfo 2>/dev/null")
 	output, err = cmd.Output()
 	if err == nil && len(strings.TrimSpace(string(output))) > 0 {
-		// Found hypervisor flag - it's a VPS
 		result := "VPS"
 		cacheMutex.Lock()
 		virtualizationTypeCache = result
@@ -1714,30 +1736,14 @@ func getVirtualizationType() string {
 		return result
 	}
 	
-	// Check systemd-detect-virt if available
-	cmd = exec.Command("systemd-detect-virt")
-	output, err = cmd.Output()
-	if err == nil {
-		virtType := strings.TrimSpace(string(output))
-		if virtType != "" && virtType != "none" {
-			// Detected virtualization - it's a VPS
-			result := "VPS"
-			cacheMutex.Lock()
-			virtualizationTypeCache = result
-			virtualizationTypeCacheTime = time.Now()
-			cacheMutex.Unlock()
-			return result
-		}
-	}
-	
-	// Check /sys/class/dmi/id/product_name for common VPS indicators
-	cmd = exec.Command("sh", "-c", "cat /sys/class/dmi/id/product_name 2>/dev/null | tr '[:upper:]' '[:lower:]'")
+	// Method 4: Check DMI for known virtualization products
+	cmd = exec.Command("sh", "-c", "cat /sys/class/dmi/id/product_name 2>/dev/null")
 	output, err = cmd.Output()
 	if err == nil {
 		productName := strings.ToLower(strings.TrimSpace(string(output)))
-		// Common VPS product names
-		vpsIndicators := []string{"vmware", "virtualbox", "kvm", "qemu", "xen", "hyper-v", "parallels", "vps", "cloud"}
-		for _, indicator := range vpsIndicators {
+		// Only check for definite VM indicators (not "cloud" which could be physical cloud servers)
+		vmIndicators := []string{"vmware", "virtualbox", "kvm", "qemu", "xen", "hyper-v", "parallels", "bochs", "virtual machine"}
+		for _, indicator := range vmIndicators {
 			if strings.Contains(productName, indicator) {
 				result := "VPS"
 				cacheMutex.Lock()
@@ -1749,20 +1755,7 @@ func getVirtualizationType() string {
 		}
 	}
 	
-	// Check /proc/1/cgroup for container indicators (containers are also VPS-like)
-	cmd = exec.Command("sh", "-c", "grep -q 'docker\\|lxc\\|containerd' /proc/1/cgroup 2>/dev/null")
-	err = cmd.Run()
-	if err == nil {
-		// Running in container - consider as VPS
-		result := "VPS"
-		cacheMutex.Lock()
-		virtualizationTypeCache = result
-		virtualizationTypeCacheTime = time.Now()
-		cacheMutex.Unlock()
-		return result
-	}
-	
-	// If none of the above checks indicate virtualization, assume it's a dedicated server
+	// If none of the above detected virtualization, it's a dedicated server
 	result := "DS"
 	cacheMutex.Lock()
 	virtualizationTypeCache = result
