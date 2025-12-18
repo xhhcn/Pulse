@@ -1,24 +1,12 @@
 services:
   pulse:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: pulse-monitor:latest
+    image: xhh1128/pulse:latest
     container_name: pulse-monitor
     ports:
       - "${PORT:-8008}:8008"
     volumes:
-      # Persist database
       - pulse-data:/app/data
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8008/healthz"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
 
 volumes:
   pulse-data:
-    driver: local
-
