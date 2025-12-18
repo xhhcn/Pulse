@@ -994,10 +994,20 @@ func getDiskUsage() float64 {
 		return 0.0
 	}
 	
-	// Get disk usage percentage for all mounted filesystems (Linux)
-	// Use df -B1 to get exact byte values (not human-readable)
-	// Use %.0f format to avoid integer overflow in awk (32-bit int max is 2147483647)
-	cmd := exec.Command("sh", "-c", "df -B1 --exclude-type=tmpfs --exclude-type=devtmpfs --exclude-type=squashfs 2>/dev/null | tail -n +2 | awk '{total+=$2; used+=$3} END {if (total>0) printf \"%.1f\\n\", (used/total)*100; else print \"0\"}'")
+	// Get disk usage percentage for LOCAL physical filesystems only (Linux)
+	// Only include /dev/* devices, exclude virtual/network filesystems, track unique devices
+	cmd := exec.Command("sh", "-c", `df -B1 -T 2>/dev/null | tail -n +2 | awk '
+		$1 ~ /^\/dev\// && 
+		$2 !~ /^(tmpfs|devtmpfs|squashfs|overlay|aufs|nfs|nfs4|cifs|smb|smbfs|fuse|sshfs|proc|sysfs|debugfs|securityfs|cgroup|cgroup2|pstore|bpf|tracefs|hugetlbfs|mqueue|configfs|fusectl|efivarfs|binfmt_misc|devpts|ramfs)$/ {
+			if (!seen[$1]++) {
+				total += $3
+				used += $4
+			}
+		}
+		END {
+			if (total > 0) printf "%.1f\n", (used/total)*100
+			else print "0"
+		}'`)
 	output, err := cmd.Output()
 	if err == nil {
 		outputStr := strings.TrimSpace(string(output))
@@ -1964,10 +1974,24 @@ func getDiskInfo() string {
 		return ""
 	}
 	
-	// Get total disk size and used space from all mounted filesystems (Linux)
-	// Use df -B1 to get exact byte values, then convert to human-readable
-	// Use %.0f format to avoid integer overflow in awk (32-bit int max is 2147483647)
-	cmd := exec.Command("sh", "-c", "df -B1 --exclude-type=tmpfs --exclude-type=devtmpfs --exclude-type=squashfs 2>/dev/null | tail -n +2 | awk '{total+=$2; used+=$3} END {if (total>0) printf \"%.0f %.0f\\n\", used+0.0, total+0.0; else print \"0 0\"}'")
+	// Get total disk size and used space from LOCAL physical filesystems only (Linux)
+	// Exclude: tmpfs, devtmpfs, squashfs, overlay, aufs (containers)
+	// Exclude: nfs, nfs4, cifs, smb, smbfs, fuse, sshfs (network)
+	// Exclude: proc, sysfs, debugfs, securityfs, cgroup, etc. (virtual)
+	// Also filter to only include /dev/* devices to avoid duplicates
+	cmd := exec.Command("sh", "-c", `df -B1 -T 2>/dev/null | tail -n +2 | awk '
+		$1 ~ /^\/dev\// && 
+		$2 !~ /^(tmpfs|devtmpfs|squashfs|overlay|aufs|nfs|nfs4|cifs|smb|smbfs|fuse|sshfs|proc|sysfs|debugfs|securityfs|cgroup|cgroup2|pstore|bpf|tracefs|hugetlbfs|mqueue|configfs|fusectl|efivarfs|binfmt_misc|devpts|ramfs)$/ {
+			# Track unique devices to avoid double counting
+			if (!seen[$1]++) {
+				total += $3
+				used += $4
+			}
+		}
+		END {
+			if (total > 0) printf "%.0f %.0f\n", used+0.0, total+0.0
+			else print "0 0"
+		}'`)
 	output, err := cmd.Output()
 	if err == nil {
 		outputStr := strings.TrimSpace(string(output))
@@ -1976,7 +2000,6 @@ func getDiskInfo() string {
 			fields := strings.Fields(outputStr)
 			if len(fields) >= 2 {
 				// Parse as uint64 to handle large numbers
-				// First try parsing as float then convert to uint64 to handle scientific notation
 				var usedFloat, totalFloat float64
 				_, err1 := fmt.Sscanf(fields[0], "%f", &usedFloat)
 				_, err2 := fmt.Sscanf(fields[1], "%f", &totalFloat)
@@ -1986,7 +2009,6 @@ func getDiskInfo() string {
 					totalBytes = uint64(totalFloat)
 					
 					if totalBytes > 0 && usedBytes <= totalBytes {
-						// Convert bytes to human-readable format
 						usedStr := formatBytes(usedBytes)
 						totalStr := formatBytes(totalBytes)
 						return fmt.Sprintf("%s / %s", usedStr, totalStr)
