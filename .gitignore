@@ -8,8 +8,11 @@ coverage/
 
 # Compiled binaries
 *.exe
-probe-server
-probe-client
+server/probe-server
+# Keep client binaries for distribution
+!client/probe-client
+!client/probe-client.exe
+!client/probe-client-arm64
 
 # Database and data files
 *.db
