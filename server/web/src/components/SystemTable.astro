@@ -108,20 +108,57 @@ const pollMs = Number(pollMsProp ?? 5000);
   const countryToFlag = (country) => {
     if (!country) return null;
     
-    const countryLower = country.toLowerCase().trim();
+    let countryLower = country.toLowerCase().trim();
+    
+    // Remove common prefixes that don't appear in flag names
+    const prefixesToRemove = [
+      'the ',
+      'republic of ',
+      'kingdom of ',
+      'state of ',
+      'island of ',
+      'islands of ',
+      'federation of ',
+      'union of ',
+      'commonwealth of ',
+      'democratic republic of ',
+      'democratic republic of the ',
+      'people\'s republic of ',
+      'republic of the ',
+      'united states of ',
+      'united kingdom of ',
+    ];
+    
+    // Remove prefixes
+    for (const prefix of prefixesToRemove) {
+      if (countryLower.startsWith(prefix)) {
+        countryLower = countryLower.substring(prefix.length);
+        break; // Only remove one prefix
+      }
+    }
     
     // Special mappings for countries that need specific flag names
     const specialFlagMap = {
       'hong kong': 'hong-kong-sar-china',
       'hongkong': 'hong-kong-sar-china',
+      'netherlands': 'netherlands', // Explicit mapping for "The Netherlands"
       'usa': 'united-states',
       'us': 'united-states',
+      'united states': 'united-states',
       'uk': 'united-kingdom',
+      'united kingdom': 'united-kingdom',
       'uae': 'united-arab-emirates',
+      'united arab emirates': 'united-arab-emirates',
       'korea': 'south-korea',
+      'south korea': 'south-korea',
+      'north korea': 'north-korea',
+      'czech republic': 'czech-republic',
+      'russian federation': 'russia',
+      'myanmar': 'myanmar',
+      'burma': 'myanmar',
     };
     
-    // Check if there's a special mapping
+    // Check if there's a special mapping (after prefix removal)
     if (specialFlagMap[countryLower]) {
       return `emojione-v1:flag-for-${specialFlagMap[countryLower]}`;
     }
