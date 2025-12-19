@@ -1094,41 +1094,106 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 }
 
 // Get country from IP address using free IP geolocation API
+// Uses multiple services with fallback for better reliability, especially for China
 func getCountryFromIP(ip string) string {
 	if ip == "" || ip == "127.0.0.1" || strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "172.") {
 		// Skip private/local IPs
 		return ""
 	}
 	
-	// Use ip-api.com free service (no API key required, 45 requests/minute limit)
-	url := fmt.Sprintf("http://ip-api.com/json/%s?fields=status,country,countryCode", ip)
-	
-	client := &http.Client{
-		Timeout: 2 * time.Second,
-	}
-	
-	resp, err := client.Get(url)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
+	// Use shared HTTP client for connection reuse
+	httpClient := getSharedHTTPClient()
+	if httpClient == nil {
 		return ""
 	}
 	
-	var result struct {
-		Status      string `json:"status"`
-		Country     string `json:"country"`
-		CountryCode string `json:"countryCode"`
+	// Try multiple services with fallback for better reliability
+	// Some services may be blocked in China, so we try multiple options
+	services := []struct {
+		url    string
+		parser func(*http.Response) string
+	}{
+		{
+			// ip-api.com (may be blocked in China, but try first)
+			url: fmt.Sprintf("http://ip-api.com/json/%s?fields=status,country,countryCode", ip),
+			parser: func(resp *http.Response) string {
+				var result struct {
+					Status      string `json:"status"`
+					Country     string `json:"country"`
+					CountryCode string `json:"countryCode"`
+				}
+				if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+					return ""
+				}
+				if result.Status == "success" && result.Country != "" {
+					return result.Country
+				}
+				return ""
+			},
+		},
+		{
+			// ipapi.co (alternative service, may work better in China)
+			url: fmt.Sprintf("https://ipapi.co/%s/json/", ip),
+			parser: func(resp *http.Response) string {
+				var result struct {
+					CountryName string `json:"country_name"`
+					Country     string `json:"country"`
+				}
+				if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+					return ""
+				}
+				if result.CountryName != "" {
+					return result.CountryName
+				}
+				return ""
+			},
+		},
+		{
+			// ip-api.io (another alternative)
+			url: fmt.Sprintf("https://ip-api.io/json/%s", ip),
+			parser: func(resp *http.Response) string {
+				var result struct {
+					CountryName string `json:"country_name"`
+					Country     string `json:"country_code"`
+				}
+				if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+					return ""
+				}
+				if result.CountryName != "" {
+					return result.CountryName
+				}
+				return ""
+			},
+		},
 	}
 	
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return ""
-	}
+	// Try each service with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	
-	if result.Status == "success" && result.Country != "" {
-		return result.Country
+	for _, service := range services {
+		req, err := http.NewRequestWithContext(ctx, "GET", service.url, nil)
+		if err != nil {
+			continue
+		}
+		
+		req.Header.Set("User-Agent", "PulseMonitor/1.0")
+		req.Header.Set("Accept", "application/json")
+		
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			continue
+		}
+		
+		if resp.StatusCode == http.StatusOK {
+			country := service.parser(resp)
+			resp.Body.Close()
+			if country != "" {
+				return country
+			}
+		} else {
+			resp.Body.Close()
+		}
 	}
 	
 	return ""
