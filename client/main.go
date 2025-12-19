@@ -159,8 +159,13 @@ func getLocalIP() string {
 	}
 	defer conn.Close()
 	
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP.String()
+	// Safe type assertion to prevent panic
+	localAddr := conn.LocalAddr()
+	udpAddr, ok := localAddr.(*net.UDPAddr)
+	if !ok {
+		return ""
+	}
+	return udpAddr.IP.String()
 }
 
 // startPeriodicRegistration maintains connection with server by periodically re-registering

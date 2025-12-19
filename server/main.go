@@ -198,8 +198,13 @@ func getServerIP() string {
 	}
 	defer conn.Close()
 	
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP.String()
+	// Safe type assertion to prevent panic
+	localAddr := conn.LocalAddr()
+	udpAddr, ok := localAddr.(*net.UDPAddr)
+	if !ok {
+		return ""
+	}
+	return udpAddr.IP.String()
 }
 
 func (r *ClientRegistry) GetAll() []*ClientInfo {
@@ -608,7 +613,9 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 
 	
 	// Broadcast update to all connected clients
-	broker.Broadcast(`{"type":"metric_updated","id":"` + metric.ID + `"}`)
+	if broker != nil {
+		broker.Broadcast(`{"type":"metric_updated","id":"` + metric.ID + `"}`)
+	}
 	
 	writeJSON(w, http.StatusAccepted, metric)
 }
@@ -636,7 +643,9 @@ func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistr
 	registry.Remove(id)
 	
 	// Broadcast deletion to all connected clients
-	broker.Broadcast(`{"type":"metric_deleted","id":"` + id + `"}`)
+	if broker != nil {
+		broker.Broadcast(`{"type":"metric_deleted","id":"` + id + `"}`)
+	}
 	
 	writeJSON(w, http.StatusOK, map[string]string{"message": "deleted", "id": id})
 }
@@ -721,7 +730,8 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 	
-	// Track consecutive failures for each client
+	// Track consecutive failures for each client - MUST use mutex for concurrent access
+	var failureCountMu sync.RWMutex
 	failureCount := make(map[string]int)
 	const maxFailures = 30 // Remove from registry after 30 consecutive failures (90 seconds) - very tolerant for cross-continent networks (e.g., Australia-Russia)
 	
@@ -739,43 +749,62 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 		var mu sync.Mutex
 		var updatedClientIDs []string
 		
+		// Poll all clients in parallel - skip health check to avoid blocking
+		// Health checks can be slow and cause false negatives, so we poll directly
+		// This ensures we always try to get data, even if health check would fail
 		for _, client := range clients {
-			// First check if client is actually connected/available
-			// Only mark as offline after 2 consecutive failures to avoid false negatives
-			if !isClientConnected(client) {
-				failureCount[client.ID]++
-				
-				// Only mark as offline after 2 consecutive failures to avoid false negatives
-				// This prevents temporary network glitches from causing false offline status
-				if failureCount[client.ID] >= 2 {
-					// Mark system as offline in database after 2 consecutive failures
-					if failureCount[client.ID] == 2 {
-						go markSystemAsOffline(store, broker, client.ID)
-					}
-					
-					// Remove from registry after max failures to stop polling
-					if failureCount[client.ID] >= maxFailures {
-						registry.Remove(client.ID)
-						delete(failureCount, client.ID)
-					}
-				}
+			// Safety check: skip nil clients or clients with empty ID/URL
+			if client == nil || client.ID == "" || client.URL == "" {
 				continue
 			}
 			
-			// Client is connected, reset failure count and proceed with polling
-			if failureCount[client.ID] > 0 {
-				delete(failureCount, client.ID)
-			}
-			
-			// Client is connected, proceed with polling
 			wg.Add(1)
 			go func(c *ClientInfo) {
 				defer wg.Done()
+				
+				// Additional safety check inside goroutine
+				if c == nil || c.ID == "" || c.URL == "" {
+					return
+				}
+				
+				// Try to poll client directly - this is faster and more reliable than health check
+				// pollClient has its own timeout (8s) which is sufficient for cross-continent networks
 				updated := pollClient(store, c, ipCache)
+				
 				if updated {
+					// Polling succeeded, reset failure count
+					failureCountMu.Lock()
+					if failureCount[c.ID] > 0 {
+						delete(failureCount, c.ID)
+					}
+					failureCountMu.Unlock()
+					
 					mu.Lock()
 					updatedClientIDs = append(updatedClientIDs, c.ID)
 					mu.Unlock()
+				} else {
+					// Polling failed, increment failure count
+					failureCountMu.Lock()
+					failureCount[c.ID]++
+					currentCount := failureCount[c.ID]
+					failureCountMu.Unlock()
+					
+					// Only mark as offline after 2 consecutive failures to avoid false negatives
+					// This prevents temporary network glitches from causing false offline status
+					if currentCount >= 2 {
+						// Mark system as offline in database after 2 consecutive failures
+						if currentCount == 2 {
+							go markSystemAsOffline(store, broker, c.ID)
+						}
+						
+						// Remove from registry after max failures to stop polling
+						if currentCount >= maxFailures {
+							registry.Remove(c.ID)
+							failureCountMu.Lock()
+							delete(failureCount, c.ID)
+							failureCountMu.Unlock()
+						}
+					}
 				}
 			}(client)
 		}
@@ -808,12 +837,19 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 		
 		// Always broadcast to maintain 3-second update frequency
 		// Frontend will check if data actually changed and update accordingly
-		broker.Broadcast(`{"type":"metric_updated","count":` + fmt.Sprintf("%d", count) + `}`)
+		if broker != nil {
+			broker.Broadcast(`{"type":"metric_updated","count":` + fmt.Sprintf("%d", count) + `}`)
+		}
 	}
 }
 
 // markSystemAsOffline marks a system as offline in the database
 func markSystemAsOffline(store *Store, broker *SSEBroker, systemID string) {
+	// Safety checks: prevent nil pointer dereference
+	if store == nil || broker == nil || systemID == "" {
+		return
+	}
+	
 	existing, err := store.Get(systemID)
 	if err != nil || existing == nil {
 		return // System doesn't exist, nothing to update
@@ -831,7 +867,9 @@ func markSystemAsOffline(store *Store, broker *SSEBroker, systemID string) {
 		}
 		
 		// Broadcast update to frontend immediately
-		broker.Broadcast(`{"type":"metric_updated","id":"` + systemID + `"}`)
+		if broker != nil {
+			broker.Broadcast(`{"type":"metric_updated","id":"` + systemID + `"}`)
+		}
 	}
 }
 
@@ -899,12 +937,24 @@ func isClientConnected(client *ClientInfo) bool {
 }
 
 func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool {
+	// Safety checks: prevent nil pointer dereference
+	if client == nil || client.URL == "" || client.ID == "" {
+		return false
+	}
+	if store == nil || ipCache == nil {
+		return false
+	}
+	
 	// Use shared HTTP client for connection reuse and efficiency
 	httpClient := getSharedHTTPClient()
+	if httpClient == nil {
+		return false
+	}
 	
 	// Create request with context for timeout control
-	// 20 second timeout - increased for cross-continent networks (e.g., Australia-Russia ~300ms RTT)
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second) // Increased from 8s to 20s for high-latency networks
+	// Use shorter timeout (8s) to avoid blocking the 3s polling cycle
+	// This ensures we can complete polling within the 2.8s wait window
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second) // Reduced from 20s to 8s to prevent blocking
 	defer cancel()
 	
 	// Request metrics from client
@@ -915,7 +965,7 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	}
 	
 	// Set proper headers for connection reuse and efficiency
-		req.Header.Set("User-Agent", "PulseMonitor/1.0")
+	req.Header.Set("User-Agent", "PulseMonitor/1.0")
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Encoding", "gzip, deflate") // Enable compression
@@ -1116,7 +1166,9 @@ func handleUpdateOrder(store *Store, broker *SSEBroker, w http.ResponseWriter, r
 	
 	
 	// Broadcast order change to all connected clients
-	broker.Broadcast(`{"type":"order_updated","count":` + fmt.Sprintf("%d", len(payload.Order)) + `}`)
+	if broker != nil {
+		broker.Broadcast(`{"type":"order_updated","count":` + fmt.Sprintf("%d", len(payload.Order)) + `}`)
+	}
 	
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "order updated",
@@ -1431,6 +1483,11 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 		}
 		
 		for _, client := range clients {
+			// Safety check: skip nil clients or clients with empty ID/URL
+			if client == nil || client.ID == "" || client.URL == "" {
+				continue
+			}
+			
 			// Only send tcping to connected clients
 			if !isClientConnected(client) {
 				continue
@@ -1438,7 +1495,17 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 			
 			// Send tcping request for each target
 			for _, target := range config.Targets {
+				// Safety check: skip empty target address
+				if target.Address == "" {
+					continue
+				}
+				
 				go func(c *ClientInfo, tgt TCPingTargetEntry) {
+					// Additional safety check inside goroutine
+					if c == nil || c.ID == "" || c.URL == "" || tgt.Address == "" {
+						return
+					}
+					
 					url := c.URL + "/tcping"
 					// Send target address in request body
 					tcpingRequest := map[string]string{
