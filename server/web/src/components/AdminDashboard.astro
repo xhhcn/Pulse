@@ -2857,6 +2857,18 @@ const apiBase = apiBaseProp ?? '';
     }
   });
 
+  // Debounce loadSystems to prevent duplicate updates
+  let loadSystemsTimeout = null;
+  const debouncedLoadSystems = () => {
+    if (loadSystemsTimeout) {
+      clearTimeout(loadSystemsTimeout);
+    }
+    loadSystemsTimeout = setTimeout(() => {
+      loadSystems();
+      loadSystemsTimeout = null;
+    }, 100); // 100ms debounce - prevents rapid consecutive calls
+  };
+
   // Connect to SSE for real-time updates from other clients or agents
   function connectSSE() {
     if (eventSource) {
@@ -2875,7 +2887,8 @@ const apiBase = apiBaseProp ?? '';
       // Reload when metrics are updated or deleted (incremental update will handle changes)
       // (order updates are handled locally by drag & drop)
       if (update.type === 'metric_updated' || update.type === 'metric_deleted') {
-  loadSystems();
+        // Use debounced loadSystems to prevent duplicate updates from rapid SSE events
+        debouncedLoadSystems();
       }
     });
 

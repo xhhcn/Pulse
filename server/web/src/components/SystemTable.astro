@@ -2521,6 +2521,18 @@ const pollMs = Number(pollMsProp ?? 5000);
     }
   }
 
+  // Debounce loadData to prevent duplicate updates
+  let loadDataTimeout = null;
+  const debouncedLoadData = () => {
+    if (loadDataTimeout) {
+      clearTimeout(loadDataTimeout);
+    }
+    loadDataTimeout = setTimeout(() => {
+      loadData();
+      loadDataTimeout = null;
+    }, 100); // 100ms debounce - prevents rapid consecutive calls
+  };
+
   // Connect to SSE for real-time updates
   function connectSSE() {
     if (eventSource) {
@@ -2539,8 +2551,8 @@ const pollMs = Number(pollMsProp ?? 5000);
           
           // Reload data when any update is received (incremental update will handle changes)
           if (update.type === 'metric_updated' || update.type === 'order_updated' || update.type === 'metric_deleted') {
-            // Force reload to get latest status
-            loadData();
+            // Use debounced loadData to prevent duplicate updates from rapid SSE events
+            debouncedLoadData();
             
             // Update tcping charts for visible expanded rows (incremental update only)
             document.querySelectorAll('.system-details:not(.hidden)').forEach(detailsSection => {
