@@ -167,9 +167,9 @@ func getLocalIP() string {
 // This handles: 1) Server restart, 2) Client removed from registry due to failures, 3) Network recovery
 func startPeriodicRegistration() {
 	// Wait for initial registration to complete
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second) // Reduced from 10s to 5s for faster recovery
 	
-	ticker := time.NewTicker(10 * time.Second) // Very frequent heartbeat (10s) for stable connection like LAN
+	ticker := time.NewTicker(5 * time.Second) // More frequent heartbeat (5s) for faster recovery and stability
 	defer ticker.Stop()
 	
 	

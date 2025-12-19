@@ -449,14 +449,16 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// Mark systems as offline if they haven't updated in the last 10 seconds
+	// Mark systems as offline if they haven't updated in the last 5 seconds
+	// This matches the 3-second polling interval with a 2-second buffer for network delays
 	// Also mark as offline if UpdatedAt is zero (newly added systems)
 	now := time.Now().UTC()
 	authenticated := isAuthenticated(r)
 	
 	for i := range metrics {
 		// Check if system should be marked as offline based on update time
-		shouldBeOffline := metrics[i].UpdatedAt.IsZero() || now.Sub(metrics[i].UpdatedAt) > 10*time.Second
+		// Use 5 seconds threshold (3s polling + 2s buffer) to ensure accurate status
+		shouldBeOffline := metrics[i].UpdatedAt.IsZero() || now.Sub(metrics[i].UpdatedAt) > 5*time.Second
 		
 		// Always calculate Alert based on update time for consistency
 		// This ensures the status is always accurate based on the latest update
@@ -739,18 +741,23 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 		
 		for _, client := range clients {
 			// First check if client is actually connected/available
+			// Only mark as offline after 2 consecutive failures to avoid false negatives
 			if !isClientConnected(client) {
 				failureCount[client.ID]++
 				
-				// Mark system as offline in database immediately on first failure
-				if failureCount[client.ID] == 1 {
-					go markSystemAsOffline(store, broker, client.ID)
-				}
-				
-				// Remove from registry after max failures to stop polling
-				if failureCount[client.ID] >= maxFailures {
-					registry.Remove(client.ID)
-					delete(failureCount, client.ID)
+				// Only mark as offline after 2 consecutive failures to avoid false negatives
+				// This prevents temporary network glitches from causing false offline status
+				if failureCount[client.ID] >= 2 {
+					// Mark system as offline in database after 2 consecutive failures
+					if failureCount[client.ID] == 2 {
+						go markSystemAsOffline(store, broker, client.ID)
+					}
+					
+					// Remove from registry after max failures to stop polling
+					if failureCount[client.ID] >= maxFailures {
+						registry.Remove(client.ID)
+						delete(failureCount, client.ID)
+					}
 				}
 				continue
 			}
@@ -781,25 +788,27 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 			close(done)
 		}()
 		
-		// Maximum wait time is 2.5 seconds to ensure we can broadcast before next tick
+		// Maximum wait time is 2.8 seconds to ensure we can broadcast before next tick (3s interval)
+		// This gives clients more time to respond while still maintaining 3s update frequency
 		select {
 		case <-done:
 			// All clients responded in time
-		case <-time.After(2500 * time.Millisecond):
+		case <-time.After(2800 * time.Millisecond):
 			// Timeout - proceed with whatever updates we have
 			// Slow clients will complete in background and update DB
 			// Their data will be included in next broadcast
 		}
 		
-		// Broadcast all updates at once if there are any
+		// Broadcast all updates at once
+		// Always broadcast every 3 seconds to ensure frontend gets updates even if no data changed
+		// This maintains the 3-second update frequency for all metrics (except TCPing)
 		mu.Lock()
 		count := len(updatedClientIDs)
 		mu.Unlock()
 		
-		if count > 0 {
-			// Broadcast a single update event that triggers frontend to reload all data
-			broker.Broadcast(`{"type":"metric_updated","count":` + fmt.Sprintf("%d", count) + `}`)
-		}
+		// Always broadcast to maintain 3-second update frequency
+		// Frontend will check if data actually changed and update accordingly
+		broker.Broadcast(`{"type":"metric_updated","count":` + fmt.Sprintf("%d", count) + `}`)
 	}
 }
 
@@ -827,35 +836,66 @@ func markSystemAsOffline(store *Store, broker *SSEBroker, systemID string) {
 }
 
 // isClientConnected checks if a client is actually reachable and responding
+// Uses retry logic to avoid false negatives due to temporary network issues
 func isClientConnected(client *ClientInfo) bool {
 	// Use shared HTTP client for connection reuse
 	httpClient := getSharedHTTPClient()
 	
-	// Create a request with reasonable timeout for health check (longer for cross-continent networks)
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second) // Increased from 4s to 8s for high-latency networks
-	defer cancel()
-	
-	// Try to reach the health endpoint first (faster than /metrics)
-	healthURL := client.URL + "/health"
-	req, err := http.NewRequestWithContext(ctx, "GET", healthURL, nil)
-	if err != nil {
-		return false
-	}
-	
-	// Set proper headers for connection reuse
+	// Retry health check up to 2 times with shorter timeout to avoid blocking
+	// This prevents false negatives from temporary network glitches
+	maxRetries := 2
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Use shorter timeout for health check (5s) to avoid blocking polling
+		// If health check fails, we'll retry once more
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		
+		// Try to reach the health endpoint first (faster than /metrics)
+		healthURL := client.URL + "/health"
+		req, err := http.NewRequestWithContext(ctx, "GET", healthURL, nil)
+		if err != nil {
+			cancel()
+			if attempt < maxRetries-1 {
+				time.Sleep(100 * time.Millisecond) // Brief delay before retry
+				continue
+			}
+			return false
+		}
+		
+		// Set proper headers for connection reuse
 		req.Header.Set("User-Agent", "PulseMonitor/1.0")
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Accept", "*/*")
-	
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		// Health check failed, client is not connected
+		req.Header.Set("Connection", "keep-alive")
+		req.Header.Set("Accept", "*/*")
+		
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			cancel()
+			// If this is not the last attempt, retry
+			if attempt < maxRetries-1 {
+				time.Sleep(100 * time.Millisecond) // Brief delay before retry
+				continue
+			}
+			// Health check failed after all retries
+			return false
+		}
+		
+		statusOK := resp.StatusCode == http.StatusOK
+		resp.Body.Close()
+		cancel()
+		
+		if statusOK {
+			return true
+		}
+		
+		// If status is not OK and not last attempt, retry
+		if attempt < maxRetries-1 {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		
 		return false
 	}
-	defer resp.Body.Close()
 	
-	// Client responded, check if it's a valid response
-	return resp.StatusCode == http.StatusOK
+	return false
 }
 
 func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool {

@@ -1,6 +1,6 @@
 services:
   pulse:
-    image: pulse:local-test
+    image: xhh1128/pulse:latest
     container_name: pulse-monitor
     ports:
       - "8008:8008"
