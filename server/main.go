@@ -219,19 +219,19 @@ var sharedHTTPClientOnce sync.Once
 
 func getSharedHTTPClient() *http.Client {
 	sharedHTTPClientOnce.Do(func() {
-		// Create a shared HTTP client with optimized connection pooling
+		// Create a shared HTTP client with optimized connection pooling for stable connection
 		sharedHTTPClient = &http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: 8 * time.Second, // Longer timeout for stability
 			Transport: &http.Transport{
 				DialContext: (&net.Dialer{
-					Timeout:   3 * time.Second,
-					KeepAlive: 60 * time.Second, // Longer keep-alive for connection reuse
+					Timeout:   5 * time.Second, // Longer dial timeout for stability
+					KeepAlive: 120 * time.Second, // Longer keep-alive for connection reuse (like LAN)
 				}).DialContext,
-				MaxIdleConns:          100,              // Increased for multiple clients
-				MaxIdleConnsPerHost:   10,               // Per-host connection limit
-				IdleConnTimeout:       90 * time.Second, // Longer idle timeout
-				TLSHandshakeTimeout:   3 * time.Second,
-				ExpectContinueTimeout: 1 * time.Second,
+				MaxIdleConns:          200,              // More connections for stability
+				MaxIdleConnsPerHost:   20,               // More per-host connections
+				IdleConnTimeout:       180 * time.Second, // Longer idle timeout for stable connection
+				TLSHandshakeTimeout:   5 * time.Second,
+				ExpectContinueTimeout: 2 * time.Second,
 				DisableCompression:    false, // Enable compression for efficiency
 			},
 		}
@@ -721,7 +721,7 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 	
 	// Track consecutive failures for each client
 	failureCount := make(map[string]int)
-	const maxFailures = 3 // Remove from registry after 3 consecutive failures (9 seconds)
+	const maxFailures = 15 // Remove from registry after 15 consecutive failures (45 seconds) - very tolerant for stable connection
 	
 	for {
 		<-ticker.C
@@ -831,8 +831,8 @@ func isClientConnected(client *ClientInfo) bool {
 	// Use shared HTTP client for connection reuse
 	httpClient := getSharedHTTPClient()
 	
-	// Create a request with shorter timeout for health check
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// Create a request with reasonable timeout for health check (longer for stability)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	
 	// Try to reach the health endpoint first (faster than /metrics)
@@ -863,9 +863,8 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	httpClient := getSharedHTTPClient()
 	
 	// Create request with context for timeout control
-	// 5 second timeout - if client doesn't respond in time, skip this cycle
-	// This prevents slow clients from blocking the entire update cycle
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// 8 second timeout - longer timeout for better reliability, prevents slow clients from blocking
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	
 	// Request metrics from client

@@ -623,7 +623,7 @@ const pollMs = Number(pollMsProp ?? 5000);
             <!-- Swap Info -->
             <div class="flex flex-wrap items-baseline gap-1.5 sm:gap-2">
               <div class="text-[10px] sm:text-xs font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0" data-translate-detail="swapPartition">Swap Partition:</div>
-              <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] leading-normal" data-detail="swap_info">${item.swap_info || '-'}</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] leading-normal" data-detail="swap_info">${item.swap_info || '0.00 MiB / 0.00 MiB'}</div>
             </div>
             <!-- Disk Info -->
             <div class="flex flex-wrap items-baseline gap-1.5 sm:gap-2">
@@ -1055,7 +1055,7 @@ const pollMs = Number(pollMsProp ?? 5000);
         
         // Update swap info if changed
         if (swapInfoEl) {
-          const newSwapInfo = String(item.swap_info || '-');
+          const newSwapInfo = String(item.swap_info || '0.00 MiB / 0.00 MiB');
           if (swapInfoEl.textContent !== newSwapInfo) {
             swapInfoEl.textContent = newSwapInfo;
           }
@@ -1131,9 +1131,17 @@ const pollMs = Number(pollMsProp ?? 5000);
       return;
     }
     
-    // Load Chart.js
+    // Load Chart.js with fallback for Chinese networks
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    script.onerror = function() {
+      // Fallback to unpkg CDN if jsdelivr fails (better for Chinese networks)
+      const fallbackScript = document.createElement('script');
+      fallbackScript.src = 'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js';
+      fallbackScript.async = true;
+      fallbackScript.setAttribute('data-chartjs', 'true');
+      document.head.appendChild(fallbackScript);
+    };
     script.async = true;
     script.setAttribute('data-chartjs', 'true');
     script.onload = () => {
@@ -1205,8 +1213,8 @@ const pollMs = Number(pollMsProp ?? 5000);
           targetName: target.name || target.address
         });
         
-        // Switch chart - always use incremental=false to ensure full reload and stats update
-        updateTCPingChart(systemId, target.address, target.name || target.address, false);
+        // Update chart colors based on selected target (don't reload data)
+        updateTCPingChartColors(systemId, target.address);
       });
 
       tabsContainer.appendChild(tab);
@@ -1256,25 +1264,31 @@ const pollMs = Number(pollMsProp ?? 5000);
     // Create tabs immediately (no loading delay for tabs)
     const activeTarget = createTCPingTabs(systemId, config, tabsContainer);
 
-    // Initialize chart with first target (this shows the loading state)
+    // Initialize chart with all targets (this shows the loading state)
     if (activeTarget) {
       // Set initial active target
       tcpingActiveTargets.set(systemId, {
         target: activeTarget,
         targetName: config.targets[0].name || activeTarget
       });
-      // Load chart data asynchronously
-      await updateTCPingChart(systemId, activeTarget, config.targets[0].name || activeTarget);
+      // Load chart data for all targets asynchronously
+      await updateTCPingChart(systemId, null, null); // null means load all targets
     }
   }
 
-  // Update tcping chart with data (incremental: true for adding new points only, false for full reload)
+  // Update tcping chart with data for all targets
   async function updateTCPingChart(systemId, target, targetName, incremental = false) {
     const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
     if (!container) return;
 
     const canvas = container.querySelector(`[data-tcping-chart="${systemId}"]`);
     if (!canvas) return;
+    
+    // Get config for this system
+    const config = tcpingConfigs.get(systemId);
+    if (!config || !config.targets || config.targets.length === 0) {
+      return;
+    }
     
     // Show loading state if this is not an incremental update
     if (!incremental) {
@@ -1293,77 +1307,89 @@ const pollMs = Number(pollMsProp ?? 5000);
     const clientID = systemId;
 
     // Check if chart already exists for incremental update
-    const chartKey = `${systemId}_${target}`;
+    const chartKey = `${systemId}_all`;
     const existingChartData = tcpingCharts.get(chartKey);
     
-    // Load history data
-    const historyData = await loadTCPingHistory(clientID, target);
+    // Load history data for all targets
+    const allHistoryData = await Promise.all(
+      config.targets.map(target => loadTCPingHistory(clientID, target.address))
+    );
     
-    // Prepare chart data - only use real data from backend, no interpolation
-    // Use {x: timestamp, y: latency} format for time scale support
-    const chartData = [];
-    
-    // Ensure historyData is an array (handle null/undefined)
-    const safeHistoryData = Array.isArray(historyData) ? historyData : [];
-    
-    // Only keep data from last 24 hours
+    // Prepare chart data for all targets
+    const PACKET_LOSS_THRESHOLD_MS = 1000;
     const now = new Date();
     const twentyFourHoursAgo = now.getTime() - (24 * 60 * 60 * 1000);
     
-    // Filter and sort by timestamp to ensure chronological order (real data only, no fake data)
-    const sortedData = [...safeHistoryData]
-      .filter(result => {
-        const timestamp = new Date(result.timestamp).getTime();
-        return timestamp >= twentyFourHoursAgo;
-      })
-      .sort((a, b) => {
-        return new Date(a.timestamp) - new Date(b.timestamp);
-      });
+    // Get active target for color determination
+    const activeTargetInfo = tcpingActiveTargets.get(systemId);
+    const selectedTarget = activeTargetInfo ? activeTargetInfo.target : (config.targets[0] ? config.targets[0].address : null);
     
-    let totalCount = 0;
-    let successCount = 0;
-    let totalLatency = 0;
+    // Create datasets for each target
+    const datasets = [];
+    let hasAnyData = false;
     
-    // Define packet loss threshold: latency > 1000ms (1 second) is considered packet loss
-    // This is a common threshold for TCP connections - anything over 1 second is likely a timeout/retransmission
-    // Normal network latency should be in the range of tens to hundreds of milliseconds
-    const PACKET_LOSS_THRESHOLD_MS = 1000;
-    
-    sortedData.forEach(result => {
-      const timestamp = new Date(result.timestamp);
-      totalCount++;
+    config.targets.forEach((targetConfig, index) => {
+      const historyData = allHistoryData[index];
+      const safeHistoryData = Array.isArray(historyData) ? historyData : [];
       
-      let yValue = null;
-      if (result.latency !== null && result.latency !== undefined) {
-        // Filter out abnormal values (packet loss threshold)
-        if (result.latency > PACKET_LOSS_THRESHOLD_MS) {
-          // Treat as packet loss - show as null (gap in chart)
-          yValue = null;
-        } else {
-          yValue = result.latency;
-          successCount++;
-          totalLatency += result.latency;
-        }
+      // Filter and sort by timestamp
+      const sortedData = [...safeHistoryData]
+        .filter(result => {
+          const timestamp = new Date(result.timestamp).getTime();
+          return timestamp >= twentyFourHoursAgo;
+        })
+        .sort((a, b) => {
+          return new Date(a.timestamp) - new Date(b.timestamp);
+        });
+      
+      if (sortedData.length > 0) {
+        hasAnyData = true;
       }
       
-      // Use {x: timestamp, y: latency} format for time scale
-      chartData.push({
-        x: timestamp,
-        y: yValue
+      const chartData = [];
+      sortedData.forEach(result => {
+        const timestamp = new Date(result.timestamp);
+        let yValue = null;
+        if (result.latency !== null && result.latency !== undefined) {
+          if (result.latency > PACKET_LOSS_THRESHOLD_MS) {
+            yValue = null; // Packet loss
+          } else {
+            yValue = result.latency;
+          }
+        }
+        chartData.push({
+          x: timestamp,
+          y: yValue
+        });
+      });
+      
+      // Determine color based on whether this is the selected target
+      const isSelected = targetConfig.address === selectedTarget;
+      const borderColor = isSelected ? 'rgb(34, 197, 94)' : 'rgba(163, 163, 163, 0.5)';
+      const borderWidth = isSelected ? 2 : 1.5;
+      
+      datasets.push({
+        label: `${targetConfig.name || targetConfig.address} (ms)`,
+        data: chartData,
+        borderColor: borderColor,
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderWidth: borderWidth,
+        fill: false,
+        tension: 0.1,
+        spanGaps: true,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        pointHitRadius: 5,
+        showLine: true,
+        targetAddress: targetConfig.address // Store target address for color updates
       });
     });
     
-    // Calculate statistics (only count valid latencies, excluding packet loss)
-    const avgLatency = successCount > 0 ? (totalLatency / successCount) : 0;
-    // Packet loss includes both null values and values above threshold
-    const packetLossCount = totalCount - successCount;
-    const packetLossRate = totalCount > 0 ? (packetLossCount / totalCount * 100) : 0;
-    
-    // Always update statistics display (including incremental updates)
-    updateTCPingStats(systemId, avgLatency, packetLossRate);
+    // Calculate statistics for all targets (will be updated when target is selected)
+    calculateAndUpdateStats(systemId, selectedTarget);
     
     // Check if there's no data - show "No data" state instead of empty chart
-    if (sortedData.length === 0) {
+    if (!hasAnyData) {
       // Hide loading state
       const loadingElement = container.querySelector(`[data-tcping-loading="${systemId}"]`);
       if (loadingElement) {
@@ -1411,7 +1437,6 @@ const pollMs = Number(pollMsProp ?? 5000);
     }
     
     // If chart exists and this is an incremental update, add only new data points
-    // Note: Statistics are already calculated and updated above, so they will be correct
     if (incremental && existingChartData && existingChartData.chart) {
       const chart = existingChartData.chart;
       
@@ -1420,50 +1445,51 @@ const pollMs = Number(pollMsProp ?? 5000);
         return;
       }
       
-      const currentData = chart.data.datasets[0].data || [];
+      // Update each dataset with new data points
+      let hasNewData = false;
+      datasets.forEach((newDataset, index) => {
+        if (index < chart.data.datasets.length) {
+          const currentDataset = chart.data.datasets[index];
+          const currentData = currentDataset.data || [];
+          
+          if (currentData.length > 0) {
+            const lastCurrentDataPoint = currentData[currentData.length - 1];
+            const lastCurrentTime = lastCurrentDataPoint ? lastCurrentDataPoint.x.getTime() : 0;
+            
+            // Find new data points
+            const newDataPoints = newDataset.data.filter(point => point.x.getTime() > lastCurrentTime);
+            
+            if (newDataPoints.length > 0) {
+              currentDataset.data.push(...newDataPoints);
+              hasNewData = true;
+            }
+          } else {
+            // No existing data, add all new data
+            currentDataset.data = [...newDataset.data];
+            hasNewData = true;
+          }
+          
+          // Remove data older than 24 hours
+          currentDataset.data = currentDataset.data.filter(point => {
+            return point.x.getTime() >= twentyFourHoursAgo;
+          });
+        }
+      });
       
-      if (currentData.length === 0) {
-        // Chart exists but has no data, skip incremental update
-        // But statistics are already updated, so they will show correctly
-        return;
-      }
-      
-      // Use timestamp comparison for more reliable incremental updates
-      // Get the last timestamp from current data
-      const lastCurrentDataPoint = currentData[currentData.length - 1];
-      const lastCurrentTime = lastCurrentDataPoint ? lastCurrentDataPoint.x.getTime() : 0;
-      
-      // Find new data points after the last current timestamp
-      const newDataPoints = chartData.filter(point => point.x.getTime() > lastCurrentTime);
-      
-      if (newDataPoints.length > 0) {
-        chart.data.datasets[0].data.push(...newDataPoints);
-        
-        // Remove data older than 24 hours based on timestamp
-        const now = new Date();
-        const twentyFourHoursAgo = now.getTime() - (24 * 60 * 60 * 1000);
-        
-        // Filter out data points older than 24 hours
-        chart.data.datasets[0].data = chart.data.datasets[0].data.filter(point => {
-          return point.x.getTime() >= twentyFourHoursAgo;
-        });
-        
-        // Safety check before updating chart
+      if (hasNewData) {
         try {
           if (chart && chart.canvas && chart.canvas.parentElement) {
-            chart.update('none'); // Update without animation
+            chart.update('none');
+            calculateAndUpdateStats(systemId, selectedTarget);
           }
         } catch (err) {
           // Chart update failed silently
         }
-        return;
-      } else {
-        // No new data, just return without updating (don't recreate chart)
-        return;
       }
+      return;
     }
     
-    // If incremental is true, we should have returned above - never recreate chart in incremental mode
+    // If incremental is true, we should have returned above
     if (incremental) {
       return;
     }
@@ -1508,15 +1534,49 @@ const pollMs = Number(pollMsProp ?? 5000);
           return;
         }
         
-        // Load Chart.js first
+        // Load Chart.js first with fallback for Chinese networks
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+        script.onerror = function() {
+          // Fallback to unpkg CDN if jsdelivr fails
+          const fallbackScript = document.createElement('script');
+          fallbackScript.src = 'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js';
+          fallbackScript.async = true;
+          fallbackScript.setAttribute('data-chartjs', 'true');
+          fallbackScript.onload = () => {
+            // Continue with adapter loading
+            const adapterScript = document.createElement('script');
+            adapterScript.src = 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+            adapterScript.async = true;
+            adapterScript.setAttribute('data-chartjs-adapter', 'true');
+            adapterScript.onload = () => {
+              window._chartjsAdapterLoaded = true;
+              updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
+            };
+            adapterScript.onerror = () => {
+              reject(new Error('Failed to load Chart.js date adapter'));
+            };
+            document.head.appendChild(adapterScript);
+          };
+          document.head.appendChild(fallbackScript);
+        };
         script.async = true;
         script.setAttribute('data-chartjs', 'true');
         script.onload = () => {
-          // Then load the date adapter for time scale support
+          // Then load the date adapter for time scale support with fallback
           const adapterScript = document.createElement('script');
           adapterScript.src = 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+          adapterScript.onerror = function() {
+            // Fallback to unpkg CDN
+            const fallbackAdapter = document.createElement('script');
+            fallbackAdapter.src = 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+            fallbackAdapter.async = true;
+            fallbackAdapter.setAttribute('data-chartjs-adapter', 'true');
+            fallbackAdapter.onload = () => {
+              window._chartjsAdapterLoaded = true;
+            };
+            document.head.appendChild(fallbackAdapter);
+          };
           adapterScript.async = true;
           adapterScript.setAttribute('data-chartjs-adapter', 'true');
           adapterScript.onload = () => {
@@ -1524,7 +1584,19 @@ const pollMs = Number(pollMsProp ?? 5000);
             updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
           };
           adapterScript.onerror = () => {
-            reject(new Error('Failed to load Chart.js date adapter'));
+            // Fallback to unpkg CDN
+            const fallbackAdapter = document.createElement('script');
+            fallbackAdapter.src = 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+            fallbackAdapter.async = true;
+            fallbackAdapter.setAttribute('data-chartjs-adapter', 'true');
+            fallbackAdapter.onload = () => {
+              window._chartjsAdapterLoaded = true;
+              updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
+            };
+            fallbackAdapter.onerror = () => {
+              reject(new Error('Failed to load Chart.js date adapter'));
+            };
+            document.head.appendChild(fallbackAdapter);
           };
           document.head.appendChild(adapterScript);
         };
@@ -1563,7 +1635,19 @@ const pollMs = Number(pollMsProp ?? 5000);
           updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
         };
         adapterScript.onerror = () => {
-          reject(new Error('Failed to load Chart.js date adapter'));
+          // Fallback to unpkg CDN
+          const fallbackAdapter = document.createElement('script');
+          fallbackAdapter.src = 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+          fallbackAdapter.async = true;
+          fallbackAdapter.setAttribute('data-chartjs-adapter', 'true');
+          fallbackAdapter.onload = () => {
+            window._chartjsAdapterLoaded = true;
+            updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
+          };
+          fallbackAdapter.onerror = () => {
+            reject(new Error('Failed to load Chart.js date adapter'));
+          };
+          document.head.appendChild(fallbackAdapter);
         };
         document.head.appendChild(adapterScript);
       });
@@ -1660,20 +1744,7 @@ const pollMs = Number(pollMsProp ?? 5000);
     const chart = new ChartClass(ctx, {
       type: 'line',
       data: {
-        datasets: [{
-          label: `${targetName} (ms)`,
-          data: chartData, // Use {x: timestamp, y: latency} format for time scale
-          borderColor: 'rgb(34, 197, 94)', // emerald-500
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
-          borderWidth: 2,
-          fill: false, // Don't fill area to avoid interpolation
-          tension: 0.1, // Slight curve for smoother appearance
-          spanGaps: true, // Skip null values (packet loss) but connect valid points
-          pointRadius: 0, // No points, only lines
-          pointHoverRadius: 0,
-          pointHitRadius: 5, // Keep hover area for tooltips
-          showLine: true // Ensure line is shown
-        }]
+        datasets: datasets // All targets as separate datasets
       },
       options: {
         responsive: true,
@@ -1707,11 +1778,12 @@ const pollMs = Number(pollMsProp ?? 5000);
                 return '';
               },
               label: function(context) {
+                const datasetLabel = context.dataset.label || '';
                 const value = context.parsed.y;
                 if (value === null || value === undefined) {
-                  return 'Timeout/Failure';
+                  return `${datasetLabel}: Timeout/Failure`;
                 }
-                return `${value.toFixed(2)} ms`;
+                return `${datasetLabel}: ${value.toFixed(2)} ms`;
               }
             }
           }
@@ -1782,7 +1854,7 @@ const pollMs = Number(pollMsProp ?? 5000);
       }
     });
 
-    tcpingCharts.set(chartKey, { chart, target: targetName });
+    tcpingCharts.set(chartKey, { chart, target: 'all' });
     
     // Hide loading state and show chart (only if not incremental update)
     if (!incremental) {
@@ -1828,12 +1900,88 @@ const pollMs = Number(pollMsProp ?? 5000);
     }
   }
   
+  // Update TCPing chart colors based on selected target
+  function updateTCPingChartColors(systemId, selectedTarget) {
+    const chartKey = `${systemId}_all`;
+    const chartData = tcpingCharts.get(chartKey);
+    if (!chartData || !chartData.chart) return;
+    
+    const chart = chartData.chart;
+    const config = tcpingConfigs.get(systemId);
+    if (!config || !config.targets) return;
+    
+    // Update colors for each dataset
+    chart.data.datasets.forEach((dataset, index) => {
+      const targetAddress = dataset.targetAddress;
+      if (targetAddress === selectedTarget) {
+        // Selected target: keep original color (emerald-500)
+        dataset.borderColor = 'rgb(34, 197, 94)';
+        dataset.borderWidth = 2;
+      } else {
+        // Other targets: gray color
+        dataset.borderColor = 'rgba(163, 163, 163, 0.5)';
+        dataset.borderWidth = 1.5;
+      }
+    });
+    
+    chart.update('none');
+    
+    // Recalculate statistics based on selected target
+    const activeTargetInfo = tcpingActiveTargets.get(systemId);
+    if (activeTargetInfo && activeTargetInfo.target) {
+      calculateAndUpdateStats(systemId, activeTargetInfo.target);
+    } else {
+      calculateAndUpdateStats(systemId, null); // All targets
+    }
+  }
+  
+  // Calculate and update statistics for selected target or all targets
+  function calculateAndUpdateStats(systemId, selectedTarget) {
+    const chartKey = `${systemId}_all`;
+    const chartData = tcpingCharts.get(chartKey);
+    if (!chartData || !chartData.chart) return;
+    
+    const chart = chartData.chart;
+    const PACKET_LOSS_THRESHOLD_MS = 1000;
+    
+    let totalCount = 0;
+    let successCount = 0;
+    let totalLatency = 0;
+    
+    chart.data.datasets.forEach(dataset => {
+      // If selectedTarget is specified, only count data from that target
+      if (selectedTarget && dataset.targetAddress !== selectedTarget) {
+        return;
+      }
+      
+      dataset.data.forEach(point => {
+        if (point && point.x && point.y !== null && point.y !== undefined) {
+          totalCount++;
+          if (point.y <= PACKET_LOSS_THRESHOLD_MS) {
+            successCount++;
+            totalLatency += point.y;
+          }
+        } else if (point && point.x) {
+          // Null value (packet loss)
+          totalCount++;
+        }
+      });
+    });
+    
+    const avgLatency = successCount > 0 ? (totalLatency / successCount) : 0;
+    const packetLossCount = totalCount - successCount;
+    const packetLossRate = totalCount > 0 ? (packetLossCount / totalCount * 100) : 0;
+    
+    updateTCPingStats(systemId, avgLatency, packetLossRate);
+  }
+  
   // Setup row click handlers for expand/collapse
   const setupRowClickHandlers = (container) => {
     if (!container || container.dataset.rowClickSetup) return;
     container.dataset.rowClickSetup = 'true';
     
-    container.addEventListener('click', (e) => {
+    // Handle both click and touch events for mobile compatibility
+    const handleRowToggle = (e) => {
       // Don't expand if clicking on copy button or other interactive elements
       if (e.target.closest('.copy-btn') || e.target.closest('button')) {
         return;
@@ -1915,6 +2063,66 @@ const pollMs = Number(pollMsProp ?? 5000);
           rowElement.setAttribute('aria-expanded', 'false');
         }
       }
+    };
+    
+    // Use a simple approach: handle both touchstart and click, but prevent double-trigger
+    let lastTouchTime = 0;
+    let lastTouchTarget = null;
+    
+    // Handle touch events directly for mobile
+    container.addEventListener('touchstart', (e) => {
+      const touch = e.touches[0];
+      if (!touch) return;
+      
+      const target = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (!target) return;
+      
+      // Check if this is a row element
+      const rowElement = target.closest('[data-system-id]');
+      if (!rowElement) return;
+      
+      // Don't trigger if clicking on buttons
+      if (target.closest('.copy-btn') || target.closest('button')) {
+        return;
+      }
+      
+      // Prevent double-trigger: if we just handled a touch for this target, ignore click
+      const now = Date.now();
+      if (lastTouchTarget === rowElement && now - lastTouchTime < 500) {
+        return;
+      }
+      
+      lastTouchTime = now;
+      lastTouchTarget = rowElement;
+      
+      // Create a synthetic event for handleRowToggle
+      const syntheticEvent = {
+        target: target,
+        currentTarget: container,
+        preventDefault: () => {},
+        stopPropagation: () => {}
+      };
+      
+      // Use setTimeout to ensure this happens after any potential click event
+      setTimeout(() => {
+        handleRowToggle(syntheticEvent);
+      }, 50);
+    }, { passive: true });
+    
+    // Handle click events (for desktop and as fallback)
+    container.addEventListener('click', (e) => {
+      // Skip if this was a touch event (prevent double-trigger)
+      const now = Date.now();
+      if (lastTouchTarget && now - lastTouchTime < 500) {
+        const rowElement = e.target.closest('[data-system-id]');
+        if (rowElement === lastTouchTarget) {
+          lastTouchTime = 0;
+          lastTouchTarget = null;
+          return;
+        }
+      }
+      
+      handleRowToggle(e);
     });
   };
   
@@ -2212,23 +2420,8 @@ const pollMs = Number(pollMsProp ?? 5000);
             document.querySelectorAll('.system-details:not(.hidden)').forEach(detailsSection => {
               const systemId = detailsSection.dataset.detailsId;
               if (systemId) {
-                // Use the current active target for this system, not just any chart
-                const activeTargetInfo = tcpingActiveTargets.get(systemId);
-                if (activeTargetInfo) {
-                  // Use incremental update - only add new data points, don't recreate chart
-                  // This will update the chart but NOT recalculate statistics (to avoid overwriting)
-                  updateTCPingChart(systemId, activeTargetInfo.target, activeTargetInfo.targetName, true);
-                } else {
-                  // Fallback: find any chart for this system (for backward compatibility)
-                  const chartEntry = Array.from(tcpingCharts.entries()).find(([key]) => key.startsWith(`${systemId}_`));
-                  if (chartEntry) {
-                    const [key, value] = chartEntry;
-                    const target = key.split('_').slice(1).join('_'); // Get target from key
-                    const targetName = value.target;
-                    // Use incremental update - only add new data points, don't recreate chart
-                    updateTCPingChart(systemId, target, targetName, true);
-                  }
-                }
+                // Use incremental update for all targets chart
+                updateTCPingChart(systemId, null, null, true);
               }
             });
       }
