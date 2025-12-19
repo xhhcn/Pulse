@@ -95,8 +95,8 @@ func main() {
 
 // Register client with server
 func registerWithServer() {
-	// Retry registration with exponential backoff
-	maxRetries := 5
+	// Retry registration with exponential backoff - increased for cross-continent networks
+	maxRetries := 10 // Increased from 5 to handle high-latency networks (e.g., Australia-Russia)
 	for i := 0; i < maxRetries; i++ {
 		time.Sleep(time.Duration(i+1) * time.Second) // Wait before retry
 		
@@ -112,19 +112,19 @@ func registerWithServer() {
 		
 		data, _ := json.Marshal(payload)
 		
-		// Use a stable HTTP client with optimized connection pooling for stable connection
+		// Use a stable HTTP client with optimized connection pooling for cross-continent networks
 		httpClient := &http.Client{
-			Timeout: 8 * time.Second, // Longer timeout for better reliability
+			Timeout: 20 * time.Second, // Increased from 8s to 20s for high-latency networks (e.g., Australia-Russia ~300ms RTT)
 			Transport: &http.Transport{
 				DialContext: (&net.Dialer{
-					Timeout:   5 * time.Second, // Longer dial timeout
+					Timeout:   10 * time.Second, // Increased from 5s to 10s for slow connections
 					KeepAlive: 120 * time.Second, // Longer keep-alive for connection reuse
 				}).DialContext,
 				MaxIdleConns:          20, // More idle connections
 				MaxIdleConnsPerHost:   10, // More per-host connections
 				IdleConnTimeout:       180 * time.Second, // Longer idle timeout
-				TLSHandshakeTimeout:   5 * time.Second,
-				ExpectContinueTimeout: 2 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second, // Increased from 5s to 10s for slow TLS
+				ExpectContinueTimeout: 5 * time.Second, // Increased from 2s to 5s
 				DisableCompression:    false, // Enable compression
 			},
 		}
@@ -173,19 +173,19 @@ func startPeriodicRegistration() {
 	defer ticker.Stop()
 	
 	
-	// Reuse HTTP client for efficiency with optimized settings for stable connection
+	// Reuse HTTP client for efficiency with optimized settings for cross-continent networks
 	httpClient := &http.Client{
-		Timeout: 8 * time.Second, // Longer timeout for better reliability
+		Timeout: 20 * time.Second, // Increased from 8s to 20s for high-latency networks (e.g., Australia-Russia)
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
-				Timeout:   5 * time.Second, // Longer dial timeout
+				Timeout:   10 * time.Second, // Increased from 5s to 10s for slow connections
 				KeepAlive: 120 * time.Second, // Longer keep-alive for connection reuse
 			}).DialContext,
 			MaxIdleConns:          20, // More idle connections
 			MaxIdleConnsPerHost:   10, // More per-host connections
 			IdleConnTimeout:       180 * time.Second, // Longer idle timeout
-			TLSHandshakeTimeout:   5 * time.Second,
-			ExpectContinueTimeout: 2 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second, // Increased from 5s to 10s for slow TLS
+			ExpectContinueTimeout: 5 * time.Second, // Increased from 2s to 5s
 			DisableKeepAlives:     false, // Enable keep-alive
 		},
 	}

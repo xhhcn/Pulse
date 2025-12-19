@@ -12,8 +12,28 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     
+    # Only run if server files changed (skip if only client, docs, or other files changed)
     steps:
+      - name: Check if server files changed
+        id: check_changes
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            server:
+              - 'server/**'
+              - 'docker/**'
+              - 'Dockerfile'
+              - '.github/workflows/docker.yml'
+      
+      - name: Skip if no server changes
+        if: steps.check_changes.outputs.server != 'true'
+        run: |
+          echo "No server files changed, skipping build"
+          exit 0
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -67,20 +87,28 @@ jobs:
 
             ### ✨ Features & Improvements
 
-            **Connection Stability (LAN-like Experience)**
-            - Server: Increased failure tolerance to 15 (45s), longer timeouts (4s health, 8s poll)
-            - Client: Faster heartbeat (10s), longer timeouts (8s), optimized connection pool
-            - Extended keep-alive to 120s, larger connection pools for stable connection
+            **Cross-Continent Network Support**
+            - Server: Increased failure tolerance to 30 (90s), longer timeouts (8s health, 20s poll)
+            - Client: Increased retries to 10, longer timeouts (20s), optimized for high-latency networks
+            - Extended keep-alive to 120s, larger connection pools for stable cross-continent connections
 
             **Mobile Fixes**
+            - Fixed touch scroll detection: Only taps trigger row expansion, not scrolling
             - Fixed Footer: Removed '·' separator on mobile
-            - Fixed mobile table expansion: Single tap now works (touchstart + click handling)
+            - Fixed mobile table expansion: Single tap now works correctly
             - Fixed swap partition display: Shows '0.00 MiB / 0.00 MiB' when empty
 
             **TCPing Improvements**
-            - All targets displayed simultaneously with color highlighting
+            - All targets displayed simultaneously with distinct colors by default
+            - Click active tab to deselect and show all targets
             - Statistics calculated based on selected target
+            - Tooltip shows all targets when none selected, only selected target when one is active
             - CDN fallback for Chinese networks (unpkg as backup)
+
+            **Flag Icons**
+            - Automatic flag icon generation for all countries
+            - Special handling for Hong Kong: `emojione-v1:flag-for-hong-kong-sar-china`
+            - Proper country name normalization (spaces to hyphens, remove commas)
 
             **Client Binaries**
             - Compiled for Linux (amd64, arm64) and Windows (amd64)
@@ -93,5 +121,3 @@ jobs:
             Client binaries are available in the repository: [client/](https://github.com/xhhcn/Pulse/tree/main/client)
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -109,79 +109,34 @@ const pollMs = Number(pollMsProp ?? 5000);
     if (!country) return null;
     
     const countryLower = country.toLowerCase().trim();
-    const flagMap = {
-      // Common countries
-      'germany': 'emojione-v1:flag-for-germany',
-      'united states': 'emojione-v1:flag-for-united-states',
-      'usa': 'emojione-v1:flag-for-united-states',
-      'us': 'emojione-v1:flag-for-united-states',
-      'united kingdom': 'emojione-v1:flag-for-united-kingdom',
-      'uk': 'emojione-v1:flag-for-united-kingdom',
-      'china': 'emojione-v1:flag-for-china',
-      'japan': 'emojione-v1:flag-for-japan',
-      'france': 'emojione-v1:flag-for-france',
-      'italy': 'emojione-v1:flag-for-italy',
-      'spain': 'emojione-v1:flag-for-spain',
-      'canada': 'emojione-v1:flag-for-canada',
-      'australia': 'emojione-v1:flag-for-australia',
-      'brazil': 'emojione-v1:flag-for-brazil',
-      'india': 'emojione-v1:flag-for-india',
-      'russia': 'emojione-v1:flag-for-russia',
-      'south korea': 'emojione-v1:flag-for-south-korea',
-      'korea': 'emojione-v1:flag-for-south-korea',
-      'netherlands': 'emojione-v1:flag-for-netherlands',
-      'sweden': 'emojione-v1:flag-for-sweden',
-      'norway': 'emojione-v1:flag-for-norway',
-      'denmark': 'emojione-v1:flag-for-denmark',
-      'finland': 'emojione-v1:flag-for-finland',
-      'poland': 'emojione-v1:flag-for-poland',
-      'singapore': 'emojione-v1:flag-for-singapore',
-      'hong kong': 'emojione-v1:flag-for-hong-kong',
-      'taiwan': 'emojione-v1:flag-for-taiwan',
-      'switzerland': 'emojione-v1:flag-for-switzerland',
-      'austria': 'emojione-v1:flag-for-austria',
-      'belgium': 'emojione-v1:flag-for-belgium',
-      'ireland': 'emojione-v1:flag-for-ireland',
-      'portugal': 'emojione-v1:flag-for-portugal',
-      'greece': 'emojione-v1:flag-for-greece',
-      'turkey': 'emojione-v1:flag-for-turkey',
-      'mexico': 'emojione-v1:flag-for-mexico',
-      'argentina': 'emojione-v1:flag-for-argentina',
-      'chile': 'emojione-v1:flag-for-chile',
-      'south africa': 'emojione-v1:flag-for-south-africa',
-      'egypt': 'emojione-v1:flag-for-egypt',
-      'israel': 'emojione-v1:flag-for-israel',
-      'uae': 'emojione-v1:flag-for-united-arab-emirates',
-      'united arab emirates': 'emojione-v1:flag-for-united-arab-emirates',
-      'saudi arabia': 'emojione-v1:flag-for-saudi-arabia',
-      'thailand': 'emojione-v1:flag-for-thailand',
-      'vietnam': 'emojione-v1:flag-for-vietnam',
-      'indonesia': 'emojione-v1:flag-for-indonesia',
-      'malaysia': 'emojione-v1:flag-for-malaysia',
-      'philippines': 'emojione-v1:flag-for-philippines',
-      'new zealand': 'emojione-v1:flag-for-new-zealand',
-      'czech republic': 'emojione-v1:flag-for-czech-republic',
-      'romania': 'emojione-v1:flag-for-romania',
-      'hungary': 'emojione-v1:flag-for-hungary',
-      'ukraine': 'emojione-v1:flag-for-ukraine',
-      'yemen': 'emojione-v1:flag-for-yemen',
+    
+    // Special mappings for countries that need specific flag names
+    const specialFlagMap = {
+      'hong kong': 'hong-kong-sar-china',
+      'hongkong': 'hong-kong-sar-china',
+      'usa': 'united-states',
+      'us': 'united-states',
+      'uk': 'united-kingdom',
+      'uae': 'united-arab-emirates',
+      'korea': 'south-korea',
     };
     
-    // Direct match
-    if (flagMap[countryLower]) {
-      return flagMap[countryLower];
+    // Check if there's a special mapping
+    if (specialFlagMap[countryLower]) {
+      return `emojione-v1:flag-for-${specialFlagMap[countryLower]}`;
     }
     
-    // Try to match by containing the country name
-    for (const [key, value] of Object.entries(flagMap)) {
-      if (countryLower.includes(key) || key.includes(countryLower)) {
-        return value;
-      }
-    }
+    // Convert country name to flag icon path:
+    // 1. Convert to lowercase (already done)
+    // 2. Replace spaces with hyphens
+    // 3. Remove commas
+    // 4. Keep sar, china, territories, etc. as they are (no special handling needed)
+    let flagName = countryLower
+      .replace(/\s+/g, '-')  // Replace spaces with hyphens
+      .replace(/,/g, '')      // Remove commas
+      .replace(/--+/g, '-')  // Replace multiple hyphens with single hyphen
+      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
     
-    // Fallback: try to construct flag name from country
-    // Format: emojione-v1:flag-for-{country-name}
-    const flagName = countryLower.replace(/\s+/g, '-');
     return `emojione-v1:flag-for-${flagName}`;
   };
 
@@ -1182,45 +1137,54 @@ const pollMs = Number(pollMsProp ?? 5000);
     // Clear existing tabs
     tabsContainer.innerHTML = '';
     
-    let activeTarget = null;
-    
     // Create tabs for each target
     config.targets.forEach((target, index) => {
       const tab = document.createElement('button');
-      tab.className = `px-3 py-1 text-xs font-medium rounded transition-colors ${
-        index === 0 
-          ? 'bg-[#404040]/50 dark:bg-[#404040]/50 text-[#f5f5f5] dark:text-[#f5f5f5] text-[#151515]' 
-          : 'bg-transparent text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30'
-      }`;
+      // No tab is active by default - all tabs start as inactive
+      tab.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-transparent text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
       tab.textContent = target.name || target.address;
       tab.dataset.target = target.address;
       tab.dataset.targetName = target.name || target.address;
-      
-      if (index === 0) {
-        activeTarget = target.address;
-      }
 
       tab.addEventListener('click', () => {
-        // Update active tab
-        tabsContainer.querySelectorAll('button').forEach(btn => {
-          btn.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-transparent text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
-        });
-        tab.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-[#404040]/50 dark:bg-[#404040]/50 text-[#f5f5f5] dark:text-[#f5f5f5] text-[#151515]';
+        // Check if this tab is already active
+        const activeTargetInfo = tcpingActiveTargets.get(systemId);
+        const isCurrentlyActive = activeTargetInfo && activeTargetInfo.target === target.address;
         
-        // Update current active target for this system
-        tcpingActiveTargets.set(systemId, {
-          target: target.address,
-          targetName: target.name || target.address
-        });
-        
-        // Update chart colors based on selected target (don't reload data)
-        updateTCPingChartColors(systemId, target.address);
+        if (isCurrentlyActive) {
+          // Clicking the active tab: deselect it and show all targets
+          tab.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-transparent text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
+          
+          // Clear active target to show all targets with distinct colors
+          tcpingActiveTargets.delete(systemId);
+          
+          // Update chart colors to show all targets (don't reload data)
+          updateTCPingChartColors(systemId, null);
+        } else {
+          // Clicking an inactive tab: select it
+          // Update all tabs to inactive state
+          tabsContainer.querySelectorAll('button').forEach(btn => {
+            btn.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-transparent text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
+          });
+          // Set clicked tab as active
+          tab.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-[#404040]/50 dark:bg-[#404040]/50 text-[#f5f5f5] dark:text-[#f5f5f5] text-[#151515]';
+          
+          // Update current active target for this system
+          tcpingActiveTargets.set(systemId, {
+            target: target.address,
+            targetName: target.name || target.address
+          });
+          
+          // Update chart colors based on selected target (don't reload data)
+          updateTCPingChartColors(systemId, target.address);
+        }
       });
 
       tabsContainer.appendChild(tab);
     });
     
-    return activeTarget;
+    // Return null to indicate no target is selected by default (all targets shown)
+    return null;
   }
 
   // Initialize tcping chart for a system
@@ -1262,18 +1226,12 @@ const pollMs = Number(pollMsProp ?? 5000);
     tcpingConfigs.set(systemId, config);
 
     // Create tabs immediately (no loading delay for tabs)
-    const activeTarget = createTCPingTabs(systemId, config, tabsContainer);
+    createTCPingTabs(systemId, config, tabsContainer);
 
-    // Initialize chart with all targets (this shows the loading state)
-    if (activeTarget) {
-      // Set initial active target
-      tcpingActiveTargets.set(systemId, {
-        target: activeTarget,
-        targetName: config.targets[0].name || activeTarget
-      });
-      // Load chart data for all targets asynchronously
-      await updateTCPingChart(systemId, null, null); // null means load all targets
-    }
+    // Initialize chart with all targets (no target selected by default)
+    // Don't set activeTarget - this means all lines will be colored
+    // Load chart data for all targets asynchronously
+    await updateTCPingChart(systemId, null, null); // null means load all targets, no target selected
   }
 
   // Update tcping chart with data for all targets
@@ -1322,7 +1280,19 @@ const pollMs = Number(pollMsProp ?? 5000);
     
     // Get active target for color determination
     const activeTargetInfo = tcpingActiveTargets.get(systemId);
-    const selectedTarget = activeTargetInfo ? activeTargetInfo.target : (config.targets[0] ? config.targets[0].address : null);
+    const selectedTarget = activeTargetInfo ? activeTargetInfo.target : null; // null means no target selected (all colored)
+    
+    // Generate distinct colors for each target when no target is selected
+    const defaultColors = [
+      'rgb(34, 197, 94)',    // emerald-500 (green)
+      'rgb(59, 130, 246)',  // blue-500
+      'rgb(168, 85, 247)',  // purple-500
+      'rgb(236, 72, 153)',  // pink-500
+      'rgb(251, 146, 60)',  // orange-500
+      'rgb(34, 211, 238)',  // cyan-500
+      'rgb(132, 204, 22)',  // lime-500
+      'rgb(245, 158, 11)',  // amber-500
+    ];
     
     // Create datasets for each target
     const datasets = [];
@@ -1363,16 +1333,26 @@ const pollMs = Number(pollMsProp ?? 5000);
         });
       });
       
-      // Determine color based on whether this is the selected target
-      const isSelected = targetConfig.address === selectedTarget;
-      const borderColor = isSelected ? 'rgb(34, 197, 94)' : 'rgba(163, 163, 163, 0.5)';
-      const borderWidth = isSelected ? 2 : 1.5;
+      // Determine color based on whether a target is selected
+      // If no target is selected (selectedTarget === null), all lines have distinct colors
+      // If a target is selected, only that target is colored, others are gray
+      const isSelected = selectedTarget !== null && targetConfig.address === selectedTarget;
+      let borderColor, borderWidth;
+      if (selectedTarget === null) {
+        // No target selected: all lines have distinct colors
+        borderColor = defaultColors[index % defaultColors.length];
+        borderWidth = 2;
+      } else {
+        // Target selected: only selected target is colored, others are gray
+        borderColor = isSelected ? 'rgb(34, 197, 94)' : 'rgba(163, 163, 163, 0.5)';
+        borderWidth = isSelected ? 2 : 1.5;
+      }
       
       datasets.push({
         label: `${targetConfig.name || targetConfig.address} (ms)`,
         data: chartData,
         borderColor: borderColor,
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        backgroundColor: selectedTarget === null ? `${borderColor}20` : 'rgba(34, 197, 94, 0.1)', // Semi-transparent version of border color when all colored
         borderWidth: borderWidth,
         fill: false,
         tension: 0.1,
@@ -1381,7 +1361,8 @@ const pollMs = Number(pollMsProp ?? 5000);
         pointHoverRadius: 0,
         pointHitRadius: 5,
         showLine: true,
-        targetAddress: targetConfig.address // Store target address for color updates
+        targetAddress: targetConfig.address, // Store target address for color updates
+        targetIndex: index // Store index for color lookup
       });
     });
     
@@ -1770,6 +1751,21 @@ const pollMs = Number(pollMsProp ?? 5000);
               size: 11
             },
             displayColors: false,
+            filter: function(tooltipItem) {
+              // Get active target for this system
+              const systemId = canvas.dataset.tcpingChart;
+              const activeTargetInfo = tcpingActiveTargets.get(systemId);
+              const selectedTarget = activeTargetInfo ? activeTargetInfo.target : null;
+              
+              // If no target is selected, show all tooltips
+              if (selectedTarget === null) {
+                return true;
+              }
+              
+              // If a target is selected, only show tooltip for that target
+              const dataset = tooltipItem.dataset;
+              return dataset.targetAddress === selectedTarget;
+            },
             callbacks: {
               title: function(context) {
                 if (context.length > 0 && context[0].label) {
@@ -1910,29 +1906,45 @@ const pollMs = Number(pollMsProp ?? 5000);
     const config = tcpingConfigs.get(systemId);
     if (!config || !config.targets) return;
     
+    // Generate distinct colors for each target when no target is selected
+    const defaultColors = [
+      'rgb(34, 197, 94)',    // emerald-500 (green)
+      'rgb(59, 130, 246)',  // blue-500
+      'rgb(168, 85, 247)',  // purple-500
+      'rgb(236, 72, 153)',  // pink-500
+      'rgb(251, 146, 60)',  // orange-500
+      'rgb(34, 211, 238)',  // cyan-500
+      'rgb(132, 204, 22)',  // lime-500
+      'rgb(245, 158, 11)',  // amber-500
+    ];
+    
     // Update colors for each dataset
     chart.data.datasets.forEach((dataset, index) => {
       const targetAddress = dataset.targetAddress;
-      if (targetAddress === selectedTarget) {
-        // Selected target: keep original color (emerald-500)
+      const targetIndex = dataset.targetIndex !== undefined ? dataset.targetIndex : index;
+      
+      if (selectedTarget === null) {
+        // No target selected: all lines have distinct colors
+        dataset.borderColor = defaultColors[targetIndex % defaultColors.length];
+        dataset.borderWidth = 2;
+        dataset.backgroundColor = `${defaultColors[targetIndex % defaultColors.length]}20`;
+      } else if (targetAddress === selectedTarget) {
+        // Selected target: emerald-500
         dataset.borderColor = 'rgb(34, 197, 94)';
         dataset.borderWidth = 2;
+        dataset.backgroundColor = 'rgba(34, 197, 94, 0.1)';
       } else {
         // Other targets: gray color
         dataset.borderColor = 'rgba(163, 163, 163, 0.5)';
         dataset.borderWidth = 1.5;
+        dataset.backgroundColor = 'rgba(163, 163, 163, 0.05)';
       }
     });
     
     chart.update('none');
     
     // Recalculate statistics based on selected target
-    const activeTargetInfo = tcpingActiveTargets.get(systemId);
-    if (activeTargetInfo && activeTargetInfo.target) {
-      calculateAndUpdateStats(systemId, activeTargetInfo.target);
-    } else {
-      calculateAndUpdateStats(systemId, null); // All targets
-    }
+    calculateAndUpdateStats(systemId, selectedTarget);
   }
   
   // Calculate and update statistics for selected target or all targets
@@ -2069,22 +2081,77 @@ const pollMs = Number(pollMsProp ?? 5000);
     let lastTouchTime = 0;
     let lastTouchTarget = null;
     
-    // Handle touch events directly for mobile
+    // Track touch state to distinguish between tap and scroll
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchMoved = false;
+    let touchTarget = null;
+    let touchRowElement = null;
+    
+    // Handle touch events directly for mobile - distinguish between tap and scroll
     container.addEventListener('touchstart', (e) => {
       const touch = e.touches[0];
       if (!touch) return;
       
+      // Reset touch state
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      touchMoved = false;
+      
       const target = document.elementFromPoint(touch.clientX, touch.clientY);
       if (!target) return;
+      
+      touchTarget = target;
       
       // Check if this is a row element
       const rowElement = target.closest('[data-system-id]');
       if (!rowElement) return;
       
+      touchRowElement = rowElement;
+      
       // Don't trigger if clicking on buttons
       if (target.closest('.copy-btn') || target.closest('button')) {
+        touchTarget = null;
+        touchRowElement = null;
         return;
       }
+    }, { passive: true });
+    
+    // Detect if user is scrolling (not tapping)
+    container.addEventListener('touchmove', (e) => {
+      if (!touchTarget || !touchRowElement) return;
+      
+      const touch = e.touches[0];
+      if (!touch) return;
+      
+      // Calculate movement distance
+      const deltaX = Math.abs(touch.clientX - touchStartX);
+      const deltaY = Math.abs(touch.clientY - touchStartY);
+      
+      // If moved more than 10px in any direction, consider it a scroll
+      if (deltaX > 10 || deltaY > 10) {
+        touchMoved = true;
+        touchTarget = null;
+        touchRowElement = null;
+      }
+    }, { passive: true });
+    
+    // Handle tap (only if no scrolling occurred)
+    container.addEventListener('touchend', (e) => {
+      if (!touchTarget || !touchRowElement || touchMoved) {
+        touchTarget = null;
+        touchRowElement = null;
+        touchMoved = false;
+        return;
+      }
+      
+      const rowElement = touchRowElement;
+      const target = touchTarget;
+      
+      // Reset touch state
+      touchTarget = null;
+      touchRowElement = null;
+      touchMoved = false;
       
       // Prevent double-trigger: if we just handled a touch for this target, ignore click
       const now = Date.now();

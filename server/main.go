@@ -219,20 +219,20 @@ var sharedHTTPClientOnce sync.Once
 
 func getSharedHTTPClient() *http.Client {
 	sharedHTTPClientOnce.Do(func() {
-		// Create a shared HTTP client with optimized connection pooling for stable connection
+		// Create a shared HTTP client with optimized connection pooling for cross-continent networks
 		sharedHTTPClient = &http.Client{
-			Timeout: 8 * time.Second, // Longer timeout for stability
+			Timeout: 20 * time.Second, // Increased from 8s to 20s for high-latency networks (e.g., Australia-Russia ~300ms RTT)
 			Transport: &http.Transport{
 				DialContext: (&net.Dialer{
-					Timeout:   5 * time.Second, // Longer dial timeout for stability
+					Timeout:   10 * time.Second, // Increased from 5s to 10s for slow connections
 					KeepAlive: 120 * time.Second, // Longer keep-alive for connection reuse (like LAN)
 				}).DialContext,
 				MaxIdleConns:          200,              // More connections for stability
 				MaxIdleConnsPerHost:   20,               // More per-host connections
 				IdleConnTimeout:       180 * time.Second, // Longer idle timeout for stable connection
-				TLSHandshakeTimeout:   5 * time.Second,
-				ExpectContinueTimeout: 2 * time.Second,
-				DisableCompression:    false, // Enable compression for efficiency
+				TLSHandshakeTimeout:   10 * time.Second, // Increased from 5s to 10s for slow TLS
+				ExpectContinueTimeout: 5 * time.Second,   // Increased from 2s to 5s
+				DisableCompression:    false,            // Enable compression for efficiency
 			},
 		}
 	})
@@ -721,7 +721,7 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 	
 	// Track consecutive failures for each client
 	failureCount := make(map[string]int)
-	const maxFailures = 15 // Remove from registry after 15 consecutive failures (45 seconds) - very tolerant for stable connection
+	const maxFailures = 30 // Remove from registry after 30 consecutive failures (90 seconds) - very tolerant for cross-continent networks (e.g., Australia-Russia)
 	
 	for {
 		<-ticker.C
@@ -831,8 +831,8 @@ func isClientConnected(client *ClientInfo) bool {
 	// Use shared HTTP client for connection reuse
 	httpClient := getSharedHTTPClient()
 	
-	// Create a request with reasonable timeout for health check (longer for stability)
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	// Create a request with reasonable timeout for health check (longer for cross-continent networks)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second) // Increased from 4s to 8s for high-latency networks
 	defer cancel()
 	
 	// Try to reach the health endpoint first (faster than /metrics)
@@ -863,8 +863,8 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	httpClient := getSharedHTTPClient()
 	
 	// Create request with context for timeout control
-	// 8 second timeout - longer timeout for better reliability, prevents slow clients from blocking
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	// 20 second timeout - increased for cross-continent networks (e.g., Australia-Russia ~300ms RTT)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second) // Increased from 8s to 20s for high-latency networks
 	defer cancel()
 	
 	// Request metrics from client
@@ -1321,15 +1321,15 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 		currentTargets[target.Address] = target
 	}
 	
-	// Create a separate HTTP client for tcping with longer timeout
-	// Client tcping operation can take up to 5 seconds, plus network overhead
+	// Create a separate HTTP client for tcping with longer timeout for cross-continent networks
+	// Client tcping operation can take up to 5 seconds, plus network overhead for high-latency networks
 	tcpingHTTPClient := &http.Client{
-		Timeout: 8 * time.Second, // Longer timeout for tcping operations
+		Timeout: 15 * time.Second, // Increased from 8s to 15s for cross-continent networks
 		Transport: &http.Transport{
 			MaxIdleConns:        100,
 			MaxIdleConnsPerHost: 10,
 			IdleConnTimeout:     90 * time.Second,
-			TLSHandshakeTimeout: 3 * time.Second,
+			TLSHandshakeTimeout: 10 * time.Second, // Increased from 3s to 10s for slow TLS
 		},
 	}
 	
