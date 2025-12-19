@@ -24,7 +24,7 @@ const pollMs = Number(pollMsProp ?? 5000);
         display: none;
       }
     </style>
-    <div class="min-w-[1050px]">
+    <div class="min-w-[1100px]">
       <SystemTableHeaderRow />
 
       <!-- 表格主体 -->
@@ -411,42 +411,6 @@ const pollMs = Number(pollMsProp ?? 5000);
     });
   }
 
-  // Columns dropdown controls
-  const columnsBtn = document.getElementById('columns-btn');
-  const columnsDropdown = document.getElementById('columns-dropdown');
-  const columnsContainer = document.getElementById('columns-dropdown-container');
-
-  // Toggle dropdown
-  columnsBtn?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    columnsDropdown?.classList.toggle('hidden');
-  });
-
-  // Close dropdown when clicking outside
-  document.addEventListener('click', (e) => {
-    if (columnsContainer && !columnsContainer.contains(e.target)) {
-      columnsDropdown?.classList.add('hidden');
-    }
-  });
-
-  // Sort option buttons
-  document.querySelectorAll('.sort-option').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const sortField = btn.dataset.sort;
-      if (sortField) {
-        // If clicking the same field, toggle direction
-        if (currentSort.field === sortField) {
-          currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-        } else {
-          currentSort.field = sortField;
-          currentSort.direction = 'asc'; // Reset to ascending for new field
-        }
-        updateSortUI();
-        loadData(); // Reload with new sort
-      }
-    });
-  });
-
   // Initialize sort UI (no sort by default - shows backend order)
   updateSortUI();
 
@@ -518,8 +482,10 @@ const pollMs = Number(pollMsProp ?? 5000);
     }
     
     // Set the column width for all rows and header using inline style
+    // New column order: Service, OS, Time, Location, Net, CPU, Memory, Disk
+    // Last three columns (CPU, Memory, Disk) use 1fr each to fill remaining space
     const columnWidth = `${Math.ceil(maxWidth)}px`;
-    const gridTemplateColumns = `minmax(160px,${columnWidth}) minmax(70px,0.8fr) minmax(90px,1fr) minmax(150px,1.8fr) minmax(150px,1.8fr) minmax(150px,1.8fr) minmax(85px,0.9fr) minmax(90px,1fr)`;
+    const gridTemplateColumns = `${columnWidth} 80px 70px 90px 90px 1fr 1fr 1fr`;
     
     // Update all table rows
     rows.forEach(systemRow => {
@@ -571,7 +537,7 @@ const pollMs = Number(pollMsProp ?? 5000);
     const isOffline = item.alert || false;
     return `
     <div class="system-row" data-system-id="${item.id}">
-      <div class="group grid grid-cols-[minmax(160px,max-content)_minmax(70px,0.8fr)_minmax(90px,1fr)_minmax(150px,1.8fr)_minmax(150px,1.8fr)_minmax(150px,1.8fr)_minmax(85px,0.9fr)_minmax(90px,1fr)] items-center gap-1 sm:gap-2 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${item.id}">
+      <div class="group grid grid-cols-[160px_80px_70px_90px_90px_1fr_1fr_1fr] items-center gap-2 sm:gap-3 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${item.id}">
         <div class="flex items-center gap-1.5 sm:gap-2.5 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-red-400' : 'bg-emerald-400'} shrink-0"></span>
           <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]">${item.name || 'unknown'}</span>
@@ -579,6 +545,9 @@ const pollMs = Number(pollMsProp ?? 5000);
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
+    </div>
+        <div class="h-5 flex items-center w-full" title="${item.os || '-'}">
+          ${item.os_icon ? `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${item.os_icon}"></span>` : `<span class="text-[10px] sm:text-xs text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040]">${item.os || '-'}</span>`}
     </div>
         <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center">${item.time || '-'}</div>
         <div class="h-5 flex items-center" title="${item.location || '-'}">
@@ -590,13 +559,10 @@ const pollMs = Number(pollMsProp ?? 5000);
             return `<span class="text-[10px] sm:text-xs text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040]">${item.location}</span>`;
           })() : '<span class="text-[10px] sm:text-xs text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040]">-</span>'}
     </div>
+        <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center">${((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0)).toFixed(2)} MB/s</div>
         <div class="h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.cpu || 0, false, isOffline)}</div>
         <div class="h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.memory || 0, false, isOffline)}</div>
         <div class="h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline)}</div>
-        <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center">${((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0)).toFixed(2)} MB/s</div>
-        <div class="h-5 flex items-center justify-center w-full" title="${item.os || '-'}">
-          ${item.os_icon ? `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${item.os_icon}"></span>` : `<span class="text-[10px] sm:text-xs text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040]">${item.os || '-'}</span>`}
-    </div>
     </div>
       <!-- Expandable details section -->
       <div class="system-details hidden border-t border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#1a1a1a] dark:bg-[#1a1a1a] bg-[#fafafa] overflow-hidden" data-details-id="${item.id}" style="width: 100%;">
@@ -886,17 +852,31 @@ const pollMs = Number(pollMsProp ?? 5000);
       }
     }
     
-    // Cell 1: Time - only update if changed
+    // Cell 1: OS - only update if changed
+    if (oldItemNormalized.os !== newItemNormalized.os || oldItemNormalized.os_icon !== newItemNormalized.os_icon) {
+      const osCell = cells[1];
+      if (osCell) {
+        if (item.os_icon) {
+          osCell.innerHTML = `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${item.os_icon}"></span>`;
+          setTimeout(() => loadOSIcons(), 0);
+        } else {
+          osCell.innerHTML = `<span class="text-xs text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040]">${item.os || '-'}</span>`;
+        }
+        osCell.title = item.os || '-';
+      }
+    }
+    
+    // Cell 2: Time - only update if changed
     if (shouldUpdateAll || oldItemNormalized.time !== newItemNormalized.time) {
-      const timeCell = cells[1];
+      const timeCell = cells[2];
       if (timeCell) {
         timeCell.textContent = item.time || '-';
       }
     }
     
-    // Cell 2: Location - only update if changed
+    // Cell 3: Location - only update if changed
     if (shouldUpdateAll || oldItemNormalized.location !== newItemNormalized.location) {
-      const locationCell = cells[2];
+      const locationCell = cells[3];
       if (locationCell) {
         if (item.location) {
           const flagIcon = countryToFlag(item.location);
@@ -918,7 +898,17 @@ const pollMs = Number(pollMsProp ?? 5000);
     // Check if system is offline/paused
     const isOffline = newItemNormalized.alert || false;
     
-    // Cell 3: CPU - only update if changed (with threshold)
+    // Cell 4: Net - only update if changed (with threshold)
+    const netInChanged = Math.abs(oldItemNormalized.net_in_mb_s - newItemNormalized.net_in_mb_s) >= 0.01;
+    const netOutChanged = Math.abs(oldItemNormalized.net_out_mb_s - newItemNormalized.net_out_mb_s) >= 0.01;
+    if (shouldUpdateAll || netInChanged || netOutChanged) {
+      const netCell = cells[4];
+      if (netCell) {
+        netCell.textContent = `${(newItemNormalized.net_in_mb_s + newItemNormalized.net_out_mb_s).toFixed(2)} MB/s`;
+      }
+    }
+    
+    // Cell 5: CPU - only update if changed (with threshold)
     const cpuChanged = Math.abs(oldItemNormalized.cpu - newItemNormalized.cpu) >= 0.1;
     // Helper function for dynamic color updates (same logic as getProgressColor)
     const getDynamicProgressColor = (value, isOffline = false) => {
@@ -931,7 +921,7 @@ const pollMs = Number(pollMsProp ?? 5000);
     
     const cpuStatusChanged = oldItemNormalized.alert !== newItemNormalized.alert;
     if (shouldUpdateAll || cpuChanged || cpuStatusChanged) {
-      const cpuCell = cells[3];
+      const cpuCell = cells[5];
       if (cpuCell) {
         // Update progress bar and text directly
         // Use more flexible selector to match span with font-medium class (which has text-[10px] sm:text-xs)
@@ -949,11 +939,11 @@ const pollMs = Number(pollMsProp ?? 5000);
       }
     }
     
-    // Cell 4: Memory - only update if changed (with threshold)
+    // Cell 6: Memory - only update if changed (with threshold)
     const memoryChanged = Math.abs(oldItemNormalized.memory - newItemNormalized.memory) >= 0.1;
     const memoryStatusChanged = oldItemNormalized.alert !== newItemNormalized.alert;
     if (shouldUpdateAll || memoryChanged || memoryStatusChanged) {
-      const memoryCell = cells[4];
+      const memoryCell = cells[6];
       if (memoryCell) {
         // Use more flexible selector to match span with font-medium class (which has text-[10px] sm:text-xs)
         const textSpan = memoryCell.querySelector('span.font-medium');
@@ -970,11 +960,11 @@ const pollMs = Number(pollMsProp ?? 5000);
       }
     }
     
-    // Cell 5: Disk - only update if changed (with threshold)
+    // Cell 7: Disk - only update if changed (with threshold)
     const diskChanged = Math.abs(oldItemNormalized.disk - newItemNormalized.disk) >= 0.1;
     const diskStatusChanged = oldItemNormalized.alert !== newItemNormalized.alert;
     if (shouldUpdateAll || diskChanged || diskStatusChanged) {
-      const diskCell = cells[5];
+      const diskCell = cells[7];
       if (diskCell) {
         // Use more flexible selector to match span with font-medium class (which has text-[10px] sm:text-xs)
         const textSpan = diskCell.querySelector('span.font-medium');
@@ -987,29 +977,6 @@ const pollMs = Number(pollMsProp ?? 5000);
           progressBar.style.width = `${pct(value)}%`;
           // Update color based on threshold
           progressBar.className = `absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getDynamicProgressColor(value, isOffline)}`;
-        }
-      }
-    }
-    
-    // Cell 6: Net - only update if changed (with threshold)
-    const netInChanged = Math.abs(oldItemNormalized.net_in_mb_s - newItemNormalized.net_in_mb_s) >= 0.01;
-    const netOutChanged = Math.abs(oldItemNormalized.net_out_mb_s - newItemNormalized.net_out_mb_s) >= 0.01;
-    if (shouldUpdateAll || netInChanged || netOutChanged) {
-      const netCell = cells[6];
-      if (netCell) {
-        netCell.textContent = `${(newItemNormalized.net_in_mb_s + newItemNormalized.net_out_mb_s).toFixed(2)} MB/s`;
-      }
-    }
-    
-    // Cell 7: OS - only update if changed
-    if (oldItemNormalized.os !== newItemNormalized.os || oldItemNormalized.os_icon !== newItemNormalized.os_icon) {
-      const osCell = cells[7];
-      if (osCell) {
-        if (item.os_icon) {
-          osCell.innerHTML = `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${item.os_icon}"></span>`;
-          setTimeout(() => loadOSIcons(), 0);
-        } else {
-          osCell.innerHTML = `<span class="text-xs text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040]">${item.os || '-'}</span>`;
         }
       }
     }
@@ -2575,31 +2542,9 @@ const pollMs = Number(pollMsProp ?? 5000);
     };
   }
 
-  // Setup filter input handler
-  function setupFilterInput() {
-    const filterInput = document.getElementById('system-filter-input');
-    if (!filterInput) return;
-
-    filterInput.addEventListener('input', (e) => {
-      currentFilter = e.target.value;
-      // Reload data to apply filter
-      loadData();
-    });
-
-    // Also handle Enter key
-    filterInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        currentFilter = e.target.value;
-        loadData();
-  }
-    });
-  }
-
   // Initial load - wait for DOM to be ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-      setupFilterInput();
       loadData();
       connectSSE();
       // Initial translation update
@@ -2608,7 +2553,6 @@ const pollMs = Number(pollMsProp ?? 5000);
       preloadTCPingConfig();
     });
   } else {
-    setupFilterInput();
     loadData();
     connectSSE();
     // Initial translation update
