@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -695,26 +696,52 @@ func getIPAddresses() (ipv4, ipv6 string) {
 }
 
 // getPublicIPv4 tries to get public IPv4 from external API as fallback
+// Uses multiple services including HTTP versions for better reliability in China
 func getPublicIPv4() string {
-	// Try multiple services for reliability
+	// Try multiple services for reliability, including HTTP versions (may work better in China)
+	// Order: try HTTP first (less likely to be blocked), then HTTPS
 	services := []string{
-		"https://api.ipify.org",
-		"https://icanhazip.com",
-		"https://ifconfig.me/ip",
+		"http://ifconfig.me/ip",           // HTTP version, may work better in China
+		"http://icanhazip.com",            // HTTP version
+		"http://api.ipify.org",            // HTTP version
+		"https://api.ipify.org",           // HTTPS version
+		"https://icanhazip.com",           // HTTPS version
+		"https://ifconfig.me/ip",          // HTTPS version
+		"http://ip.sb",                    // Alternative service (may work in China)
+		"http://myip.ipip.net",            // Chinese service (should work in China)
+		"http://ip.3322.net",              // Chinese service (should work in China)
 	}
 	
-	for _, service := range services {
-		client := &http.Client{
-			Timeout: 3 * time.Second,
+	// Use shared HTTP client for connection reuse
+	httpClient := getSharedHTTPClient()
+	if httpClient == nil {
+		// Fallback to simple client if shared client not available
+		httpClient = &http.Client{
+			Timeout: 10 * time.Second, // Increased timeout for cross-continent networks
 		}
-		resp, err := client.Get(service)
+	}
+	
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	for _, service := range services {
+		req, err := http.NewRequestWithContext(ctx, "GET", service, nil)
 		if err != nil {
 			continue
-	}
-	defer resp.Body.Close()
-
+		}
+		
+		req.Header.Set("User-Agent", "PulseClient/1.0")
+		req.Header.Set("Accept", "text/plain, */*")
+		
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			continue
+		}
+		
 		if resp.StatusCode == http.StatusOK {
 			body, err := ioutil.ReadAll(resp.Body)
+			resp.Body.Close()
 			if err != nil {
 				continue
 			}
@@ -723,6 +750,8 @@ func getPublicIPv4() string {
 			if ip != nil && ip.To4() != nil && !isPrivateIP(ip) {
 				return ipStr
 			}
+		} else {
+			resp.Body.Close()
 		}
 	}
 	
