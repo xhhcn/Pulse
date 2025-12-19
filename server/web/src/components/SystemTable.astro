@@ -362,7 +362,19 @@ const pollMs = Number(pollMsProp ?? 5000);
   function extractTimeValue(timeStr) {
     if (!timeStr) return null;
     
-    // Try to match patterns like "5 hours", "2 days", "12:34:56", etc.
+    // Try to match patterns like "5h", "2d", "5 hours", "2 days", "12:34:56", etc.
+    // First try compact format (no space): "0h", "11d", "120d"
+    const compactHoursMatch = timeStr.match(/(\d+)h/i);
+    if (compactHoursMatch) {
+      return parseInt(compactHoursMatch[1], 10); // Return hours as number
+    }
+    
+    const compactDaysMatch = timeStr.match(/(\d+)d/i);
+    if (compactDaysMatch) {
+      return parseInt(compactDaysMatch[1], 10) * 24; // Convert days to hours for comparison
+    }
+    
+    // Try to match patterns with space: "5 hours", "2 days"
     const hoursMatch = timeStr.match(/(\d+)\s*hours?/i);
     if (hoursMatch) {
       return parseInt(hoursMatch[1], 10); // Return hours as number
