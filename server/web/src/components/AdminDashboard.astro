@@ -704,6 +704,11 @@ const apiBase = apiBaseProp ?? '';
     const old = normalizeItem(oldItem);
     const new_ = normalizeItem(newItem);
     
+    // Compare tags arrays (deep comparison)
+    const oldTags = Array.isArray(old.tags) ? old.tags.sort().join(',') : '';
+    const newTags = Array.isArray(new_.tags) ? new_.tags.sort().join(',') : '';
+    const tagsChanged = oldTags !== newTags;
+    
     // Compare relevant fields
     return (
       old.name !== new_.name ||
@@ -715,7 +720,8 @@ const apiBase = apiBaseProp ?? '';
       old.total_net_in_bytes !== new_.total_net_in_bytes ||
       old.total_net_out_bytes !== new_.total_net_out_bytes ||
       old.cpu_model !== new_.cpu_model ||
-      old.order !== new_.order
+      old.order !== new_.order ||
+      tagsChanged // Include tags in change detection
     );
   }
 
@@ -1712,6 +1718,14 @@ const apiBase = apiBaseProp ?? '';
         // Double-check that item is still in cache before updating
         if (currentData.has(item.id)) {
           updateSystemItem(itemElement, item);
+          // CRITICAL: Update data-system attribute on edit button to reflect latest data
+          // This ensures edit modal shows correct data (tags, name, secret, etc.) when reopened
+          const editBtn = itemElement.querySelector('.edit-btn');
+          if (editBtn) {
+            // Use original item data from API response (includes tags, secret, etc.) for data-system attribute
+            // The item parameter is the raw data from API, which should include all fields
+            editBtn.dataset.system = JSON.stringify(item).replace(/'/g, "&apos;");
+          }
         } else {
           // Item was removed from cache, skip update (should be handled by re-render)
         }

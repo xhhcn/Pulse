@@ -491,9 +491,12 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 			metrics[i].IPv6 = ""
 		}
 		
-		// CRITICAL SECURITY: Never expose secret to frontend, even if authenticated
-		// Secret should only be used server-side for client authentication
-		metrics[i].Secret = ""
+		// CRITICAL SECURITY: Never expose secret to unauthenticated users
+		// For authenticated admin users, return secret so they can generate install commands
+		if !authenticated {
+			metrics[i].Secret = ""
+		}
+		// Authenticated admin users can see secret for generating install commands
 	}
 	
 	writeJSON(w, http.StatusOK, metrics)
@@ -655,10 +658,15 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 		broker.Broadcast(`{"type":"metric_updated","id":"` + metric.ID + `"}`)
 	}
 	
-	// CRITICAL SECURITY: Never expose secret in API responses
-	// Create a copy without secret before sending to client
+	// CRITICAL SECURITY: Never expose secret in API responses to unauthenticated users
+	// For authenticated admin users, return secret so they can generate install commands
 	responseMetric := metric
-	responseMetric.Secret = ""
+	authenticated := isAuthenticated(r)
+	if !authenticated {
+		// Unauthenticated users should never see secret
+		responseMetric.Secret = ""
+	}
+	// Authenticated admin users can see secret for generating install commands
 	
 	writeJSON(w, http.StatusAccepted, responseMetric)
 }
