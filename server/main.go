@@ -297,7 +297,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handleHealth)
 	mux.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
-		handleSSE(broker, w, r)
+		handleSSE(store, broker, w, r)
 	})
 	mux.HandleFunc("/api/metrics", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -350,6 +350,31 @@ func main() {
 			handleGetTCPingConfig(store, w, r)
 		} else if r.Method == http.MethodPost {
 			handleSetTCPingConfig(store, w, r)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/navbar/config", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleGetNavbarConfig(store, w, r)
+		} else if r.Method == http.MethodPost {
+			handleSetNavbarConfig(store, w, r)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/privacy/config", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleGetPrivacyConfig(store, w, r)
+		} else if r.Method == http.MethodPost {
+			handleSetPrivacyConfig(store, w, r)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/privacy/verify-token", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			handleVerifyShareToken(store, w, r)
 		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -420,23 +445,49 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func handleSSE(broker *SSEBroker, w http.ResponseWriter, r *http.Request) {
-	// Set headers for SSE - critical for Cloudflare CDN compatibility
+func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.Request) {
+	// Check privacy mode - if enabled, require authentication or valid share token
+	privacyConfig, err := store.GetPrivacyConfig()
+	if err == nil && privacyConfig.Enabled {
+		// Privacy mode is enabled, check authentication
+		authenticated := isAuthenticated(r)
+		
+		// If not authenticated, check for share token or admin token in query
+		if !authenticated {
+			shareToken := r.URL.Query().Get("token")
+			adminToken := r.URL.Query().Get("admin_token")
+			
+			if shareToken != "" {
+				// Verify share token
+				if shareToken == privacyConfig.ShareToken && !privacyConfig.TokenExpires.IsZero() && time.Now().Before(privacyConfig.TokenExpires) {
+					// Valid share token, allow access
+					authenticated = true
+				}
+			} else if adminToken != "" {
+				// Check admin token
+				authTokensMu.Lock()
+				expiry, exists := authTokens[adminToken]
+				authTokensMu.Unlock()
+				if exists && time.Now().Before(expiry) {
+					authenticated = true
+				}
+			}
+			
+			if !authenticated {
+				// No valid authentication or share token, deny access
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+	}
+	
+	// Set headers for SSE
 	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
-	// Critical for reverse proxy and Cloudflare - tells proxies not to buffer
+	// Important for reverse proxy - tells nginx/other proxies not to buffer
 	w.Header().Set("X-Accel-Buffering", "no")
-	// Additional headers for Cloudflare compatibility
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	// Flush headers immediately to prevent buffering
-	if flusher, ok := w.(http.Flusher); ok {
-		flusher.Flush()
-	}
 
 	// Subscribe to broker
 	ch := broker.Subscribe()
@@ -469,6 +520,42 @@ func handleSSE(broker *SSEBroker, w http.ResponseWriter, r *http.Request) {
 }
 
 func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
+	// Check privacy mode - if enabled, require authentication or valid share token
+	privacyConfig, err := store.GetPrivacyConfig()
+	if err == nil && privacyConfig.Enabled {
+		// Privacy mode is enabled, check authentication
+		authenticated := isAuthenticated(r)
+		
+		// If not authenticated, check for share token
+		if !authenticated {
+			shareToken := r.URL.Query().Get("token")
+			if shareToken == "" {
+				// Try to get from Authorization header as fallback
+				authHeader := r.Header.Get("Authorization")
+				if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+					// This is admin token, not share token, so check admin auth
+					authenticated = isAuthenticated(r)
+				}
+			}
+			
+			if !authenticated && shareToken != "" {
+				// Verify share token
+				if shareToken == privacyConfig.ShareToken && !privacyConfig.TokenExpires.IsZero() && time.Now().Before(privacyConfig.TokenExpires) {
+					// Valid share token, allow access
+					authenticated = true
+				} else {
+					// Invalid or expired share token, deny access
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+			} else if !authenticated {
+				// No valid authentication or share token, deny access
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+	}
+	
 	metrics, err := store.List()
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -681,6 +768,12 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 }
 
 func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistry, w http.ResponseWriter, r *http.Request, id string) {
+	// Require authentication for deleting systems
+	if !isAuthenticated(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	
 	id = strings.TrimSpace(id)
 	if id == "" {
 		http.Error(w, "system id is required", http.StatusBadRequest)
@@ -1338,6 +1431,12 @@ func generateSecret() string {
 }
 
 func handleUpdateOrder(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.Request) {
+	// Require authentication for updating order
+	if !isAuthenticated(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	
 	defer r.Body.Close()
 	
 	var payload struct {
@@ -1483,6 +1582,30 @@ func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 
 // Handle get tcping config
 func handleGetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request) {
+	// Check privacy mode - if enabled, require authentication or valid share token
+	privacyConfig, err := store.GetPrivacyConfig()
+	if err == nil && privacyConfig.Enabled {
+		authenticated := isAuthenticated(r)
+		if !authenticated {
+			shareToken := r.URL.Query().Get("token")
+			if shareToken == "" {
+				authHeader := r.Header.Get("Authorization")
+				if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+					authenticated = isAuthenticated(r)
+				}
+			}
+			if !authenticated && shareToken != "" {
+				if shareToken == privacyConfig.ShareToken && !privacyConfig.TokenExpires.IsZero() && time.Now().Before(privacyConfig.TokenExpires) {
+					authenticated = true
+				}
+			}
+			if !authenticated {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+	}
+	
 	config, err := store.GetTCPingConfig()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to get config: %v", err), http.StatusInternalServerError)
@@ -1493,6 +1616,30 @@ func handleGetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request)
 
 // Handle get tcping history
 func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request) {
+	// Check privacy mode - if enabled, require authentication or valid share token
+	privacyConfig, err := store.GetPrivacyConfig()
+	if err == nil && privacyConfig.Enabled {
+		authenticated := isAuthenticated(r)
+		if !authenticated {
+			shareToken := r.URL.Query().Get("token")
+			if shareToken == "" {
+				authHeader := r.Header.Get("Authorization")
+				if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+					authenticated = isAuthenticated(r)
+				}
+			}
+			if !authenticated && shareToken != "" {
+				if shareToken == privacyConfig.ShareToken && !privacyConfig.TokenExpires.IsZero() && time.Now().Before(privacyConfig.TokenExpires) {
+					authenticated = true
+				}
+			}
+			if !authenticated {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+		}
+	}
+	
 	clientID := r.URL.Query().Get("client_id")
 	target := r.URL.Query().Get("target")
 	
@@ -1502,7 +1649,6 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 	}
 	
 	var results []TCPingResult
-	var err error
 	if target != "" {
 		results, err = store.GetTCPingResults(clientID, target)
 	} else {
@@ -1518,7 +1664,199 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 }
 
 // Handle set tcping config
+func handleGetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request) {
+	// Navbar config is public (no authentication required)
+	// It's used by the frontend to display custom navbar text and logo
+	config, err := store.GetNavbarConfig()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to get navbar config: %v", err), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, config)
+}
+
+func handleSetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request) {
+	if !isAuthenticated(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	
+	defer r.Body.Close()
+	var config NavbarConfig
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+	
+	// Validate config
+	if config.Text == "" {
+		config.Text = "Pulse" // Default to "Pulse" if empty
+	}
+	
+	if err := store.SaveNavbarConfig(&config); err != nil {
+		http.Error(w, fmt.Sprintf("failed to save navbar config: %v", err), http.StatusInternalServerError)
+		return
+	}
+	
+	writeJSON(w, http.StatusOK, map[string]string{"message": "navbar config saved"})
+}
+
+func handleGetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request) {
+	config, err := store.GetPrivacyConfig()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to get privacy config: %v", err), http.StatusInternalServerError)
+		return
+	}
+	
+	// Check if user is authenticated - only authenticated users can see share_token
+	authenticated := isAuthenticated(r)
+	
+	// Convert TokenExpires to RFC3339 string for JSON serialization
+	configResponse := map[string]interface{}{
+		"enabled":           config.Enabled,
+		"server_time":       time.Now().Format(time.RFC3339), // Include server time for client to calculate time difference
+	}
+	
+	// Only include share_token and expiration info if authenticated
+	if authenticated {
+		configResponse["share_token"] = config.ShareToken
+		configResponse["expires_in_seconds"] = config.ExpiresInSeconds
+		if !config.TokenExpires.IsZero() {
+			configResponse["token_expires"] = config.TokenExpires.Format(time.RFC3339)
+			// Also include whether token is expired (based on server time)
+			configResponse["token_expired"] = time.Now().After(config.TokenExpires)
+		} else {
+			configResponse["token_expires"] = ""
+			configResponse["token_expired"] = false
+		}
+	} else {
+		// Unauthenticated users can only see if privacy is enabled
+		configResponse["share_token"] = ""
+		configResponse["expires_in_seconds"] = 0
+		configResponse["token_expires"] = ""
+		configResponse["token_expired"] = false
+	}
+	
+	writeJSON(w, http.StatusOK, configResponse)
+}
+
+func handleSetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request) {
+	if !isAuthenticated(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	
+	defer r.Body.Close()
+	var payload struct {
+		Enabled      bool   `json:"enabled"`
+		ShareToken   string `json:"share_token"`
+		TokenExpires string `json:"token_expires"` // ISO 8601 string or empty
+		ExpiresInSeconds int `json:"expires_in_seconds"` // Alternative: seconds from now
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+	
+	config := PrivacyConfig{
+		Enabled:          payload.Enabled,
+		ShareToken:       payload.ShareToken,
+		ExpiresInSeconds: payload.ExpiresInSeconds, // Save the expiration seconds value
+	}
+	
+	// Calculate expiration time on server side
+	if payload.ShareToken != "" {
+		if payload.ExpiresInSeconds > 0 {
+			// Use server time + seconds (more accurate)
+			config.TokenExpires = time.Now().Add(time.Duration(payload.ExpiresInSeconds) * time.Second)
+		} else if payload.TokenExpires != "" {
+			// Parse provided expiration time (fallback for backward compatibility)
+			expiresTime, err := time.Parse(time.RFC3339, payload.TokenExpires)
+			if err != nil {
+				http.Error(w, "invalid token_expires format", http.StatusBadRequest)
+				return
+			}
+			config.TokenExpires = expiresTime
+		}
+		// If both are empty, TokenExpires remains zero (no expiration)
+	} else {
+		// ShareToken is empty, clear TokenExpires to revoke the share link
+		config.TokenExpires = time.Time{}
+		config.ExpiresInSeconds = 0
+	}
+	
+	if err := store.SavePrivacyConfig(&config); err != nil {
+		http.Error(w, fmt.Sprintf("failed to save privacy config: %v", err), http.StatusInternalServerError)
+		return
+	}
+	
+	// Return the saved config with server-calculated expiration time
+	// Convert TokenExpires to RFC3339 string for JSON serialization
+	configResponse := map[string]interface{}{
+		"enabled":           config.Enabled,
+		"share_token":       config.ShareToken,
+		"expires_in_seconds": config.ExpiresInSeconds, // Include saved expiration seconds value
+		"server_time":       time.Now().Format(time.RFC3339), // Include server time for client to calculate time difference
+	}
+	if !config.TokenExpires.IsZero() {
+		configResponse["token_expires"] = config.TokenExpires.Format(time.RFC3339)
+		// Also include whether token is expired (based on server time)
+		configResponse["token_expired"] = time.Now().After(config.TokenExpires)
+	} else {
+		configResponse["token_expires"] = ""
+		configResponse["token_expired"] = false
+	}
+	
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message": "privacy config saved",
+		"config":  configResponse,
+	})
+}
+
+func handleVerifyShareToken(store *Store, w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	var payload struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+	
+	config, err := store.GetPrivacyConfig()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to get privacy config: %v", err), http.StatusInternalServerError)
+		return
+	}
+	
+	// Check if privacy is enabled
+	if !config.Enabled {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "reason": "privacy_not_enabled"})
+		return
+	}
+	
+	// Check if token matches
+	if config.ShareToken == "" || config.ShareToken != payload.Token {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "reason": "invalid_token"})
+		return
+	}
+	
+	// Check if token is expired
+	if !config.TokenExpires.IsZero() && time.Now().After(config.TokenExpires) {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "reason": "token_expired"})
+		return
+	}
+	
+	writeJSON(w, http.StatusOK, map[string]interface{}{"valid": true})
+}
+
 func handleSetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request) {
+	// Require authentication for setting TCPing config
+	if !isAuthenticated(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	
 	defer r.Body.Close()
 	var config TCPingConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {

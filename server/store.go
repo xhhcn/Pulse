@@ -21,6 +21,8 @@ const (
 	tcpingBucket  = "tcping"
 	configBucket  = "config"
 	configKey     = "tcping"
+	navbarConfigKey = "navbar"
+	privacyConfigKey = "privacy"
 	authBucket    = "auth"
 	passwordKey   = "admin_password"
 )
@@ -543,4 +545,114 @@ func GenerateAuthToken() (string, error) {
 		return "", err
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+// NavbarConfig represents the navbar configuration
+type NavbarConfig struct {
+	Text string `json:"text"` // Custom text for navbar (default: "Pulse")
+	Logo string `json:"logo"` // Custom logo URL or SVG (default: built-in SVG)
+}
+
+// GetNavbarConfig retrieves the navbar configuration
+func (s *Store) GetNavbarConfig() (*NavbarConfig, error) {
+	var config NavbarConfig
+	
+	err := s.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(configBucket))
+		if bucket == nil {
+			return fmt.Errorf("config bucket not found")
+		}
+		
+		data := bucket.Get([]byte(navbarConfigKey))
+		if data == nil {
+			// Return default config if not found
+			config = NavbarConfig{
+				Text: "Pulse",
+				Logo: "", // Empty means use default SVG
+			}
+			return nil
+		}
+		
+		return json.Unmarshal(data, &config)
+	})
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	return &config, nil
+}
+
+// SaveNavbarConfig saves the navbar configuration
+func (s *Store) SaveNavbarConfig(config *NavbarConfig) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(configBucket))
+		if bucket == nil {
+			return fmt.Errorf("config bucket not found")
+		}
+		
+		data, err := json.Marshal(config)
+		if err != nil {
+			return fmt.Errorf("failed to marshal config: %w", err)
+		}
+		
+		return bucket.Put([]byte(navbarConfigKey), data)
+	})
+}
+
+// PrivacyConfig represents the privacy configuration
+type PrivacyConfig struct {
+	Enabled          bool      `json:"enabled"`           // Whether privacy mode is enabled
+	ShareToken       string    `json:"share_token"`       // Temporary share token
+	TokenExpires     time.Time `json:"token_expires"`     // Token expiration time
+	ExpiresInSeconds int       `json:"expires_in_seconds"` // Saved expiration seconds value for UI
+}
+
+// GetPrivacyConfig retrieves the privacy configuration
+func (s *Store) GetPrivacyConfig() (*PrivacyConfig, error) {
+	var config PrivacyConfig
+	
+	err := s.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(configBucket))
+		if bucket == nil {
+			return fmt.Errorf("config bucket not found")
+		}
+		
+		data := bucket.Get([]byte(privacyConfigKey))
+		if data == nil {
+			// Return default config if not found
+			config = PrivacyConfig{
+				Enabled:          false,
+				ShareToken:       "",
+				TokenExpires:     time.Time{},
+				ExpiresInSeconds: 60, // Default to 60 seconds
+			}
+			return nil
+		}
+		
+		return json.Unmarshal(data, &config)
+	})
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	return &config, nil
+}
+
+// SavePrivacyConfig saves the privacy configuration
+func (s *Store) SavePrivacyConfig(config *PrivacyConfig) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(configBucket))
+		if bucket == nil {
+			return fmt.Errorf("config bucket not found")
+		}
+		
+		data, err := json.Marshal(config)
+		if err != nil {
+			return fmt.Errorf("failed to marshal config: %w", err)
+		}
+		
+		return bucket.Put([]byte(privacyConfigKey), data)
+	})
 }

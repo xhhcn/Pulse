@@ -11,28 +11,32 @@ const { isAdmin = false } = Astro.props;
 <nav class="mx-auto mt-2 sm:mt-3 max-w-7xl flex items-center justify-between rounded-xl border border-[#404040]/50 bg-[#1c1c1c] dark:border-[#404040]/50 dark:bg-[#1c1c1c] border-[#a3a3a3]/50 bg-white px-3 sm:px-4 md:px-6 py-2 sm:py-3">
   <!-- Logo -->
   <a href="/" class="flex items-center gap-1.5 sm:gap-2">
-    <svg width="20" height="20" class="sm:w-6 sm:h-6 shrink-0 monitor-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="--monitor-stroke: #24292f;">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.5 12h2l2-6 3 18 2.5-12h2" style="stroke: var(--monitor-stroke);">
-        <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/>
-      </path>
-      <path stroke-linecap="round" stroke-width="1.5" d="M3 12h2M19 12h2" style="stroke: var(--monitor-stroke);">
-        <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite"/>
-      </path>
-      <path stroke-linecap="round" stroke-width="1.5" opacity="0.5" d="M1 12h1M22 12h1" style="stroke: var(--monitor-stroke);">
-        <animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite"/>
-      </path>
-      <circle cx="12" cy="12" r="9" stroke-width="1.5" opacity="0.2" style="stroke: var(--monitor-stroke);">
-        <animate attributeName="opacity" values="0.1;0.3;0.1" dur="2s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx="12" cy="12" r="5" stroke-width="1.5" opacity="0.4" style="stroke: var(--monitor-stroke);">
-        <animate attributeName="opacity" values="0.2;0.6;0.2" dur="2s" repeatCount="indefinite"/>
-      </circle>
-    </svg>
-    <span class="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-[#262626] dark:text-white">Pulse</span>
+    <!-- Logo Container -->
+    <span id="navbar-logo-container" class="shrink-0" style="opacity: 0;">
+      <svg width="20" height="20" class="sm:w-6 sm:h-6 monitor-icon default-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="--monitor-stroke: #24292f;">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.5 12h2l2-6 3 18 2.5-12h2" style="stroke: var(--monitor-stroke);">
+          <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/>
+        </path>
+        <path stroke-linecap="round" stroke-width="1.5" d="M3 12h2M19 12h2" style="stroke: var(--monitor-stroke);">
+          <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite"/>
+        </path>
+        <path stroke-linecap="round" stroke-width="1.5" opacity="0.5" d="M1 12h1M22 12h1" style="stroke: var(--monitor-stroke);">
+          <animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite"/>
+        </path>
+        <circle cx="12" cy="12" r="9" stroke-width="1.5" opacity="0.2" style="stroke: var(--monitor-stroke);">
+          <animate attributeName="opacity" values="0.1;0.3;0.1" dur="2s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="12" cy="12" r="5" stroke-width="1.5" opacity="0.4" style="stroke: var(--monitor-stroke);">
+          <animate attributeName="opacity" values="0.2;0.6;0.2" dur="2s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+    </span>
+    <!-- Text Container -->
+    <span id="navbar-text" class="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-[#262626] dark:text-white" style="opacity: 0;">Pulse</span>
   </a>
 
   <!-- Right Side Icons -->
-  <div class="flex items-center gap-0.5 sm:gap-1">
+  <div id="navbar-icons-container" class="flex items-center gap-0.5 sm:gap-1" style="opacity: 0;">
     <button id="language-btn" class="rounded-lg p-1.5 sm:p-2 text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90" aria-label="language" title="切换语言">
       <Icon name="languages" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px] transition-transform duration-200" />
       </button>
@@ -75,7 +79,12 @@ const { isAdmin = false } = Astro.props;
       if (stored) {
         return stored;
       }
-      // Default to English, not system language
+      // Default to system language
+      const sysLang = getSystemLanguage();
+      // Convert system language to 'zh' or 'en'
+      if (sysLang.toLowerCase().startsWith('zh')) {
+        return 'zh';
+      }
       return 'en';
     }
 
@@ -118,8 +127,8 @@ const { isAdmin = false } = Astro.props;
       if (stored === 'dark' || stored === 'light') {
         return stored;
       }
-      // Default to dark theme, not system theme
-      return 'dark';
+      // Default to system theme
+      return getSystemTheme();
     }
 
     function toggleTheme() {
@@ -192,16 +201,123 @@ const { isAdmin = false } = Astro.props;
 
     // System theme listener removed - we use fixed defaults (English and Dark)
 
+    // Apply navbar configuration and show content with smooth fade-in animation
+    function applyNavbarConfig(config) {
+      const navbarText = document.getElementById('navbar-text');
+      const logoContainer = document.getElementById('navbar-logo-container');
+      const iconsContainer = document.getElementById('navbar-icons-container');
+      
+      // Update navbar text
+      if (navbarText) {
+        if (config && config.text) {
+          navbarText.textContent = config.text;
+        }
+      }
+      
+      // Update navbar logo
+      if (logoContainer) {
+        if (config && config.logo) {
+          // Check if logo is a URL or SVG code
+          if (config.logo.startsWith('http://') || config.logo.startsWith('https://') || config.logo.startsWith('//')) {
+            // It's a URL - use img tag
+            logoContainer.innerHTML = `<img src="${config.logo}" alt="Logo" class="w-5 h-5 sm:w-6 sm:h-6" style="object-fit: contain;" />`;
+          } else if (config.logo.trim().startsWith('<svg')) {
+            // It's SVG code - insert directly
+            logoContainer.innerHTML = config.logo;
+            // Ensure SVG has proper size classes
+            const svg = logoContainer.querySelector('svg');
+            if (svg) {
+              svg.classList.add('w-5', 'h-5', 'sm:w-6', 'sm:h-6');
+              if (!svg.hasAttribute('width')) svg.setAttribute('width', '20');
+              if (!svg.hasAttribute('height')) svg.setAttribute('height', '20');
+            }
+          }
+        } else {
+          // Reset to default logo if config.logo is empty
+          const defaultLogo = logoContainer.querySelector('.default-logo');
+          if (!defaultLogo) {
+            // Restore default SVG if it was replaced
+            logoContainer.innerHTML = `<svg width="20" height="20" class="sm:w-6 sm:h-6 monitor-icon default-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="--monitor-stroke: #24292f;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.5 12h2l2-6 3 18 2.5-12h2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/></path><path stroke-linecap="round" stroke-width="1.5" d="M3 12h2M19 12h2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite"/></path><path stroke-linecap="round" stroke-width="1.5" opacity="0.5" d="M1 12h1M22 12h1" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite"/></path><circle cx="12" cy="12" r="9" stroke-width="1.5" opacity="0.2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.1;0.3;0.1" dur="2s" repeatCount="indefinite"/></circle><circle cx="12" cy="12" r="5" stroke-width="1.5" opacity="0.4" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.2;0.6;0.2" dur="2s" repeatCount="indefinite"/></circle></svg>`;
+          }
+        }
+      }
+      
+      // Update monitor icon stroke color based on current theme
+      const currentTheme = getCurrentTheme();
+      const monitorIcon = logoContainer?.querySelector('.monitor-icon');
+      if (monitorIcon) {
+        if (currentTheme === 'dark') {
+          monitorIcon.style.setProperty('--monitor-stroke', '#c9d1d9');
+        } else {
+          monitorIcon.style.setProperty('--monitor-stroke', '#24292f');
+        }
+      }
+      
+      // Show all elements with smooth staggered fade-in animation
+      // Use requestAnimationFrame to ensure smooth animation trigger
+      requestAnimationFrame(() => {
+        if (logoContainer) {
+          logoContainer.classList.add('animate-stagger-in');
+          logoContainer.style.animationDelay = '0ms';
+        }
+        
+        if (navbarText) {
+          navbarText.classList.add('animate-stagger-in');
+          navbarText.style.animationDelay = '50ms';
+        }
+        
+        if (iconsContainer) {
+          iconsContainer.classList.add('animate-stagger-in');
+          iconsContainer.style.animationDelay = '100ms';
+        }
+      });
+    }
+
+    // Load navbar configuration from backend
+    async function loadNavbarConfig() {
+      // Check if config was preloaded
+      if (window.__navbarConfig) {
+        applyNavbarConfig(window.__navbarConfig);
+        return;
+      }
+      
+      try {
+        const apiBase = window.location.origin;
+        const res = await fetch(`${apiBase}/api/navbar/config`);
+        if (res.ok) {
+          const config = await res.json();
+          applyNavbarConfig(config);
+        } else {
+          // If request failed, show defaults with animation
+          applyNavbarConfig(null);
+        }
+      } catch (err) {
+        // Config load failed silently - use defaults and show them with animation
+        applyNavbarConfig(null);
+      }
+    }
+
     // Initialize on page load
     function init() {
-      // Initialize language
+      // Language and theme are already set in head script, just sync UI
       const currentLang = getCurrentLanguage();
-      setLanguage(currentLang);
+      // Only update if different (to avoid unnecessary updates)
+      if (document.documentElement.lang !== currentLang) {
+        setLanguage(currentLang);
+      }
       updateLanguageButton();
 
-      // Initialize theme
+      // Theme is already applied, just sync icon
       const currentTheme = getCurrentTheme();
-      applyTheme(currentTheme);
+      // Only update if different (to avoid unnecessary updates)
+      const htmlHasDark = document.documentElement.classList.contains('dark');
+      const shouldBeDark = currentTheme === 'dark';
+      if (htmlHasDark !== shouldBeDark) {
+        applyTheme(currentTheme);
+      } else {
+        // Just update the icon without changing theme
+        updateThemeIcon(currentTheme);
+      }
       
       // Initialize monitor icon color
       const monitorIcon = document.querySelector('.monitor-icon');
@@ -212,6 +328,14 @@ const { isAdmin = false } = Astro.props;
           monitorIcon.style.setProperty('--monitor-stroke', '#24292f');
         }
       }
+
+      // Load navbar configuration (or use preloaded config)
+      loadNavbarConfig();
+      
+      // Listen for preloaded config event
+      window.addEventListener('navbarconfigready', (e) => {
+        applyNavbarConfig(e.detail);
+      });
 
       // Setup event listeners
       const languageBtn = document.getElementById('language-btn');

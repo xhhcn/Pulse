@@ -14,6 +14,12 @@ const apiBase = apiBaseProp ?? '';
         <button id="add-system-btn" class="rounded-lg p-1.5 sm:p-2 text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] hover:text-emerald-400 dark:hover:text-emerald-400 hover:text-emerald-600" title="" data-title-en="Add Service" data-title-zh="添加服务">
           <Icon name="plus" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
         </button>
+        <button id="privacy-config-btn" class="rounded-lg p-1.5 sm:p-2 text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] hover:text-orange-400 dark:hover:text-orange-400 hover:text-orange-600" title="" data-title-en="Privacy Settings" data-title-zh="隐私设置">
+          <Icon name="shield" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+        </button>
+        <button id="navbar-config-btn" class="rounded-lg p-1.5 sm:p-2 text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] hover:text-purple-400 dark:hover:text-purple-400 hover:text-purple-600" title="" data-title-en="Navbar Settings" data-title-zh="导航栏设置">
+          <Icon name="palette" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+        </button>
         <button id="tcping-config-btn" class="rounded-lg p-1.5 sm:p-2 text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] hover:text-blue-400 dark:hover:text-blue-400 hover:text-blue-600" title="" data-title-en="TCPing Settings" data-title-zh="TCPing 设置">
           <Icon name="settings" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
         </button>
@@ -328,6 +334,160 @@ const apiBase = apiBaseProp ?? '';
     </div>
       </form>
   </div>
+  </div>
+
+  <!-- Navbar Config Modal -->
+  <div id="navbar-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" data-modal>
+    <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-6 shadow-2xl" data-modal-content>
+      <div class="mb-4 flex items-center justify-between">
+        <h2 id="navbar-config-title" class="text-xl font-semibold text-[#262626] dark:text-[#f5f5f5]" data-translate="navbarSettings">Navbar Settings</h2>
+        <button id="close-navbar-config-modal-btn" class="rounded-lg p-1 text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] hover:text-[#262626] dark:hover:text-[#e5e5e5]">
+          <Icon name="x" size={20} />
+        </button>
+      </div>
+
+      <form id="navbar-config-form" class="space-y-4">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252]"><span data-translate="navbarText">Navbar Text</span></label>
+          <input
+            type="text"
+            name="text"
+            id="navbar-text-input"
+            placeholder="Pulse"
+            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
+          />
+          <p class="mt-1 text-xs text-[#737373] dark:text-[#737373] text-[#525252]" data-translate="navbarTextHint">Custom text displayed in navbar (leave empty for default: Pulse)</p>
+        </div>
+
+        <div>
+          <label class="mb-1 block text-sm font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252]"><span data-translate="navbarLogo">Navbar Logo</span></label>
+          <input
+            type="text"
+            name="logo"
+            id="navbar-logo-input"
+            placeholder="https://example.com/logo.svg or SVG code"
+            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
+          />
+          <p class="mt-1 text-xs text-[#737373] dark:text-[#737373] text-[#525252]" data-translate="navbarLogoHint">Logo URL or SVG code (leave empty for default logo)</p>
+        </div>
+
+        <div id="navbar-config-message" class="hidden text-sm"></div>
+
+        <div class="flex gap-3">
+          <button
+            type="button"
+            id="cancel-navbar-config-btn"
+            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-semibold text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5]"
+          >
+            <span data-translate="cancel">Cancel</span>
+          </button>
+          <button
+            type="submit"
+            class="flex-1 rounded-lg bg-purple-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-600"
+          >
+            <span data-translate="save">Save</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Privacy Config Modal -->
+  <div id="privacy-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" data-modal>
+    <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-6 shadow-2xl" data-modal-content>
+      <div class="mb-4 flex items-center justify-between">
+        <h2 id="privacy-config-title" class="text-xl font-semibold text-[#262626] dark:text-[#f5f5f5]" data-translate="privacySettings">Privacy Settings</h2>
+        <button id="close-privacy-config-modal-btn" class="rounded-lg p-1 text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] hover:text-[#262626] dark:hover:text-[#e5e5e5]">
+          <Icon name="x" size={20} />
+        </button>
+      </div>
+
+      <form id="privacy-config-form" class="space-y-4">
+        <!-- Privacy Mode Toggle -->
+        <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
+          <div class="flex-1">
+            <label class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4] mb-1" data-translate="enablePrivacyMode">Enable Privacy Mode</label>
+            <p class="text-xs text-[#737373] dark:text-[#737373] text-[#525252]" data-translate="privacyModeDesc">When enabled, login page will appear before index page. Admin page does not require login.</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="privacy-enabled" name="enabled" class="sr-only peer">
+            <div class="w-11 h-6 bg-[#404040] dark:bg-[#404040] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-orange-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+          </label>
+        </div>
+
+        <!-- Temporary Share Section -->
+        <div id="share-section" class="space-y-3 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
+          <div>
+            <label class="mb-1 block text-sm font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252]" data-translate="temporaryShare">Temporary Share</label>
+            <p class="text-xs text-[#737373] dark:text-[#737373] text-[#525252]" data-translate="temporaryShareDesc">Generate a temporary share link that allows access without login. Login page will appear before admin page for share links.</p>
+          </div>
+
+          <!-- Current Share Link -->
+          <div id="current-share-link-container" class="hidden">
+            <label class="mb-1 block text-xs font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252]" data-translate="currentShareLink">Current Share Link</label>
+            <div class="flex items-center gap-2">
+              <input
+                type="text"
+                id="current-share-link"
+                readonly
+                class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#282828] dark:bg-[#282828] bg-[#f5f5f5] px-3 py-2 text-xs text-[#262626] dark:text-[#d4d4d4]"
+              />
+              <button
+                type="button"
+                id="copy-share-link-btn"
+                class="rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-xs font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5]"
+                data-translate="copy">Copy</button>
+            </div>
+            <p id="token-expires-info" class="mt-1 text-xs text-[#737373] dark:text-[#737373] text-[#525252]"></p>
+          </div>
+
+          <!-- Generate New Share Link -->
+          <div>
+            <label class="mb-1 block text-sm font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252]" data-translate="expirationHours">Expiration (Hours)</label>
+            <input
+              type="number"
+              id="token-expires-hours"
+              name="expires_hours"
+              min="1"
+              max="720"
+              value="1"
+              class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            <p class="mt-1 text-xs text-[#737373] dark:text-[#737373] text-[#525252]" data-translate="expirationHoursHint">Number of hours until the share link expires (1-720, max 30 days)</p>
+          </div>
+
+          <button
+            type="button"
+            id="generate-share-link-btn"
+            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5]"
+            data-translate="generateShareLink">Generate Share Link</button>
+          
+          <button
+            type="button"
+            id="revoke-share-link-btn"
+            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5]"
+            data-translate="revokeShareLink">Revoke Share Link</button>
+        </div>
+
+        <div id="privacy-config-message" class="hidden text-sm"></div>
+
+        <div class="flex gap-3">
+          <button
+            type="button"
+            id="cancel-privacy-config-btn"
+            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-semibold text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5]"
+          >
+            <span data-translate="cancel">Cancel</span>
+          </button>
+          <button
+            type="submit"
+            class="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+          >
+            <span data-translate="save">Save</span>
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 
 </div>
@@ -2843,6 +3003,476 @@ const apiBase = apiBaseProp ?? '';
     if (e.target === tcpingConfigModal) closeTCPingConfigModal();
   });
 
+  // Navbar Config Modal
+  const navbarConfigModal = document.getElementById('navbar-config-modal');
+  const navbarConfigBtn = document.getElementById('navbar-config-btn');
+  const closeNavbarConfigBtn = document.getElementById('close-navbar-config-modal-btn');
+  const cancelNavbarConfigBtn = document.getElementById('cancel-navbar-config-btn');
+  const navbarConfigForm = document.getElementById('navbar-config-form');
+
+  // Function to load and display current navbar config
+  async function loadNavbarConfig() {
+    try {
+      const res = await fetch(`${apiBase}/api/navbar/config`);
+      if (res.ok) {
+        const config = await res.json();
+        
+        const textInput = document.getElementById('navbar-text-input');
+        const logoInput = document.getElementById('navbar-logo-input');
+        
+        if (textInput) {
+          textInput.value = config.text || 'Pulse';
+        }
+        if (logoInput) {
+          logoInput.value = config.logo || '';
+        }
+      }
+    } catch (err) {
+      // Config load failed silently
+    }
+  }
+
+  function openNavbarConfigModal() {
+    if (navbarConfigModal) {
+      loadNavbarConfig();
+      openModalWithAnimation(navbarConfigModal);
+    }
+  }
+
+  function closeNavbarConfigModal() {
+    closeModalWithAnimation(navbarConfigModal, () => {
+      if (navbarConfigForm) {
+        navbarConfigForm.reset();
+        const messageEl = document.getElementById('navbar-config-message');
+        if (messageEl) {
+          messageEl.classList.add('hidden');
+          messageEl.textContent = '';
+        }
+      }
+    });
+  }
+
+  navbarConfigBtn?.addEventListener('click', openNavbarConfigModal);
+  closeNavbarConfigBtn?.addEventListener('click', closeNavbarConfigModal);
+  cancelNavbarConfigBtn?.addEventListener('click', closeNavbarConfigModal);
+  navbarConfigModal?.addEventListener('click', (e) => {
+    if (e.target === navbarConfigModal) closeNavbarConfigModal();
+  });
+
+  // Privacy Config Modal
+  const privacyConfigModal = document.getElementById('privacy-config-modal');
+  const privacyConfigBtn = document.getElementById('privacy-config-btn');
+  const closePrivacyConfigBtn = document.getElementById('close-privacy-config-modal-btn');
+  const cancelPrivacyConfigBtn = document.getElementById('cancel-privacy-config-btn');
+  const privacyConfigForm = document.getElementById('privacy-config-form');
+  const privacyEnabledCheckbox = document.getElementById('privacy-enabled');
+  const shareSection = document.getElementById('share-section');
+  const generateShareLinkBtn = document.getElementById('generate-share-link-btn');
+  const currentShareLinkContainer = document.getElementById('current-share-link-container');
+  const currentShareLinkInput = document.getElementById('current-share-link');
+  const copyShareLinkBtn = document.getElementById('copy-share-link-btn');
+  const revokeShareLinkBtn = document.getElementById('revoke-share-link-btn');
+  const tokenExpiresInfo = document.getElementById('token-expires-info');
+  const tokenExpiresHoursInput = document.getElementById('token-expires-hours');
+
+  // Function to generate random token
+  function generateToken() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let token = '';
+    for (let i = 0; i < 32; i++) {
+      token += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return token;
+  }
+
+  // Function to format date
+  function formatDate(date) {
+    if (!date || date === '') return '';
+    const d = new Date(date);
+    return d.toLocaleString();
+  }
+
+  // Function to load and display current privacy config
+  async function loadPrivacyConfig() {
+    try {
+      const res = await fetch(`${apiBase}/api/privacy/config`);
+      if (res.ok) {
+        const config = await res.json();
+        
+        // Update privacy enabled checkbox
+        if (privacyEnabledCheckbox) {
+          privacyEnabledCheckbox.checked = config.enabled || false;
+        }
+        
+        // Update expiration hours input with saved value (convert seconds to hours)
+        if (tokenExpiresHoursInput) {
+          const hours = Math.round((config.expires_in_seconds || 3600) / 3600);
+          tokenExpiresHoursInput.value = hours;
+        }
+        
+        // Update share section visibility
+        if (shareSection) {
+          shareSection.style.display = config.enabled ? 'block' : 'none';
+        }
+        
+        // Update current share link if exists
+        if (config.share_token && config.share_token !== '') {
+          const shareUrl = `${window.location.origin}/?token=${config.share_token}`;
+          if (currentShareLinkInput) {
+            currentShareLinkInput.value = shareUrl;
+          }
+          if (currentShareLinkContainer) {
+            currentShareLinkContainer.classList.remove('hidden');
+          }
+          if (tokenExpiresInfo && config.token_expires) {
+            // Use server time if available, otherwise fall back to client time
+            const serverTime = config.server_time ? new Date(config.server_time) : new Date();
+            const expiresDate = new Date(config.token_expires);
+            
+            // Check if token is expired based on server time
+            if (config.token_expired === true) {
+              // Token is already expired according to server
+              tokenExpiresInfo.textContent = 'Expired';
+              tokenExpiresInfo.className = 'mt-1 text-xs text-red-400';
+            } else {
+              // Calculate time difference using server time
+              const timeDiff = expiresDate.getTime() - serverTime.getTime();
+              if (timeDiff > 1000) {
+                // Token is still valid (more than 1 second remaining)
+                tokenExpiresInfo.textContent = `Expires: ${formatDate(config.token_expires)}`;
+                tokenExpiresInfo.className = 'mt-1 text-xs text-[#737373] dark:text-[#737373] text-[#525252]';
+                
+                // Set up a timer to update the status when it actually expires
+                // Use the calculated time difference
+                setTimeout(() => {
+                  if (tokenExpiresInfo) {
+                    tokenExpiresInfo.textContent = 'Expired';
+                    tokenExpiresInfo.className = 'mt-1 text-xs text-red-400';
+                  }
+                }, timeDiff);
+              } else {
+                // Token is expired or will expire within 1 second
+                tokenExpiresInfo.textContent = 'Expired';
+                tokenExpiresInfo.className = 'mt-1 text-xs text-red-400';
+              }
+            }
+          }
+        } else {
+          if (currentShareLinkContainer) {
+            currentShareLinkContainer.classList.add('hidden');
+          }
+        }
+      }
+    } catch (err) {
+      // Config load failed silently
+    }
+  }
+
+  function openPrivacyConfigModal() {
+    if (privacyConfigModal) {
+      loadPrivacyConfig();
+      openModalWithAnimation(privacyConfigModal);
+    }
+  }
+
+  function closePrivacyConfigModal() {
+    closeModalWithAnimation(privacyConfigModal, () => {
+      if (privacyConfigForm) {
+        privacyConfigForm.reset();
+        const messageEl = document.getElementById('privacy-config-message');
+        if (messageEl) {
+          messageEl.classList.add('hidden');
+          messageEl.textContent = '';
+        }
+      }
+    });
+  }
+
+  privacyConfigBtn?.addEventListener('click', openPrivacyConfigModal);
+  closePrivacyConfigBtn?.addEventListener('click', closePrivacyConfigModal);
+  cancelPrivacyConfigBtn?.addEventListener('click', closePrivacyConfigModal);
+  privacyConfigModal?.addEventListener('click', (e) => {
+    if (e.target === privacyConfigModal) closePrivacyConfigModal();
+  });
+
+  // Toggle share section visibility based on privacy enabled
+  privacyEnabledCheckbox?.addEventListener('change', (e) => {
+    if (shareSection) {
+      shareSection.style.display = e.target.checked ? 'block' : 'none';
+    }
+  });
+
+  // Generate share link
+  generateShareLinkBtn?.addEventListener('click', async () => {
+    const hours = parseInt(tokenExpiresHoursInput?.value || '1');
+    if (hours < 1 || hours > 720) {
+      alert('Please enter a valid number of hours (1-720, max 30 days)');
+      return;
+    }
+
+    // Convert hours to seconds for backend
+    const seconds = hours * 3600;
+
+    const token = generateToken();
+
+    // Update UI immediately (show estimated expiration, will be updated after save)
+    const shareUrl = `${window.location.origin}/?token=${token}`;
+    if (currentShareLinkInput) {
+      currentShareLinkInput.value = shareUrl;
+    }
+    if (currentShareLinkContainer) {
+      currentShareLinkContainer.classList.remove('hidden');
+    }
+    if (tokenExpiresInfo) {
+      // Show estimated expiration (will be updated with server time after save)
+      const estimatedExpires = new Date();
+      estimatedExpires.setSeconds(estimatedExpires.getSeconds() + seconds);
+      tokenExpiresInfo.textContent = `Expires: ${formatDate(estimatedExpires.toISOString())} (estimated)`;
+      tokenExpiresInfo.className = 'mt-1 text-xs text-[#737373] dark:text-[#737373] text-[#525252]';
+    }
+
+    // Store temporarily in form data (will be sent to server)
+    if (privacyConfigForm) {
+      const hiddenTokenInput = document.createElement('input');
+      hiddenTokenInput.type = 'hidden';
+      hiddenTokenInput.name = 'share_token';
+      hiddenTokenInput.value = token;
+      hiddenTokenInput.id = 'temp-share-token';
+      
+      const existingTokenInput = document.getElementById('temp-share-token');
+      if (existingTokenInput) {
+        existingTokenInput.value = token;
+      } else {
+        privacyConfigForm.appendChild(hiddenTokenInput);
+      }
+
+      // Store seconds instead of calculated expiration time
+      // Server will calculate expiration time based on server time
+      const hiddenExpiresSecondsInput = document.createElement('input');
+      hiddenExpiresSecondsInput.type = 'hidden';
+      hiddenExpiresSecondsInput.name = 'expires_in_seconds';
+      hiddenExpiresSecondsInput.value = seconds.toString();
+      hiddenExpiresSecondsInput.id = 'temp-expires-in-seconds';
+      
+      const existingExpiresSecondsInput = document.getElementById('temp-expires-in-seconds');
+      if (existingExpiresSecondsInput) {
+        existingExpiresSecondsInput.value = seconds.toString();
+      } else {
+        privacyConfigForm.appendChild(hiddenExpiresSecondsInput);
+      }
+    }
+  });
+
+  // Copy share link
+  copyShareLinkBtn?.addEventListener('click', () => {
+    if (currentShareLinkInput) {
+      currentShareLinkInput.select();
+      document.execCommand('copy');
+      const originalText = copyShareLinkBtn.textContent;
+      copyShareLinkBtn.textContent = 'Copied!';
+      setTimeout(() => {
+        copyShareLinkBtn.textContent = originalText;
+      }, 2000);
+    }
+  });
+
+  // Revoke share link (just clears UI, requires save to take effect)
+  revokeShareLinkBtn?.addEventListener('click', () => {
+    // Hide share link container
+    if (currentShareLinkContainer) {
+      currentShareLinkContainer.classList.add('hidden');
+    }
+    if (currentShareLinkInput) {
+      currentShareLinkInput.value = '';
+    }
+    if (tokenExpiresInfo) {
+      tokenExpiresInfo.textContent = '';
+    }
+    
+    // Clear temporary token inputs (will be saved when form is submitted)
+    const tempTokenInput = document.getElementById('temp-share-token');
+    if (tempTokenInput) {
+      tempTokenInput.value = '';
+    }
+    const tempExpiresInput = document.getElementById('temp-expires-in-seconds');
+    if (tempExpiresInput) {
+      tempExpiresInput.value = '0';
+    }
+  });
+
+  // Handle privacy config form submission
+  privacyConfigForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const messageEl = document.getElementById('privacy-config-message');
+    const submitBtn = privacyConfigForm.querySelector('button[type="submit"]');
+    
+    const enabled = privacyEnabledCheckbox?.checked || false;
+    const shareToken = document.getElementById('temp-share-token')?.value || '';
+    // Get seconds from hidden input (converted from hours)
+    const expiresInSeconds = parseInt(document.getElementById('temp-expires-in-seconds')?.value || '0');
+
+    const data = {
+      enabled: enabled,
+      share_token: shareToken,
+      expires_in_seconds: expiresInSeconds,
+    };
+
+    // Set button to saving state
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      const saveSpan = submitBtn.querySelector('span');
+      if (saveSpan) {
+        saveSpan.textContent = 'Saving...';
+      } else {
+        submitBtn.textContent = 'Saving...';
+      }
+    }
+
+    try {
+      const res = await fetch(`${apiBase}/api/privacy/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      if (res.ok) {
+        // Get the saved config from response to update UI with server-calculated expiration
+        const responseData = await res.json();
+        if (responseData.config && responseData.config.share_token && responseData.config.token_expires) {
+          // Update expiration info with server time
+          if (tokenExpiresInfo) {
+            // Use server time if available, otherwise fall back to client time
+            const serverTime = responseData.config.server_time ? new Date(responseData.config.server_time) : new Date();
+            const expiresDate = new Date(responseData.config.token_expires);
+            
+            // Check if date is valid
+            if (isNaN(expiresDate.getTime())) {
+              console.error('Invalid expiration date:', responseData.config.token_expires);
+              tokenExpiresInfo.textContent = 'Invalid expiration date';
+              tokenExpiresInfo.className = 'mt-1 text-xs text-red-400';
+            } else if (responseData.config.token_expired === true) {
+              // Token is already expired according to server
+              tokenExpiresInfo.textContent = 'Expired';
+              tokenExpiresInfo.className = 'mt-1 text-xs text-red-400';
+            } else {
+              // Calculate time difference using server time
+              const timeDiff = expiresDate.getTime() - serverTime.getTime();
+              if (timeDiff > 1000) {
+                // Token is still valid (more than 1 second remaining)
+                tokenExpiresInfo.textContent = `Expires: ${formatDate(responseData.config.token_expires)}`;
+                tokenExpiresInfo.className = 'mt-1 text-xs text-[#737373] dark:text-[#737373] text-[#525252]';
+                
+                // Set up timer to update when expired (using server time difference)
+                setTimeout(() => {
+                  if (tokenExpiresInfo) {
+                    tokenExpiresInfo.textContent = 'Expired';
+                    tokenExpiresInfo.className = 'mt-1 text-xs text-red-400';
+                  }
+                }, timeDiff);
+              } else {
+                // Token is expired or will expire within 1 second
+                tokenExpiresInfo.textContent = 'Expired';
+                tokenExpiresInfo.className = 'mt-1 text-xs text-red-400';
+              }
+            }
+          }
+        }
+        
+        // Reset button state before closing modal
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          const saveSpan = submitBtn.querySelector('span');
+          if (saveSpan) {
+            saveSpan.textContent = 'Save';
+          } else {
+            submitBtn.textContent = 'Save';
+          }
+        }
+        // Close modal immediately on success
+        closePrivacyConfigModal();
+        // Show success message briefly (outside modal)
+        // Note: messageEl is inside modal, so it will be hidden when modal closes
+      } else {
+        const error = await res.text();
+        throw new Error(error || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      // Reset button state on error
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        const saveSpan = submitBtn.querySelector('span');
+        if (saveSpan) {
+          saveSpan.textContent = 'Save';
+        } else {
+          submitBtn.textContent = 'Save';
+        }
+      }
+      if (messageEl) {
+        messageEl.className = 'text-sm text-red-400';
+        messageEl.textContent = '❌ Failed to save privacy config: ' + err.message;
+        messageEl.classList.remove('hidden');
+      }
+    }
+  });
+
+  // Handle navbar config form submission
+  navbarConfigForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(navbarConfigForm);
+    const messageEl = document.getElementById('navbar-config-message');
+    const submitBtn = navbarConfigForm.querySelector('button[type="submit"]');
+    
+    const data = {
+      text: formData.get('text')?.trim() || 'Pulse',
+      logo: formData.get('logo')?.trim() || '',
+    };
+
+    // Set button to saving state
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      const saveSpan = submitBtn.querySelector('span');
+      if (saveSpan) {
+        saveSpan.textContent = 'Saving...';
+      } else {
+        submitBtn.textContent = 'Saving...';
+      }
+    }
+
+    try {
+      const res = await fetch(`${apiBase}/api/navbar/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      if (res.ok) {
+        // Close modal immediately on success and reload
+        closeNavbarConfigModal();
+        // Reload page to apply navbar changes
+        window.location.reload();
+      } else {
+        const error = await res.text();
+        throw new Error(error || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      // Reset button state on error
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        const saveSpan = submitBtn.querySelector('span');
+        if (saveSpan) {
+          saveSpan.textContent = 'Save';
+        } else {
+          submitBtn.textContent = 'Save';
+        }
+      }
+      if (messageEl) {
+        messageEl.className = 'text-sm text-red-400';
+        messageEl.textContent = '❌ Failed to save navbar config: ' + err.message;
+        messageEl.classList.remove('hidden');
+      }
+    }
+  });
+
   // Add target button
   addTargetBtn?.addEventListener('click', () => {
     if (targetsContainer) {
@@ -3025,6 +3655,22 @@ const apiBase = apiBaseProp ?? '';
     'newPassword': { en: 'New Password', zh: '新密码' },
     'confirmNewPassword': { en: 'Confirm New Password', zh: '确认新密码' },
     'passwordMinLength': { en: 'Password must be at least 6 characters long', zh: '密码长度至少为6个字符' },
+    'navbarSettings': { en: 'Navbar Settings', zh: '导航栏设置' },
+    'navbarText': { en: 'Navbar Text', zh: '导航栏文字' },
+    'navbarLogo': { en: 'Navbar Logo', zh: '导航栏图标' },
+    'navbarTextHint': { en: 'Custom text displayed in navbar (leave empty for default: Pulse)', zh: '导航栏显示的自定义文字（留空使用默认：Pulse）' },
+    'navbarLogoHint': { en: 'Logo URL or SVG code (leave empty for default logo)', zh: '图标URL或SVG代码（留空使用默认图标）' },
+    'privacySettings': { en: 'Privacy Settings', zh: '隐私设置' },
+    'enablePrivacyMode': { en: 'Enable Privacy Mode', zh: '启用隐私模式' },
+    'privacyModeDesc': { en: 'When enabled, login page will appear before index page. Admin page does not require login.', zh: '启用后，登录页将出现在首页之前。管理页面无需登录。' },
+    'temporaryShare': { en: 'Temporary Share', zh: '临时分享' },
+    'temporaryShareDesc': { en: 'Generate a temporary share link that allows access without login. Login page will appear before admin page for share links.', zh: '生成临时分享链接，允许无需登录访问。分享链接的登录页将出现在管理页面之前。' },
+    'currentShareLink': { en: 'Current Share Link', zh: '当前分享链接' },
+    'expirationHours': { en: 'Expiration (Hours)', zh: '有效期（小时）' },
+    'expirationHoursHint': { en: 'Number of hours until the share link expires (1-720, max 30 days)', zh: '分享链接过期前的小时数（1-720，最多30天）' },
+    'generateShareLink': { en: 'Generate Share Link', zh: '生成分享链接' },
+    'revokeShareLink': { en: 'Revoke Share Link', zh: '立即停止分享链接' },
+    'copy': { en: 'Copy', zh: '复制' },
   };
 
   function updateAdminTranslations() {

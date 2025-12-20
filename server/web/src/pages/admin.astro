@@ -13,6 +13,81 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Admin - Pulse Monitor</title>
+    <!-- Initialize language and theme before page render to prevent FOUC -->
+    <script is:inline>
+      (function() {
+        // Get system language (convert to 'zh' or 'en')
+        function getSystemLanguage() {
+          const sysLang = navigator.language || (navigator.languages && navigator.languages[0]) || 'en';
+          // Check if system language is Chinese (zh, zh-CN, zh-TW, etc.)
+          if (sysLang.toLowerCase().startsWith('zh')) {
+            return 'zh';
+          }
+          return 'en';
+        }
+        
+        // Get system theme
+        function getSystemTheme() {
+          if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return 'dark';
+          }
+          return 'light';
+        }
+        
+        // Get language preference (use system language as default)
+        const storedLang = localStorage.getItem('preferred-language');
+        const lang = storedLang || getSystemLanguage();
+        document.documentElement.lang = lang;
+        
+        // Get theme preference (use system theme as default)
+        const storedTheme = localStorage.getItem('preferred-theme');
+        const theme = (storedTheme === 'dark' || storedTheme === 'light') ? storedTheme : getSystemTheme();
+        
+        // Apply theme immediately to html
+        const html = document.documentElement;
+        if (theme === 'dark') {
+          html.classList.add('dark');
+          html.classList.remove('light');
+        } else {
+          html.classList.add('light');
+          html.classList.remove('dark');
+        }
+        
+        // Apply theme to body when it's available
+        function applyThemeToBody() {
+          const body = document.body;
+          if (body) {
+            if (theme === 'dark') {
+              body.classList.add('dark');
+              body.classList.remove('light');
+            } else {
+              body.classList.add('light');
+              body.classList.remove('dark');
+            }
+          } else {
+            // Body not ready yet, try again
+            requestAnimationFrame(applyThemeToBody);
+          }
+        }
+        applyThemeToBody();
+        
+        // Preload navbar config early (non-blocking)
+        const apiBase = window.location.origin;
+        fetch(`${apiBase}/api/navbar/config`)
+          .then(res => res.ok ? res.json() : null)
+          .then(config => {
+            if (config) {
+              // Store config for NavBar component to use
+              window.__navbarConfig = config;
+              // Dispatch event when config is ready
+              window.dispatchEvent(new CustomEvent('navbarconfigready', { detail: config }));
+            }
+          })
+          .catch(() => {
+            // Silently fail, NavBar will handle defaults
+          });
+      })();
+    </script>
   </head>
   <body class="min-h-screen overflow-x-hidden bg-[#151515] dark:bg-[#151515] bg-white text-[#f5f5f5] dark:text-[#f5f5f5] text-[#151515]">
     <div id="auth-check" class="hidden min-h-screen flex flex-col">
@@ -47,6 +122,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
   const apiBase = getApiBase();
   
   // Check authentication on page load
+  // Note: Admin page requires login in normal mode, but not in privacy mode
   (async () => {
     const authCheck = document.getElementById('auth-check');
     const loginRedirect = document.getElementById('login-redirect');
@@ -58,24 +134,38 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
         const statusData = await statusRes.json();
         if (!statusData.set) {
           // Password not set yet, redirect to login to set it up
-          window.location.href = '/login';
+          window.location.href = '/login?redirect=/admin';
           return;
         }
       }
     } catch (err) {
-      // Continue with token check
+      // Continue with privacy check
+    }
+    
+    // Check privacy mode
+    let privacyEnabled = false;
+    try {
+      const privacyRes = await fetch(`${apiBase}/api/privacy/config`);
+      if (privacyRes.ok) {
+        const privacyConfig = await privacyRes.json();
+        privacyEnabled = privacyConfig.enabled || false;
+      }
+    } catch (err) {
+      // Privacy check failed, assume normal mode
     }
     
     // Get stored token
     const token = localStorage.getItem('admin_auth_token');
     
+    // Both normal mode and privacy mode require token verification
+    // In privacy mode, if user logged in at index page, they can use the same token for admin
     if (!token) {
       // No token, redirect to login
-      window.location.href = '/login';
+      window.location.href = '/login?redirect=/admin';
       return;
     }
     
-    // Verify token
+    // Verify token (same logic for both modes)
     try {
       const res = await fetch(`${apiBase}/api/auth/verify`, {
         method: 'POST',
@@ -105,16 +195,16 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
         } else {
           // Token is invalid, redirect to login
           localStorage.removeItem('admin_auth_token');
-          window.location.href = '/login';
+          window.location.href = '/login?redirect=/admin';
         }
       } else {
         // Verification failed, redirect to login
         localStorage.removeItem('admin_auth_token');
-        window.location.href = '/login';
+        window.location.href = '/login?redirect=/admin';
       }
     } catch (err) {
       localStorage.removeItem('admin_auth_token');
-      window.location.href = '/login';
+      window.location.href = '/login?redirect=/admin';
     }
   })();
 </script>

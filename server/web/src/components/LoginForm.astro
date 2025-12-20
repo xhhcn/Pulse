@@ -110,12 +110,22 @@
     }
   };
 
+  function getSystemLanguage() {
+    const sysLang = navigator.language || (navigator.languages && navigator.languages[0]) || 'en';
+    // Check if system language is Chinese (zh, zh-CN, zh-TW, etc.)
+    if (sysLang.toLowerCase().startsWith('zh')) {
+      return 'zh';
+    }
+    return 'en';
+  }
+
   function getCurrentLanguage() {
     const stored = localStorage.getItem('preferred-language');
     if (stored === 'zh' || stored === 'en') {
       return stored;
     }
-    return 'en';
+    // Default to system language
+    return getSystemLanguage();
   }
 
   function updateTranslations() {
@@ -205,13 +215,20 @@
   }
 
   // Theme management - just apply stored theme, no toggle button
+  function getSystemTheme() {
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
+  }
+
   function getCurrentTheme() {
     const stored = localStorage.getItem('preferred-theme');
     if (stored === 'dark' || stored === 'light') {
       return stored;
     }
-    // Default to dark theme
-    return 'dark';
+    // Default to system theme
+    return getSystemTheme();
   }
 
   function applyTheme(theme) {
@@ -287,11 +304,15 @@
           // After setup, automatically login
           const loginResult = await login(password);
           if (loginResult) {
-            // Redirect immediately without showing success message
-            window.location.href = '/admin';
+            // Get redirect target from URL parameter or default to /admin
+            const urlParams = new URLSearchParams(window.location.search);
+            const redirect = urlParams.get('redirect') || '/admin';
+            window.location.href = redirect;
           } else {
             // Setup succeeded but login failed, redirect anyway (shouldn't happen)
-            window.location.href = '/admin';
+            const urlParams = new URLSearchParams(window.location.search);
+            const redirect = urlParams.get('redirect') || '/admin';
+            window.location.href = redirect;
           }
         } else {
           const lang = getCurrentLanguage();
@@ -302,8 +323,10 @@
         // Login
         const success = await login(password);
         if (success) {
-          // Redirect immediately without showing success message
-          window.location.href = '/admin';
+          // Get redirect target from URL parameter or default to /admin
+          const urlParams = new URLSearchParams(window.location.search);
+          const redirect = urlParams.get('redirect') || '/admin';
+          window.location.href = redirect;
         } else {
           const lang = getCurrentLanguage();
           showError(translations[lang].invalidPassword);

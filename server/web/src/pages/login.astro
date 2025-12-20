@@ -5,12 +5,71 @@ import LoginForm from '../components/LoginForm.astro';
 const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
 ---
 
-<html lang="en" class="dark" data-api-base={apiBase}>
+<html lang="en" data-api-base={apiBase}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Login - Pulse Monitor</title>
+    <!-- Initialize language and theme before page render to prevent FOUC -->
+    <script is:inline>
+      (function() {
+        // Get system language (convert to 'zh' or 'en')
+        function getSystemLanguage() {
+          const sysLang = navigator.language || (navigator.languages && navigator.languages[0]) || 'en';
+          // Check if system language is Chinese (zh, zh-CN, zh-TW, etc.)
+          if (sysLang.toLowerCase().startsWith('zh')) {
+            return 'zh';
+          }
+          return 'en';
+        }
+        
+        // Get system theme
+        function getSystemTheme() {
+          if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return 'dark';
+          }
+          return 'light';
+        }
+        
+        // Get language preference (use system language as default)
+        const storedLang = localStorage.getItem('preferred-language');
+        const lang = storedLang || getSystemLanguage();
+        document.documentElement.lang = lang;
+        
+        // Get theme preference (use system theme as default)
+        const storedTheme = localStorage.getItem('preferred-theme');
+        const theme = (storedTheme === 'dark' || storedTheme === 'light') ? storedTheme : getSystemTheme();
+        
+        // Apply theme immediately to html
+        const html = document.documentElement;
+        if (theme === 'dark') {
+          html.classList.add('dark');
+          html.classList.remove('light');
+        } else {
+          html.classList.add('light');
+          html.classList.remove('dark');
+        }
+        
+        // Apply theme to body when it's available
+        function applyThemeToBody() {
+          const body = document.body;
+          if (body) {
+            if (theme === 'dark') {
+              body.classList.add('dark');
+              body.classList.remove('light');
+            } else {
+              body.classList.add('light');
+              body.classList.remove('dark');
+            }
+          } else {
+            // Body not ready yet, try again
+            requestAnimationFrame(applyThemeToBody);
+          }
+        }
+        applyThemeToBody();
+      })();
+    </script>
   </head>
   <body class="min-h-screen bg-[#151515] dark:bg-[#151515] bg-white text-[#f5f5f5] dark:text-[#f5f5f5] text-[#151515]">
     <LoginForm />

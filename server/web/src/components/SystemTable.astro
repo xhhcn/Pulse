@@ -44,7 +44,27 @@ const apiBase = apiBaseProp ?? '';
   };
 
   const fetchSystemMetrics = async (apiBase) => {
-    const res = await fetch(`${apiBase}/api/metrics`, { cache: 'no-store' });
+    // Get token from URL parameter (for share links) or admin token
+    const urlParams = new URLSearchParams(window.location.search);
+    const shareToken = urlParams.get('token');
+    const adminToken = localStorage.getItem('admin_auth_token');
+    
+    // Build request URL with token if available
+    let requestUrl = `${apiBase}/api/metrics`;
+    const headers = { 'Cache-Control': 'no-store' };
+    
+    if (shareToken) {
+      // Use share token from URL
+      requestUrl += `?token=${encodeURIComponent(shareToken)}`;
+    } else if (adminToken) {
+      // Use admin token in Authorization header
+      headers['Authorization'] = `Bearer ${adminToken}`;
+    }
+    
+    const res = await fetch(requestUrl, { 
+      cache: 'no-store',
+      headers: headers
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (Array.isArray(data)) return data;
@@ -702,7 +722,7 @@ const apiBase = apiBaseProp ?? '';
             ` : ''}
             <!-- CPU Info -->
             <div class="flex flex-wrap items-baseline gap-1.5 sm:gap-2" style="min-height: 16px; line-height: 16px;">
-              <div class="text-[10px] sm:text-xs font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0" data-translate-detail="cpuInformation">CPU Information:</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0" data-translate-detail="cpuInformation">CPU:</div>
               <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] leading-normal" data-detail="cpu_model">${item.cpu_model || '-'}</div>
             </div>
             <!-- Memory Info -->
@@ -712,12 +732,12 @@ const apiBase = apiBaseProp ?? '';
             </div>
             <!-- Swap Info -->
             <div class="flex flex-wrap items-baseline gap-1.5 sm:gap-2">
-              <div class="text-[10px] sm:text-xs font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0" data-translate-detail="swapPartition">Swap Partition:</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0" data-translate-detail="swapPartition">Swap:</div>
               <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] leading-normal" data-detail="swap_info">${item.swap_info || '0.00 MiB / 0.00 MiB'}</div>
             </div>
             <!-- Disk Info -->
             <div class="flex flex-wrap items-baseline gap-1.5 sm:gap-2">
-              <div class="text-[10px] sm:text-xs font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0" data-translate-detail="diskInformation">Disk Information:</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0" data-translate-detail="diskInformation">Disk:</div>
               <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] leading-normal" data-detail="disk_info">${item.disk_info || '-'}</div>
             </div>
           </div>
@@ -771,10 +791,10 @@ const apiBase = apiBaseProp ?? '';
   const translations = {
     'noSystemsFound': { en: 'No services found', zh: '未找到服务' },
     'systemsWillAppear': { en: 'Services will appear here once agents start reporting', zh: '代理开始报告后，服务将显示在这里' },
-    'cpuInformation': { en: 'CPU Information:', zh: 'CPU 信息:' },
+    'cpuInformation': { en: 'CPU:', zh: 'CPU:' },
     'memoryInfo': { en: 'Memory:', zh: '内存:' },
-    'swapPartition': { en: 'Swap Partition:', zh: '交换分区:' },
-    'diskInformation': { en: 'Disk Information:', zh: '磁盘信息:' },
+    'swapPartition': { en: 'Swap:', zh: '交换:' },
+    'diskInformation': { en: 'Disk:', zh: '磁盘:' },
     'tcpingLatency': { en: 'TCPing Latency (24h)', zh: 'TCPing 延迟 (24小时)' },
     'avgLatency': { en: 'Avg:', zh: '平均:' },
     'packetLoss': { en: 'Loss:', zh: '丢包:' },
@@ -2704,7 +2724,22 @@ const apiBase = apiBaseProp ?? '';
       eventSource = null;
     }
 
-    eventSource = new EventSource(`${apiBase}/api/events`);
+    // Get token from URL parameter (for share links) or admin token
+    const urlParams = new URLSearchParams(window.location.search);
+    const shareToken = urlParams.get('token');
+    const adminToken = localStorage.getItem('admin_auth_token');
+    
+    // Build SSE URL with token if available (EventSource doesn't support custom headers)
+    let sseUrl = `${apiBase}/api/events`;
+    if (shareToken) {
+      sseUrl += `?token=${encodeURIComponent(shareToken)}`;
+    } else if (adminToken) {
+      // For admin token, we need to pass it via URL since EventSource doesn't support headers
+      // Note: This is less secure, but EventSource limitation
+      sseUrl += `?admin_token=${encodeURIComponent(adminToken)}`;
+    }
+
+    eventSource = new EventSource(sseUrl);
 
     eventSource.addEventListener('connected', (e) => {
       // Connected to update stream
