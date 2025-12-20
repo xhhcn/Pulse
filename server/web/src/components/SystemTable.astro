@@ -43,16 +43,38 @@ const apiBase = apiBaseProp ?? '';
     return window.location.origin;
   };
 
-  const fetchSystemMetrics = async (apiBase) => {
-    // Get token from URL parameter (for share links) or admin token
+  // Helper function to get authentication info (share token or admin token)
+  const getAuthInfo = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const shareToken = urlParams.get('token');
     const adminToken = localStorage.getItem('admin_auth_token');
+    return { shareToken, adminToken };
+  };
+
+  // Helper function to build authenticated fetch options
+  const buildAuthOptions = (url) => {
+    const { shareToken, adminToken } = getAuthInfo();
+    let requestUrl = url;
+    const headers = {};
     
+    if (shareToken) {
+      // Use share token from URL
+      const separator = url.includes('?') ? '&' : '?';
+      requestUrl += `${separator}token=${encodeURIComponent(shareToken)}`;
+    } else if (adminToken) {
+      // Use admin token in Authorization header
+      headers['Authorization'] = `Bearer ${adminToken}`;
+    }
+    
+    return { url: requestUrl, headers };
+  };
+
+  const fetchSystemMetrics = async (apiBase) => {
     // Build request URL with token if available
     let requestUrl = `${apiBase}/api/metrics`;
     const headers = { 'Cache-Control': 'no-store' };
     
+    const { shareToken, adminToken } = getAuthInfo();
     if (shareToken) {
       // Use share token from URL
       requestUrl += `?token=${encodeURIComponent(shareToken)}`;
@@ -1207,7 +1229,8 @@ const apiBase = apiBaseProp ?? '';
     // Start loading
     tcpingConfigLoading = (async () => {
       try {
-        const res = await fetch(`${apiBase}/api/tcping/config`);
+        const { url, headers } = buildAuthOptions(`${apiBase}/api/tcping/config`);
+        const res = await fetch(url, { headers });
         if (res.ok) {
           const config = await res.json();
           cachedTCPingConfig = config;
@@ -1273,8 +1296,9 @@ const apiBase = apiBaseProp ?? '';
   // Load tcping history data
   async function loadTCPingHistory(clientID, target) {
     try {
-      const url = `${apiBase}/api/tcping/history?client_id=${encodeURIComponent(clientID)}${target ? `&target=${encodeURIComponent(target)}` : ''}`;
-      const res = await fetch(url);
+      let url = `${apiBase}/api/tcping/history?client_id=${encodeURIComponent(clientID)}${target ? `&target=${encodeURIComponent(target)}` : ''}`;
+      const { url: authUrl, headers } = buildAuthOptions(url);
+      const res = await fetch(authUrl, { headers });
       if (res.ok) {
       const data = await res.json();
         // Ensure we always return an array

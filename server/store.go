@@ -625,7 +625,7 @@ func (s *Store) GetPrivacyConfig() (*PrivacyConfig, error) {
 				Enabled:          false,
 				ShareToken:       "",
 				TokenExpires:     time.Time{},
-				ExpiresInSeconds: 60, // Default to 60 seconds
+				ExpiresInSeconds: 3600, // Default to 1 hour (3600 seconds)
 			}
 			return nil
 		}
