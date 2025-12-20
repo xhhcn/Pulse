@@ -137,11 +137,16 @@ func registerWithServer() {
 		// Get local IP address
 		localIP := getLocalIP()
 		
-		payload := map[string]string{
+		payload := map[string]interface{}{
 			"id":   agentID,
 			"name": agentName,
 			"port": envOr("CLIENT_PORT", "9090"),
 			"ip":   localIP,
+		}
+		
+		// Add secret if provided via environment variable
+		if secret := envOr("SECRET", ""); secret != "" {
+			payload["secret"] = secret
 		}
 		
 		data, _ := json.Marshal(payload)
@@ -204,11 +209,16 @@ func startPeriodicRegistration() {
 	for range ticker.C {
 		localIP := getLocalIP()
 		
-		payload := map[string]string{
+		payload := map[string]interface{}{
 			"id":   agentID,
 			"name": agentName,
 			"port": envOr("CLIENT_PORT", "9090"),
 			"ip":   localIP,
+		}
+		
+		// Add secret if provided via environment variable (CRITICAL: must include secret in periodic registration)
+		if secret := envOr("SECRET", ""); secret != "" {
+			payload["secret"] = secret
 		}
 		
 		data, _ := json.Marshal(payload)

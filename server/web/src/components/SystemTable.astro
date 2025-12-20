@@ -103,10 +103,84 @@ const apiBase = apiBaseProp ?? '';
   };
 
   // Country to flag icon mapping (emojione-v1)
+  // Supports both ISO 3166-1 alpha-2 country codes (e.g., "US", "CN", "HK") and country names
+  // Backend now returns ISO 3166-1 alpha-2 country codes
+  // Format: emojione-v1:flag-for-{country-name} (e.g., emojione-v1:flag-for-afghanistan)
   const countryToFlag = (country) => {
     if (!country) return null;
     
-    let countryLower = country.toLowerCase().trim();
+    const countryTrimmed = country.trim();
+    
+    // ISO 3166-1 alpha-2 country code to country name mapping
+    // Maps to emojione-v1 flag format: emojione-v1:flag-for-{country-name}
+    const countryCodeToName = {
+      'AD': 'andorra', 'AE': 'united-arab-emirates', 'AF': 'afghanistan', 'AG': 'antigua-and-barbuda',
+      'AI': 'anguilla', 'AL': 'albania', 'AM': 'armenia', 'AO': 'angola', 'AQ': 'antarctica',
+      'AR': 'argentina', 'AS': 'american-samoa', 'AT': 'austria', 'AU': 'australia', 'AW': 'aruba',
+      'AX': 'aland-islands', 'AZ': 'azerbaijan', 'BA': 'bosnia-and-herzegovina', 'BB': 'barbados',
+      'BD': 'bangladesh', 'BE': 'belgium', 'BF': 'burkina-faso', 'BG': 'bulgaria', 'BH': 'bahrain',
+      'BI': 'burundi', 'BJ': 'benin', 'BL': 'saint-barthelemy', 'BM': 'bermuda', 'BN': 'brunei',
+      'BO': 'bolivia', 'BQ': 'caribbean-netherlands', 'BR': 'brazil', 'BS': 'bahamas', 'BT': 'bhutan',
+      'BV': 'bouvet-island', 'BW': 'botswana', 'BY': 'belarus', 'BZ': 'belize', 'CA': 'canada',
+      'CC': 'cocos-islands', 'CD': 'congo-kinshasa', 'CF': 'central-african-republic', 'CG': 'congo-brazzaville',
+      'CH': 'switzerland', 'CI': 'cote-divoire', 'CK': 'cook-islands', 'CL': 'chile', 'CM': 'cameroon',
+      'CN': 'china', 'CO': 'colombia', 'CR': 'costa-rica', 'CU': 'cuba', 'CV': 'cape-verde',
+      'CW': 'curacao', 'CX': 'christmas-island', 'CY': 'cyprus', 'CZ': 'czech-republic', 'DE': 'germany',
+      'DJ': 'djibouti', 'DK': 'denmark', 'DM': 'dominica', 'DO': 'dominican-republic', 'DZ': 'algeria',
+      'EC': 'ecuador', 'EE': 'estonia', 'EG': 'egypt', 'EH': 'western-sahara', 'ER': 'eritrea',
+      'ES': 'spain', 'ET': 'ethiopia', 'FI': 'finland', 'FJ': 'fiji', 'FK': 'falkland-islands',
+      'FM': 'micronesia', 'FO': 'faroe-islands', 'FR': 'france', 'GA': 'gabon', 'GB': 'united-kingdom',
+      'GD': 'grenada', 'GE': 'georgia', 'GF': 'french-guiana', 'GG': 'guernsey', 'GH': 'ghana',
+      'GI': 'gibraltar', 'GL': 'greenland', 'GM': 'gambia', 'GN': 'guinea', 'GP': 'guadeloupe',
+      'GQ': 'equatorial-guinea', 'GR': 'greece', 'GS': 'south-georgia', 'GT': 'guatemala', 'GU': 'guam',
+      'GW': 'guinea-bissau', 'GY': 'guyana', 'HK': 'hong-kong-sar-china', 'HM': 'heard-island',
+      'HN': 'honduras', 'HR': 'croatia', 'HT': 'haiti', 'HU': 'hungary', 'ID': 'indonesia',
+      'IE': 'ireland', 'IL': 'israel', 'IM': 'isle-of-man', 'IN': 'india', 'IO': 'british-indian-ocean-territory',
+      'IQ': 'iraq', 'IR': 'iran', 'IS': 'iceland', 'IT': 'italy', 'JE': 'jersey', 'JM': 'jamaica',
+      'JO': 'jordan', 'JP': 'japan', 'KE': 'kenya', 'KG': 'kyrgyzstan', 'KH': 'cambodia',
+      'KI': 'kiribati', 'KM': 'comoros', 'KN': 'saint-kitts-and-nevis', 'KP': 'north-korea',
+      'KR': 'south-korea', 'KW': 'kuwait', 'KY': 'cayman-islands', 'KZ': 'kazakhstan', 'LA': 'laos',
+      'LB': 'lebanon', 'LC': 'saint-lucia', 'LI': 'liechtenstein', 'LK': 'sri-lanka', 'LR': 'liberia',
+      'LS': 'lesotho', 'LT': 'lithuania', 'LU': 'luxembourg', 'LV': 'latvia', 'LY': 'libya',
+      'MA': 'morocco', 'MC': 'monaco', 'MD': 'moldova', 'ME': 'montenegro', 'MF': 'saint-martin',
+      'MG': 'madagascar', 'MH': 'marshall-islands', 'MK': 'north-macedonia', 'ML': 'mali', 'MM': 'myanmar',
+      'MN': 'mongolia', 'MO': 'macau-sar-china', 'MP': 'northern-mariana-islands', 'MQ': 'martinique',
+      'MR': 'mauritania', 'MS': 'montserrat', 'MT': 'malta', 'MU': 'mauritius', 'MV': 'maldives',
+      'MW': 'malawi', 'MX': 'mexico', 'MY': 'malaysia', 'MZ': 'mozambique', 'NA': 'namibia',
+      'NC': 'new-caledonia', 'NE': 'niger', 'NF': 'norfolk-island', 'NG': 'nigeria', 'NI': 'nicaragua',
+      'NL': 'netherlands', 'NO': 'norway', 'NP': 'nepal', 'NR': 'nauru', 'NU': 'niue',
+      'NZ': 'new-zealand', 'OM': 'oman', 'PA': 'panama', 'PE': 'peru', 'PF': 'french-polynesia',
+      'PG': 'papua-new-guinea', 'PH': 'philippines', 'PK': 'pakistan', 'PL': 'poland', 'PM': 'saint-pierre-and-miquelon',
+      'PN': 'pitcairn', 'PR': 'puerto-rico', 'PS': 'palestine', 'PT': 'portugal', 'PW': 'palau',
+      'PY': 'paraguay', 'QA': 'qatar', 'RE': 'reunion', 'RO': 'romania', 'RS': 'serbia',
+      'RU': 'russia', 'RW': 'rwanda', 'SA': 'saudi-arabia', 'SB': 'solomon-islands', 'SC': 'seychelles',
+      'SD': 'sudan', 'SE': 'sweden', 'SG': 'singapore', 'SH': 'saint-helena', 'SI': 'slovenia',
+      'SJ': 'svalbard-and-jan-mayen', 'SK': 'slovakia', 'SL': 'sierra-leone', 'SM': 'san-marino',
+      'SN': 'senegal', 'SO': 'somalia', 'SR': 'suriname', 'SS': 'south-sudan', 'ST': 'sao-tome-and-principe',
+      'SV': 'el-salvador', 'SX': 'sint-maarten', 'SY': 'syria', 'SZ': 'eswatini', 'TC': 'turks-and-caicos',
+      'TD': 'chad', 'TF': 'french-southern-territories', 'TG': 'togo', 'TH': 'thailand', 'TJ': 'tajikistan',
+      'TK': 'tokelau', 'TL': 'timor-leste', 'TM': 'turkmenistan', 'TN': 'tunisia', 'TO': 'tonga',
+      'TR': 'turkey', 'TT': 'trinidad-and-tobago', 'TV': 'tuvalu', 'TW': 'taiwan', 'TZ': 'tanzania',
+      'UA': 'ukraine', 'UG': 'uganda', 'UM': 'us-outlying-islands', 'US': 'united-states', 'UY': 'uruguay',
+      'UZ': 'uzbekistan', 'VA': 'vatican-city', 'VC': 'saint-vincent-and-the-grenadines', 'VE': 'venezuela',
+      'VG': 'british-virgin-islands', 'VI': 'us-virgin-islands', 'VN': 'vietnam', 'VU': 'vanuatu',
+      'WF': 'wallis-and-futuna', 'WS': 'samoa', 'XK': 'kosovo', 'YE': 'yemen', 'YT': 'mayotte',
+      'ZA': 'south-africa', 'ZM': 'zambia', 'ZW': 'zimbabwe'
+    };
+    
+    // Check if this is a country code (2 uppercase letters, e.g., "US", "CN", "HK")
+    if (countryTrimmed.length === 2 && /^[A-Z]{2}$/.test(countryTrimmed)) {
+      const countryName = countryCodeToName[countryTrimmed];
+      if (countryName) {
+        return `emojione-v1:flag-for-${countryName}`;
+      }
+      // If code not found, return null to show text fallback
+      return null;
+    }
+    
+    // Fallback: if it's a country name, convert to flag format
+    // This handles legacy data or manual entries
+    let countryLower = countryTrimmed.toLowerCase();
     
     // Remove common prefixes that don't appear in flag names
     const prefixesToRemove = [
@@ -139,7 +213,9 @@ const apiBase = apiBaseProp ?? '';
     const specialFlagMap = {
       'hong kong': 'hong-kong-sar-china',
       'hongkong': 'hong-kong-sar-china',
-      'netherlands': 'netherlands', // Explicit mapping for "The Netherlands"
+      'macau': 'macau-sar-china',
+      'macao': 'macau-sar-china',
+      'netherlands': 'netherlands',
       'usa': 'united-states',
       'us': 'united-states',
       'united states': 'united-states',
@@ -154,6 +230,9 @@ const apiBase = apiBaseProp ?? '';
       'russian federation': 'russia',
       'myanmar': 'myanmar',
       'burma': 'myanmar',
+      'bosnia': 'bosnia-and-herzegovina',
+      'bosnia and herzegovina': 'bosnia-and-herzegovina',
+      'guinea bissau': 'guinea-bissau',
     };
     
     // Check if there's a special mapping (after prefix removal)
@@ -565,7 +644,7 @@ const apiBase = apiBaseProp ?? '';
     if (value >= 70) return 'bg-amber-500';
     return 'bg-emerald-500';
   };
-  
+
   const progress = (value, warn = false, isOffline = false) => `
     <div class="flex items-center gap-1 sm:gap-1.5 pr-2 sm:pr-3 min-w-0 w-full">
       <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] w-8 sm:w-10 shrink-0">${value.toFixed(1)}%</span>
@@ -611,6 +690,16 @@ const apiBase = apiBaseProp ?? '';
       <div class="system-details hidden border-t border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#1a1a1a] dark:bg-[#1a1a1a] bg-[#fafafa] overflow-hidden" data-details-id="${item.id}" style="width: 100%;">
         <div class="details-content px-3 sm:px-4 md:px-6 py-2 sm:py-3">
           <div class="flex flex-col gap-1.5 sm:gap-2 items-start">
+            <!-- Tags (first row) -->
+            ${item.tags && Array.isArray(item.tags) && item.tags.length > 0 ? `
+            <div class="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full">
+              ${item.tags.map(tag => `
+                <span class="inline-flex items-center rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#f5f5f5]">
+                  ${tag}
+                </span>
+              `).join('')}
+            </div>
+            ` : ''}
             <!-- CPU Info -->
             <div class="flex flex-wrap items-baseline gap-1.5 sm:gap-2" style="min-height: 16px; line-height: 16px;">
               <div class="text-[10px] sm:text-xs font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0" data-translate-detail="cpuInformation">CPU Information:</div>
@@ -653,16 +742,16 @@ const apiBase = apiBaseProp ?? '';
           <!-- Tabs for different targets -->
           <div class="flex gap-1 mb-3 flex-wrap" data-tcping-tabs="${item.id}"></div>
           <!-- Chart canvas -->
-          <div class="relative" style="height: 200px; width: 100%;">
+          <div class="relative" style="height: 200px; width: 100%; min-height: 200px;">
             <!-- Loading state -->
-            <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#151515] bg-white rounded" data-tcping-loading="${item.id}">
+            <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#151515] bg-white rounded" data-tcping-loading="${item.id}" style="height: 200px; min-height: 200px;">
               <div class="flex flex-col items-center gap-2">
                 <div class="w-6 h-6 border-2 border-[#404040] dark:border-[#404040] border-[#a3a3a3] border-t-transparent dark:border-t-transparent rounded-full animate-spin"></div>
                 <span class="text-xs text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252]" data-translate-detail="loading">Loading...</span>
         </div>
       </div>
             <!-- No data state -->
-            <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#151515] bg-white rounded hidden" data-tcping-no-data="${item.id}">
+            <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#151515] bg-white rounded hidden" data-tcping-no-data="${item.id}" style="height: 200px; min-height: 200px;">
               <div class="flex flex-col items-center gap-2">
                 <svg class="w-8 h-8 text-[#404040] dark:text-[#404040]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
@@ -670,7 +759,7 @@ const apiBase = apiBaseProp ?? '';
                 <span class="text-xs text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252]" data-translate-detail="noData">No data</span>
     </div>
   </div>
-            <canvas data-tcping-chart="${item.id}" style="width: 100%; height: 100%;" class="opacity-0 transition-opacity duration-300" data-tcping-canvas="${item.id}"></canvas>
+            <canvas data-tcping-chart="${item.id}" style="width: 100%; height: 200px; min-height: 200px;" class="opacity-0 transition-opacity duration-300" data-tcping-canvas="${item.id}"></canvas>
 </div>
       </div>` : ''}
     </div>
@@ -1222,18 +1311,18 @@ const apiBase = apiBaseProp ?? '';
         } else {
           // Clicking an inactive tab: select it
           // Update all tabs to inactive state
-          tabsContainer.querySelectorAll('button').forEach(btn => {
-            btn.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-transparent text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
-          });
+        tabsContainer.querySelectorAll('button').forEach(btn => {
+          btn.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-transparent text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
+        });
           // Set clicked tab as active
-          tab.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-[#404040]/50 dark:bg-[#404040]/50 text-[#f5f5f5] dark:text-[#f5f5f5] text-[#151515]';
-          
-          // Update current active target for this system
-          tcpingActiveTargets.set(systemId, {
-            target: target.address,
-            targetName: target.name || target.address
-          });
-          
+        tab.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-[#404040]/50 dark:bg-[#404040]/50 text-[#f5f5f5] dark:text-[#f5f5f5] text-[#151515]';
+        
+        // Update current active target for this system
+        tcpingActiveTargets.set(systemId, {
+          target: target.address,
+          targetName: target.name || target.address
+        });
+        
           // Update chart colors based on selected target (don't reload data)
           updateTCPingChartColors(systemId, target.address);
         }
@@ -1246,32 +1335,22 @@ const apiBase = apiBaseProp ?? '';
     return previouslySelectedTarget;
   }
 
-  // Initialize tcping chart for a system
-  async function initializeTCPingChart(systemId) {
+  // Initialize TCPing tabs immediately when details section expands
+  async function initializeTCPingTabs(systemId) {
     const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
     if (!container) {
       return;
     }
 
-    const canvas = container.querySelector(`[data-tcping-chart="${systemId}"]`);
     const tabsContainer = container.querySelector(`[data-tcping-tabs="${systemId}"]`);
-    if (!canvas || !tabsContainer) {
+    if (!tabsContainer) {
       return;
-    }
-
-    // Show loading state for chart only (not tabs)
-    const loadingElement = container.querySelector(`[data-tcping-loading="${systemId}"]`);
-    if (loadingElement) {
-      loadingElement.style.display = 'flex';
-    }
-    if (canvas) {
-      canvas.classList.add('opacity-0');
     }
 
     // Try to use cached config first for immediate tab display
     let config = cachedTCPingConfig;
     
-    // If no cached config, show loading tabs placeholder and fetch
+    // If no cached config, fetch it
     if (!config) {
       config = await loadTCPingConfig();
     }
@@ -1286,7 +1365,51 @@ const apiBase = apiBaseProp ?? '';
 
     // Create tabs immediately (no loading delay for tabs)
     // This will restore the previously selected target if any
-    const restoredTarget = createTCPingTabs(systemId, config, tabsContainer);
+    createTCPingTabs(systemId, config, tabsContainer);
+  }
+
+  // Initialize tcping chart for a system
+  async function initializeTCPingChart(systemId) {
+    const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
+    if (!container) {
+      return;
+    }
+
+    const canvas = container.querySelector(`[data-tcping-chart="${systemId}"]`);
+    if (!canvas) {
+      return;
+    }
+
+    // Wait for tabs to be rendered if they exist (tabs are created immediately, but DOM might need a moment)
+    const tabsContainer = container.querySelector(`[data-tcping-tabs="${systemId}"]`);
+    if (tabsContainer && tabsContainer.children.length > 0) {
+      // Tabs exist, wait for layout to stabilize
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    // Show loading state for chart only (not tabs)
+    const loadingElement = container.querySelector(`[data-tcping-loading="${systemId}"]`);
+    if (loadingElement) {
+      loadingElement.style.display = 'flex';
+    }
+    if (canvas) {
+      canvas.classList.add('opacity-0');
+    }
+
+    // Get config (should already be loaded by initializeTCPingTabs)
+    const config = tcpingConfigs.get(systemId);
+    if (!config) {
+      // Fallback: load config if tabs weren't initialized
+      const loadedConfig = cachedTCPingConfig || await loadTCPingConfig();
+      if (!loadedConfig || !loadedConfig.targets || loadedConfig.targets.length === 0) {
+        return;
+      }
+      tcpingConfigs.set(systemId, loadedConfig);
+    }
+
+    // Get previously selected target from tabs
+    const activeTargetInfo = tcpingActiveTargets.get(systemId);
+    const restoredTarget = activeTargetInfo ? activeTargetInfo.target : null;
 
     // Initialize chart with all targets
     // If there's a restored target, the chart will show single line highlight
@@ -1371,36 +1494,36 @@ const apiBase = apiBaseProp ?? '';
       const safeHistoryData = Array.isArray(historyData) ? historyData : [];
       
       // Filter and sort by timestamp
-      const sortedData = [...safeHistoryData]
-        .filter(result => {
-          const timestamp = new Date(result.timestamp).getTime();
-          return timestamp >= twentyFourHoursAgo;
-        })
-        .sort((a, b) => {
-          return new Date(a.timestamp) - new Date(b.timestamp);
-        });
-      
+    const sortedData = [...safeHistoryData]
+      .filter(result => {
+        const timestamp = new Date(result.timestamp).getTime();
+        return timestamp >= twentyFourHoursAgo;
+      })
+      .sort((a, b) => {
+        return new Date(a.timestamp) - new Date(b.timestamp);
+      });
+    
       if (sortedData.length > 0) {
         hasAnyData = true;
       }
       
       const chartData = [];
-      sortedData.forEach(result => {
-        const timestamp = new Date(result.timestamp);
-        let yValue = null;
-        if (result.latency !== null && result.latency !== undefined) {
-          if (result.latency > PACKET_LOSS_THRESHOLD_MS) {
+    sortedData.forEach(result => {
+      const timestamp = new Date(result.timestamp);
+      let yValue = null;
+      if (result.latency !== null && result.latency !== undefined) {
+        if (result.latency > PACKET_LOSS_THRESHOLD_MS) {
             yValue = null; // Packet loss
-          } else {
-            yValue = result.latency;
-          }
+        } else {
+          yValue = result.latency;
         }
-        chartData.push({
-          x: timestamp,
-          y: yValue
-        });
+      }
+      chartData.push({
+        x: timestamp,
+        y: yValue
       });
-      
+    });
+    
       // Determine color based on whether a target is selected
       // If no target is selected (selectedTarget === null), all lines have distinct colors
       // If a target is selected, only that target is colored, others are gray
@@ -1502,13 +1625,13 @@ const apiBase = apiBaseProp ?? '';
           const currentData = currentDataset.data || [];
           
           if (currentData.length > 0) {
-            const lastCurrentDataPoint = currentData[currentData.length - 1];
-            const lastCurrentTime = lastCurrentDataPoint ? lastCurrentDataPoint.x.getTime() : 0;
-            
+      const lastCurrentDataPoint = currentData[currentData.length - 1];
+      const lastCurrentTime = lastCurrentDataPoint ? lastCurrentDataPoint.x.getTime() : 0;
+      
             // Find new data points
             const newDataPoints = newDataset.data.filter(point => point.x.getTime() > lastCurrentTime);
-            
-            if (newDataPoints.length > 0) {
+      
+      if (newDataPoints.length > 0) {
               currentDataset.data.push(...newDataPoints);
               hasNewData = true;
             }
@@ -1520,11 +1643,11 @@ const apiBase = apiBaseProp ?? '';
           
           // Remove data older than 24 hours
           currentDataset.data = currentDataset.data.filter(point => {
-            return point.x.getTime() >= twentyFourHoursAgo;
-          });
+          return point.x.getTime() >= twentyFourHoursAgo;
+        });
         }
       });
-      
+        
       if (hasNewData) {
         try {
           if (chart && chart.canvas && chart.canvas.parentElement) {
@@ -1534,8 +1657,8 @@ const apiBase = apiBaseProp ?? '';
         } catch (err) {
           // Chart update failed silently
         }
-      }
-      return;
+        }
+        return;
     }
     
     // If incremental is true, we should have returned above
@@ -1643,7 +1766,7 @@ const apiBase = apiBaseProp ?? '';
               updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
             };
             fallbackAdapter.onerror = () => {
-              reject(new Error('Failed to load Chart.js date adapter'));
+            reject(new Error('Failed to load Chart.js date adapter'));
             };
             document.head.appendChild(fallbackAdapter);
           };
@@ -1694,7 +1817,7 @@ const apiBase = apiBaseProp ?? '';
             updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
           };
           fallbackAdapter.onerror = () => {
-            reject(new Error('Failed to load Chart.js date adapter'));
+          reject(new Error('Failed to load Chart.js date adapter'));
           };
           document.head.appendChild(fallbackAdapter);
         };
@@ -1721,12 +1844,18 @@ const apiBase = apiBaseProp ?? '';
     }
 
     // Ensure canvas has proper dimensions
+    // Use fixed dimensions from CSS (200px height) instead of getBoundingClientRect()
+    // to avoid issues when container is still animating
+    // Note: tabs are in external container, so they don't affect chart container height
     const parent = canvas.parentElement;
     if (parent) {
       const rect = parent.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        canvas.width = rect.width;
-        canvas.height = rect.height;
+      // Use fixed 200px height from CSS, or getBoundingClientRect if available and stable
+      const width = rect.width > 0 ? rect.width : parent.offsetWidth || 0;
+      const height = 200; // Fixed height from CSS style="height: 200px"
+      if (width > 0 && height > 0) {
+        canvas.width = width;
+        canvas.height = height;
       }
     }
 
@@ -2061,7 +2190,7 @@ const apiBase = apiBaseProp ?? '';
     container.dataset.rowClickSetup = 'true';
     
     // Handle both click and touch events for mobile compatibility
-    const handleRowToggle = (e) => {
+    const handleRowToggle = async (e) => {
       // Don't expand if clicking on copy button or other interactive elements
       if (e.target.closest('.copy-btn') || e.target.closest('button')) {
         return;
@@ -2101,7 +2230,18 @@ const apiBase = apiBaseProp ?? '';
           // Trigger reflow
           detailsSection.offsetHeight;
           
-          // Animate to full height
+          // Initialize TCPing tabs immediately (no delay) and wait for them to render
+          // This ensures scrollHeight calculation includes tabs height
+          await initializeTCPingTabs(systemId);
+          
+          // Wait a bit for tabs DOM to stabilize before calculating scrollHeight
+          await new Promise(resolve => setTimeout(resolve, 10));
+          
+          // Recalculate scrollHeight after tabs are rendered
+          // Trigger reflow again to ensure accurate measurement
+          detailsSection.offsetHeight;
+          
+          // Animate to full height (now includes tabs)
           detailsSection.style.transition = 'max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease-out';
           detailsSection.style.maxHeight = detailsSection.scrollHeight + 'px';
           detailsSection.style.opacity = '1';
@@ -2112,8 +2252,8 @@ const apiBase = apiBaseProp ?? '';
             detailsSection.style.transition = '';
           }, 300);
           
-          // Initialize tcping chart when expanding
-          setTimeout(() => initializeTCPingChart(systemId), 100);
+          // Initialize tcping chart when expanding - wait for animation to complete (300ms)
+          setTimeout(() => initializeTCPingChart(systemId), 350);
           
           // Update translations when expanding
           setTimeout(() => updateTranslations(), 0);
@@ -2572,33 +2712,33 @@ const apiBase = apiBaseProp ?? '';
 
     // Store the handler function so we can remove it if needed
     const updateHandler = (e) => {
-      try {
-        const update = JSON.parse(e.data);
-        
-        // Reload data when any update is received (incremental update will handle changes)
-        if (update.type === 'metric_updated' || update.type === 'order_updated' || update.type === 'metric_deleted') {
+        try {
+          const update = JSON.parse(e.data);
+          
+          // Reload data when any update is received (incremental update will handle changes)
+          if (update.type === 'metric_updated' || update.type === 'order_updated' || update.type === 'metric_deleted') {
           // Use debounced loadData to prevent duplicate updates from rapid SSE events
           debouncedLoadData();
-          
-          // Update tcping charts for visible expanded rows (incremental update only)
-          document.querySelectorAll('.system-details:not(.hidden)').forEach(detailsSection => {
-            const systemId = detailsSection.dataset.detailsId;
-            if (systemId) {
+            
+            // Update tcping charts for visible expanded rows (incremental update only)
+            document.querySelectorAll('.system-details:not(.hidden)').forEach(detailsSection => {
+              const systemId = detailsSection.dataset.detailsId;
+              if (systemId) {
               // Use incremental update for all targets chart
               updateTCPingChart(systemId, null, null, true);
-            }
-          });
-        }
-      } catch (err) {
-        // SSE parse error silently
+              }
+            });
       }
+    } catch (err) {
+        // SSE parse error silently
+    }
     };
     
     eventSource.addEventListener('update', updateHandler);
 
     eventSource.onerror = (err) => {
       if (eventSource) {
-        eventSource.close();
+      eventSource.close();
         eventSource = null;
       }
       // Reconnect after 5 seconds
@@ -2623,7 +2763,7 @@ const apiBase = apiBaseProp ?? '';
         e.preventDefault();
         currentFilter = e.target.value;
         loadData();
-      }
+  }
     };
 
     filterInput.addEventListener('input', inputHandler);

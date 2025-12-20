@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -41,6 +43,8 @@ type SystemMetric struct {
 	Alert              bool                          `json:"alert"`
 	UpdatedAt          time.Time                     `json:"updated_at"`
 	TCPingData         map[string]TCPingTargetData   `json:"tcping_data,omitempty"` // Map of target -> latest tcping data
+	Tags               []string                      `json:"tags,omitempty"`        // User-defined tags for the service
+	Secret             string                         `json:"secret,omitempty"`      // Secret for client authentication
 }
 
 // TCPingTargetData represents the latest tcping data for a specific target
@@ -70,8 +74,10 @@ type metricPayload struct {
 	NetOutMBps         float64 `json:"net_out_mb_s"`
 	TotalNetInBytes    uint64  `json:"total_net_in_bytes,omitempty"`  // Total received bytes
 	TotalNetOutBytes   uint64  `json:"total_net_out_bytes,omitempty"` // Total transmitted bytes
-	AgentVersion       string  `json:"agent_version"`
-	Alert              bool    `json:"alert"`
+	AgentVersion       string   `json:"agent_version"`
+	Alert              bool     `json:"alert"`
+	Tags               []string `json:"tags,omitempty"` // User-defined tags
+	Secret             string   `json:"secret,omitempty"` // Secret for client authentication (sent by client during registration)
 }
 
 // SSE Broker for broadcasting updates
@@ -165,6 +171,11 @@ func (r *ClientRegistry) Register(id, name, port, ip string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	
+	// IMPORTANT: One client per ID - this ensures a client can only connect to one service
+	// If a client with this ID already exists, we replace it with the new registration
+	// This is the correct behavior: the latest registration wins (handles client restarts, IP changes, etc.)
+	// Note: We don't check IP/Port differences because clients may change IP addresses (e.g., dynamic IP, VPN, etc.)
+	
 	// Construct client URL - always use IP, never localhost
 	var url string
 	if ip != "" && ip != "127.0.0.1" && ip != "localhost" {
@@ -181,6 +192,7 @@ func (r *ClientRegistry) Register(id, name, port, ip string) {
 		}
 	}
 	
+	// Register or update the client (one client per ID)
 	r.clients[id] = &ClientInfo{
 		ID:   id,
 		Name: name,
@@ -478,6 +490,10 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 			metrics[i].IPv4 = ""
 			metrics[i].IPv6 = ""
 		}
+		
+		// CRITICAL SECURITY: Never expose secret to frontend, even if authenticated
+		// Secret should only be used server-side for client authentication
+		metrics[i].Secret = ""
 	}
 	
 	writeJSON(w, http.StatusOK, metrics)
@@ -541,20 +557,28 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 	var metric SystemMetric
 	
 	if !isFromClient && existing != nil {
-		// Admin page is updating existing system - preserve ALL existing data, only update name
+		// Admin page is updating existing system - preserve ALL existing data, only update name and tags
 		metric = *existing
 		metric.Name = strings.TrimSpace(payload.Name)
-		// Keep existing order and updatedAt
+		// Update tags if provided in payload (from admin edit form)
+		// IMPORTANT: If payload.Tags is nil, preserve existing tags; if empty array, clear tags
+		if payload.Tags != nil {
+			metric.Tags = payload.Tags
+		}
+		// Keep existing order, updatedAt, and secret
 	} else {
 		// Either from client, or new system from admin page
 		// Preserve existing values for new fields if updating existing system
-		var cpuModel, memoryInfo, swapInfo, diskInfo string
+		var cpuModel, memoryInfo, swapInfo, diskInfo, secret string
+		var tags []string
 		var tcpingData map[string]TCPingTargetData
 		if existing != nil {
 			cpuModel = existing.CPUModel
 			memoryInfo = existing.MemoryInfo
 			swapInfo = existing.SwapInfo
 			diskInfo = existing.DiskInfo
+			secret = existing.Secret
+			tags = existing.Tags
 			// Preserve existing tcping data map
 			if existing.TCPingData != nil {
 				tcpingData = make(map[string]TCPingTargetData)
@@ -562,6 +586,16 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 					tcpingData[k] = v
 				}
 			}
+		}
+		
+		// Generate secret for new systems (only if not from client and doesn't exist)
+		if !isFromClient && existing == nil && secret == "" {
+			secret = generateSecret()
+		}
+		
+		// Update tags if provided in payload (from admin form)
+		if payload.Tags != nil {
+			tags = payload.Tags
 		}
 		// Use payload values if provided, otherwise keep existing or use empty string
 		if payload.CPUModel != "" {
@@ -603,6 +637,8 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 			Alert:              payload.Alert,
 			UpdatedAt:          updatedAt,
 			TCPingData:         tcpingData,
+			Tags:               tags,
+			Secret:             secret,
 		}
 	}
 
@@ -619,7 +655,12 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 		broker.Broadcast(`{"type":"metric_updated","id":"` + metric.ID + `"}`)
 	}
 	
-	writeJSON(w, http.StatusAccepted, metric)
+	// CRITICAL SECURITY: Never expose secret in API responses
+	// Create a copy without secret before sending to client
+	responseMetric := metric
+	responseMetric.Secret = ""
+	
+	writeJSON(w, http.StatusAccepted, responseMetric)
 }
 
 func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistry, w http.ResponseWriter, r *http.Request, id string) {
@@ -656,10 +697,11 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 	defer r.Body.Close()
 	
 	var payload struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-		Port string `json:"port"`
-		IP   string `json:"ip,omitempty"`
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Port   string `json:"port"`
+		IP     string `json:"ip,omitempty"`
+		Secret string `json:"secret,omitempty"` // Secret for authentication
 	}
 	
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -679,6 +721,17 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 		return
 	}
 	
+	// Verify secret if it's set in the database
+	if existing.Secret != "" {
+		if payload.Secret == "" {
+			http.Error(w, "secret is required for authentication", http.StatusUnauthorized)
+			return
+		}
+		if payload.Secret != existing.Secret {
+			http.Error(w, "invalid secret", http.StatusUnauthorized)
+			return
+		}
+	}
 	
 	// Get client IP from request - prioritize request IP over payload IP
 	// This ensures we use the actual connection IP, not what client reports
@@ -1027,15 +1080,20 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	// Format uptime for display
 	timeDisplay := formatUptime(payload.Uptime)
 	
-	// Get existing system to preserve order and name from database
+	// Get existing system to preserve order, name, tags, and secret from database
 	existing, _ := store.Get(client.ID)
 	order := 0
 	name := client.Name // Default to client name if not in database
 	var tcpingData map[string]TCPingTargetData
+	var tags []string
+	var secret string
 	if existing != nil {
 		order = existing.Order
 		// Preserve name from database (don't override with client name)
 		name = existing.Name
+		// CRITICAL: Preserve tags and secret from database (client should never override these)
+		tags = existing.Tags
+		secret = existing.Secret
 		// Preserve existing tcping data map
 		if existing.TCPingData != nil {
 			tcpingData = make(map[string]TCPingTargetData)
@@ -1053,6 +1111,7 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	
 	// Client is sending data, so system is definitely online
 	// Set Alert to false (online) and update timestamp
+	// CRITICAL: Always preserve Tags and Secret from database - client should never override these
 	metric := SystemMetric{
 		ID:                 client.ID,
 		Name:               name, // Use name from database, not from client registration
@@ -1079,6 +1138,8 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 		Alert:           false, // Client is sending data, so system is online
 		UpdatedAt:    time.Now().UTC(),
 		TCPingData:   tcpingData,
+		Tags:         tags,   // CRITICAL: Preserve tags from database
+		Secret:       secret, // CRITICAL: Preserve secret from database
 	}
 	
 	// If system was offline and is now online, log the reconnection
@@ -1108,13 +1169,36 @@ func getCountryFromIP(ip string) string {
 	}
 	
 	// Try multiple services with fallback for better reliability
+	// Priority: ipinfo.io first (most accurate), then fallback to others
 	// Some services may be blocked in China, so we try multiple options
 	services := []struct {
 		url    string
 		parser func(*http.Response) string
 	}{
 		{
-			// ip-api.com (may be blocked in China, but try first)
+			// ipinfo.io (most accurate, try first)
+			// Returns ISO 3166-1 alpha-2 country code (e.g., "US", "CN", "HK")
+			// We'll use the country code directly for emojione-v1 flag icons
+			url: fmt.Sprintf("https://ipinfo.io/%s/json", ip),
+			parser: func(resp *http.Response) string {
+				var result struct {
+					Country string `json:"country"`
+					Region  string `json:"region"`
+					City    string `json:"city"`
+				}
+				if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+					return ""
+				}
+				// ipinfo.io returns country code (2-letter ISO 3166-1 alpha-2)
+				// Return it directly (uppercase) for emojione-v1 flag format
+				if result.Country != "" {
+					return strings.ToUpper(result.Country)
+				}
+				return ""
+			},
+		},
+		{
+			// ip-api.com (fallback, provides country code)
 			url: fmt.Sprintf("http://ip-api.com/json/%s?fields=status,country,countryCode", ip),
 			parser: func(resp *http.Response) string {
 				var result struct {
@@ -1125,8 +1209,9 @@ func getCountryFromIP(ip string) string {
 				if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 					return ""
 				}
-				if result.Status == "success" && result.Country != "" {
-					return result.Country
+				// Prefer country code for emojione-v1 flag format
+				if result.Status == "success" && result.CountryCode != "" {
+					return strings.ToUpper(result.CountryCode)
 				}
 				return ""
 			},
@@ -1137,13 +1222,15 @@ func getCountryFromIP(ip string) string {
 			parser: func(resp *http.Response) string {
 				var result struct {
 					CountryName string `json:"country_name"`
+					CountryCode string `json:"country_code"`
 					Country     string `json:"country"`
 				}
 				if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 					return ""
 				}
-				if result.CountryName != "" {
-					return result.CountryName
+				// Prefer country code for emojione-v1 flag format
+				if result.CountryCode != "" {
+					return strings.ToUpper(result.CountryCode)
 				}
 				return ""
 			},
@@ -1154,13 +1241,14 @@ func getCountryFromIP(ip string) string {
 			parser: func(resp *http.Response) string {
 				var result struct {
 					CountryName string `json:"country_name"`
-					Country     string `json:"country_code"`
+					CountryCode string `json:"country_code"`
 				}
 				if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 					return ""
 				}
-				if result.CountryName != "" {
-					return result.CountryName
+				// Prefer country code for emojione-v1 flag format
+				if result.CountryCode != "" {
+					return strings.ToUpper(result.CountryCode)
 				}
 				return ""
 			},
@@ -1218,6 +1306,18 @@ func extractCountry(location string) string {
 	}
 	
 	return strings.TrimSpace(location)
+}
+
+// generateSecret generates a short secret for client authentication
+// Returns a base64-encoded string of 12 random bytes (16 characters when encoded)
+func generateSecret() string {
+	bytes := make([]byte, 12)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to timestamp-based secret if crypto/rand fails
+		return fmt.Sprintf("%x", time.Now().UnixNano())[:16]
+	}
+	// Use base64 URL encoding (no padding) for shorter, URL-safe secrets
+	return base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(bytes)
 }
 
 func handleUpdateOrder(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.Request) {

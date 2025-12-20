@@ -111,6 +111,18 @@ const apiBase = apiBaseProp ?? '';
           />
         </div>
 
+        <div>
+          <label class="mb-1 block text-sm font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252]"><span data-translate="tags">Tags</span> <span class="text-xs text-[#737373] dark:text-[#737373] text-[#a3a3a3]">(comma-separated)</span></label>
+          <input
+            type="text"
+            name="tags"
+            id="edit-tags-input"
+            placeholder="Python, R"
+            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
+          />
+          <p class="mt-1 text-xs text-[#737373] dark:text-[#737373] text-[#a3a3a3]">Enter tags separated by commas (e.g., Python, R, Production)</p>
+        </div>
+
         <div class="rounded-lg bg-[#282828] dark:bg-[#282828] bg-[#f5f5f5] p-3">
           <p class="text-xs text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252]">
             <strong data-translate="note">Note:</strong> <span data-translate="noteContent">IP addresses, location, OS and metrics are automatically updated by the agent and cannot be edited manually.</span>
@@ -554,6 +566,14 @@ const apiBase = apiBaseProp ?? '';
       // Fill form with system data (only Name, ID is hidden)
       form.elements['original-id'].value = system.id;
       form.elements['name'].value = system.name || '';
+      
+      // Fill tags input
+      const tagsInput = document.getElementById('edit-tags-input');
+      if (tagsInput && system.tags && Array.isArray(system.tags)) {
+        tagsInput.value = system.tags.join(', ');
+      } else if (tagsInput) {
+        tagsInput.value = '';
+      }
       
       // Open modal with animation
       openModalWithAnimation(editModal);
@@ -1872,7 +1892,16 @@ const apiBase = apiBaseProp ?? '';
         e.stopPropagation();
         const systemId = newBtn.dataset.systemId;
         const serverUrl = window.location.origin;
-        const command = `curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id ${systemId} --server ${serverUrl}`;
+        
+        // Get system secret from the system data
+        const system = JSON.parse(newBtn.closest('.draggable-item').querySelector('.edit-btn').dataset.system);
+        const secret = system.secret || '';
+        
+        // Build command with secret if available
+        let command = `curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id ${systemId} --server ${serverUrl}`;
+        if (secret) {
+          command += ` --secret ${secret}`;
+        }
         
         const linuxIcon = newBtn.querySelector('.linux-icon');
         const checkIcon = newBtn.querySelector('.check-icon');
@@ -1911,8 +1940,18 @@ const apiBase = apiBaseProp ?? '';
         e.stopPropagation();
         const systemId = newBtn.dataset.systemId;
         const serverUrl = window.location.origin;
+        
+        // Get system secret from the system data
+        const system = JSON.parse(newBtn.closest('.draggable-item').querySelector('.edit-btn').dataset.system);
+        const secret = system.secret || '';
+        
+        // Build command with secret if available
         // Use backtick to escape $env: so PowerShell doesn't expand it prematurely
-        const command = `powershell -ExecutionPolicy Bypass -Command "& { \`$env:AgentId='${systemId}'; \`$env:ServerBase='${serverUrl}'; irm https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.ps1 | iex }"`;
+        let command = `powershell -ExecutionPolicy Bypass -Command "& { \`$env:AgentId='${systemId}'; \`$env:ServerBase='${serverUrl}'`;
+        if (secret) {
+          command += `; \`$env:Secret='${secret}'`;
+        }
+        command += `; irm https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.ps1 | iex }"`;
         
         const windowsIcon = newBtn.querySelector('.windows-icon');
         const checkIcon = newBtn.querySelector('.check-icon');
@@ -2433,7 +2472,7 @@ const apiBase = apiBaseProp ?? '';
       // Use original-id from hidden field
       const systemId = formData.get('original-id');
       const systemName = formData.get('name')?.trim();
-
+      const tagsInput = formData.get('tags')?.trim() || '';
 
       // Validate
       if (!systemId || !systemName || systemId.trim() === '' || systemName.trim() === '') {
@@ -2447,6 +2486,11 @@ const apiBase = apiBaseProp ?? '';
         submitBtn.textContent = 'Updating...';
       }
 
+      // Parse tags from comma-separated string
+      const tags = tagsInput
+        ? tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
+        : [];
+
       const data = {
         id: systemId.trim(),
         name: systemName.trim(),
@@ -2457,6 +2501,7 @@ const apiBase = apiBaseProp ?? '';
         net_out_mb_s: 0,
         agent_version: '1.0.0',
         alert: false,
+        tags: tags,
       };
 
 
