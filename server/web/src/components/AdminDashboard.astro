@@ -1607,6 +1607,7 @@ const apiBase = apiBaseProp ?? '';
 
     // Initial render - if no existing data, render everything
     if (currentData.size === 0) {
+      // Use original data for rendering to preserve all fields including tags
       container.innerHTML = data.map((system, index) => renderSystemItem(system, index)).join('');
       currentData = newData;
       
