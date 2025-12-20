@@ -19,6 +19,7 @@ SERVICE_NAME="pulse-client"
 GITHUB_REPO="https://github.com/xhhcn/Pulse/raw/main/client"
 CLIENT_PORT="9090"
 AGENT_NAME=""
+SECRET=""
 
 # Print banner
 print_banner() {
@@ -51,7 +52,7 @@ parse_args() {
                 AGENT_ID="$2"
                 shift 2
                 ;;
-            --name)
+            --name|--agent-name)
                 AGENT_NAME="$2"
                 shift 2
                 ;;
@@ -61,6 +62,10 @@ parse_args() {
                 ;;
             --port)
                 CLIENT_PORT="$2"
+                shift 2
+                ;;
+            --secret)
+                SECRET="$2"
                 shift 2
                 ;;
             --help|-h)
@@ -83,13 +88,14 @@ show_help() {
     echo "  --name NAME      Agent display name (optional, defaults to ID)"
     echo "  --server URL     Server base URL (required, e.g., http://your-server:8080)"
     echo "  --port PORT      Client port (optional, default: 9090)"
+    echo "  --secret SECRET  Secret for authentication (optional, if server requires it)"
     echo "  --help, -h       Show this help message"
     echo ""
     echo "Example:"
-    echo "  $0 --id my-server-1 --server http://monitor.example.com:8080"
+    echo "  $0 --id my-server-1 --server http://monitor.example.com:8080 --secret my-secret"
     echo ""
     echo "Or using curl:"
-    echo "  curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id my-server-1 --server http://monitor.example.com:8080"
+    echo "  curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id my-server-1 --server http://monitor.example.com:8080 --secret my-secret"
 }
 
 # Prompt for required values if not provided
@@ -150,6 +156,17 @@ download_binary() {
 create_service() {
     info "Creating systemd service..."
     
+    # Build environment variables for systemd service
+    ENV_LINES="Environment=\"AGENT_ID=${AGENT_ID}\"\n"
+    if [ -n "$AGENT_NAME" ]; then
+        ENV_LINES="${ENV_LINES}Environment=\"AGENT_NAME=${AGENT_NAME}\"\n"
+    fi
+    ENV_LINES="${ENV_LINES}Environment=\"SERVER_BASE=${SERVER_BASE}\"\n"
+    ENV_LINES="${ENV_LINES}Environment=\"CLIENT_PORT=${CLIENT_PORT}\"\n"
+    if [ -n "$SECRET" ]; then
+        ENV_LINES="${ENV_LINES}Environment=\"SECRET=${SECRET}\"\n"
+    fi
+    
     cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
 [Unit]
 Description=Pulse Monitoring Client
@@ -157,10 +174,7 @@ After=network.target
 
 [Service]
 Type=simple
-Environment="AGENT_ID=${AGENT_ID}"
-Environment="AGENT_NAME=${AGENT_NAME}"
-Environment="SERVER_BASE=${SERVER_BASE}"
-Environment="CLIENT_PORT=${CLIENT_PORT}"
+$(echo -e "$ENV_LINES")
 ExecStart=${INSTALL_DIR}/probe-client
 Restart=always
 RestartSec=10
@@ -185,8 +199,14 @@ show_status() {
     echo ""
     echo "Configuration:"
     echo "  Agent ID:    $AGENT_ID"
+    if [ -n "$AGENT_NAME" ]; then
+        echo "  Agent Name:  $AGENT_NAME"
+    fi
     echo "  Server:      $SERVER_BASE"
     echo "  Client Port: $CLIENT_PORT"
+    if [ -n "$SECRET" ]; then
+        echo "  Secret:      ${SECRET:0:4}**** (hidden)"
+    fi
     echo "  Install Dir: $INSTALL_DIR"
     echo ""
     echo "Service Commands:"
