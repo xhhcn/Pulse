@@ -267,9 +267,6 @@ function Show-Status {
     Write-Host ""
     Write-Host "Configuration:"
     Write-Host "  Agent ID:    $($script:AgentId)"
-    if (-not [string]::IsNullOrEmpty($script:AgentName)) {
-        Write-Host "  Agent Name:  $($script:AgentName)"
-    }
     Write-Host "  Server:      $($script:ServerBase)"
     Write-Host "  Client Port:   $($script:ClientPort)"
     if (-not [string]::IsNullOrEmpty($script:Secret)) {

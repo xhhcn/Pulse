@@ -199,9 +199,6 @@ show_status() {
     echo ""
     echo "Configuration:"
     echo "  Agent ID:    $AGENT_ID"
-    if [ -n "$AGENT_NAME" ]; then
-        echo "  Agent Name:  $AGENT_NAME"
-    fi
     echo "  Server:      $SERVER_BASE"
     echo "  Client Port: $CLIENT_PORT"
     if [ -n "$SECRET" ]; then
