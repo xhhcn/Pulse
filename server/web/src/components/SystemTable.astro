@@ -498,7 +498,31 @@ const pollMs = Number(pollMsProp ?? 5000);
     if (!body) return;
     
     const rows = body.querySelectorAll('.system-row');
-    if (rows.length === 0) return;
+    // If no data rows yet, still update header and loading rows for consistency
+    const hasDataRows = rows.length > 0;
+    
+    if (!hasDataRows) {
+      // When loading, use default column width calculation based on CSS classes
+      // Calculate based on header row or use a reasonable default
+      const headerRow = document.getElementById('system-table-header-row');
+      if (headerRow) {
+        const isMobile = window.innerWidth < 640;
+        const fixedColWidth = isMobile ? '70px' : 'minmax(70px, 90px)';
+        // Use a default width for the first column when no data is available
+        const defaultFirstColWidth = 'minmax(120px, max-content)';
+        const gridTemplateColumns = `${defaultFirstColWidth} ${fixedColWidth} ${fixedColWidth} ${fixedColWidth} ${fixedColWidth} 1fr 1fr 1fr`;
+        
+        // Update header row
+        headerRow.style.gridTemplateColumns = gridTemplateColumns;
+        
+        // Update loading state rows
+        const loadingRows = document.querySelectorAll('#loading-indicator > div');
+        loadingRows.forEach(loadingRow => {
+          loadingRow.style.gridTemplateColumns = gridTemplateColumns;
+        });
+      }
+      return;
+    }
     
     let maxWidth = 160; // Minimum width in pixels
     
@@ -560,10 +584,21 @@ const pollMs = Number(pollMsProp ?? 5000);
     
     // Set the column width for all rows and header using inline style
     // New column order: Service, OS, Time, Location, Net, CPU, Memory, Disk
-    // Columns 2-5 (OS, Time, Location, Net) are fixed at 90px each
+    // Columns 2-5 (OS, Time, Location, Net) use responsive width based on screen size
+    // On mobile (< 640px): use 70px fixed width
+    // On larger screens: use minmax(70px, 90px) to allow growth up to 90px
     // Last three columns (CPU, Memory, Disk) use 1fr each to fill remaining space
     const columnWidth = `${Math.ceil(maxWidth)}px`;
-    const gridTemplateColumns = `${columnWidth} 90px 90px 90px 90px 1fr 1fr 1fr`;
+    const isMobile = window.innerWidth < 640;
+    // Use fixed 70px on mobile, minmax on larger screens for better responsiveness
+    const fixedColWidth = isMobile ? '70px' : 'minmax(70px, 90px)';
+    const gridTemplateColumns = `${columnWidth} ${fixedColWidth} ${fixedColWidth} ${fixedColWidth} ${fixedColWidth} 1fr 1fr 1fr`;
+    
+    // Also update loading state rows to match
+    const loadingRows = document.querySelectorAll('#loading-indicator > div');
+    loadingRows.forEach(loadingRow => {
+      loadingRow.style.gridTemplateColumns = gridTemplateColumns;
+    });
     
     // Update all table rows
     rows.forEach(systemRow => {
@@ -615,7 +650,7 @@ const pollMs = Number(pollMsProp ?? 5000);
     const isOffline = item.alert || false;
     return `
     <div class="system-row" data-system-id="${item.id}">
-      <div class="group grid grid-cols-[160px_90px_90px_90px_90px_1fr_1fr_1fr] items-center gap-2 sm:gap-3 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${item.id}">
+      <div class="group grid grid-cols-[minmax(120px,max-content)_70px_70px_70px_70px_1fr_1fr_1fr] sm:grid-cols-[minmax(120px,max-content)_minmax(70px,90px)_minmax(70px,90px)_minmax(70px,90px)_minmax(70px,90px)_1fr_1fr_1fr] items-center gap-1 sm:gap-2 md:gap-3 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${item.id}">
         <div class="flex items-center gap-1.5 sm:gap-2.5 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-red-400' : 'bg-emerald-400'} shrink-0"></span>
           <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]">${item.name || 'unknown'}</span>
@@ -2623,6 +2658,8 @@ const pollMs = Number(pollMsProp ?? 5000);
   // Initial load - wait for DOM to be ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
+      // Sync header and loading rows column widths immediately (even when loading)
+      adjustServerNameColumnWidth();
       loadData();
       connectSSE();
       // Initial translation update
@@ -2631,6 +2668,8 @@ const pollMs = Number(pollMsProp ?? 5000);
       preloadTCPingConfig();
     });
   } else {
+    // Sync header and loading rows column widths immediately (even when loading)
+    adjustServerNameColumnWidth();
     loadData();
     connectSSE();
     // Initial translation update

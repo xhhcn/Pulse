@@ -2,7 +2,7 @@
 import Icon from './Icon.astro';
 ---
 
-<div id="system-table-header-row" class="grid grid-cols-[160px_90px_90px_90px_90px_1fr_1fr_1fr] items-center gap-2 sm:gap-3 border-b border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-medium tracking-wide text-[#737373] dark:text-[#737373] text-[#404040]">
+<div id="system-table-header-row" class="grid grid-cols-[minmax(120px,max-content)_70px_70px_70px_70px_1fr_1fr_1fr] sm:grid-cols-[minmax(120px,max-content)_minmax(70px,90px)_minmax(70px,90px)_minmax(70px,90px)_minmax(70px,90px)_1fr_1fr_1fr] items-center gap-1 sm:gap-2 md:gap-3 border-b border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-medium tracking-wide text-[#737373] dark:text-[#737373] text-[#404040]">
   <div class="flex items-center gap-2">
     <Icon name="server" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
     <span data-translate="system">Service</span>
