@@ -1,0 +1,88 @@
+name: Build Client Binaries
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'client/**'
+      - '.github/workflows/build-clients.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'client/**'
+      - '.github/workflows/build-clients.yml'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Clients
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build Linux amd64
+        working-directory: ./client
+        run: |
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o probe-client main.go
+          chmod +x probe-client
+
+      - name: Build Linux arm64
+        working-directory: ./client
+        run: |
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o probe-client-arm64 main.go
+          chmod +x probe-client-arm64
+
+      - name: Build Windows amd64
+        working-directory: ./client
+        run: |
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o probe-client.exe main.go
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-binaries
+          path: |
+            client/probe-client
+            client/probe-client-arm64
+            client/probe-client.exe
+          retention-days: 30
+
+      - name: Commit binaries to client folder
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          # Force add binaries even if they're in .gitignore
+          git add -f client/probe-client client/probe-client-arm64 client/probe-client.exe
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update client binaries [skip actions]"
+            git push
+          fi
+
+      - name: Upload to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            client/probe-client
+            client/probe-client-arm64
+            client/probe-client.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
