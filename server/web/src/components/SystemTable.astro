@@ -103,10 +103,84 @@ const pollMs = Number(pollMsProp ?? 5000);
   };
 
   // Country to flag icon mapping (emojione-v1)
+  // Supports both ISO 3166-1 alpha-2 country codes (e.g., "US", "CN", "HK") and country names
+  // Backend now returns ISO 3166-1 alpha-2 country codes
+  // Format: emojione-v1:flag-for-{country-name} (e.g., emojione-v1:flag-for-afghanistan)
   const countryToFlag = (country) => {
     if (!country) return null;
     
-    let countryLower = country.toLowerCase().trim();
+    const countryTrimmed = country.trim();
+    
+    // ISO 3166-1 alpha-2 country code to country name mapping
+    // Maps to emojione-v1 flag format: emojione-v1:flag-for-{country-name}
+    const countryCodeToName = {
+      'AD': 'andorra', 'AE': 'united-arab-emirates', 'AF': 'afghanistan', 'AG': 'antigua-and-barbuda',
+      'AI': 'anguilla', 'AL': 'albania', 'AM': 'armenia', 'AO': 'angola', 'AQ': 'antarctica',
+      'AR': 'argentina', 'AS': 'american-samoa', 'AT': 'austria', 'AU': 'australia', 'AW': 'aruba',
+      'AX': 'aland-islands', 'AZ': 'azerbaijan', 'BA': 'bosnia-and-herzegovina', 'BB': 'barbados',
+      'BD': 'bangladesh', 'BE': 'belgium', 'BF': 'burkina-faso', 'BG': 'bulgaria', 'BH': 'bahrain',
+      'BI': 'burundi', 'BJ': 'benin', 'BL': 'saint-barthelemy', 'BM': 'bermuda', 'BN': 'brunei',
+      'BO': 'bolivia', 'BQ': 'caribbean-netherlands', 'BR': 'brazil', 'BS': 'bahamas', 'BT': 'bhutan',
+      'BV': 'bouvet-island', 'BW': 'botswana', 'BY': 'belarus', 'BZ': 'belize', 'CA': 'canada',
+      'CC': 'cocos-islands', 'CD': 'congo-kinshasa', 'CF': 'central-african-republic', 'CG': 'congo-brazzaville',
+      'CH': 'switzerland', 'CI': 'cote-divoire', 'CK': 'cook-islands', 'CL': 'chile', 'CM': 'cameroon',
+      'CN': 'china', 'CO': 'colombia', 'CR': 'costa-rica', 'CU': 'cuba', 'CV': 'cape-verde',
+      'CW': 'curacao', 'CX': 'christmas-island', 'CY': 'cyprus', 'CZ': 'czech-republic', 'DE': 'germany',
+      'DJ': 'djibouti', 'DK': 'denmark', 'DM': 'dominica', 'DO': 'dominican-republic', 'DZ': 'algeria',
+      'EC': 'ecuador', 'EE': 'estonia', 'EG': 'egypt', 'EH': 'western-sahara', 'ER': 'eritrea',
+      'ES': 'spain', 'ET': 'ethiopia', 'FI': 'finland', 'FJ': 'fiji', 'FK': 'falkland-islands',
+      'FM': 'micronesia', 'FO': 'faroe-islands', 'FR': 'france', 'GA': 'gabon', 'GB': 'united-kingdom',
+      'GD': 'grenada', 'GE': 'georgia', 'GF': 'french-guiana', 'GG': 'guernsey', 'GH': 'ghana',
+      'GI': 'gibraltar', 'GL': 'greenland', 'GM': 'gambia', 'GN': 'guinea', 'GP': 'guadeloupe',
+      'GQ': 'equatorial-guinea', 'GR': 'greece', 'GS': 'south-georgia', 'GT': 'guatemala', 'GU': 'guam',
+      'GW': 'guinea-bissau', 'GY': 'guyana', 'HK': 'hong-kong-sar-china', 'HM': 'heard-island',
+      'HN': 'honduras', 'HR': 'croatia', 'HT': 'haiti', 'HU': 'hungary', 'ID': 'indonesia',
+      'IE': 'ireland', 'IL': 'israel', 'IM': 'isle-of-man', 'IN': 'india', 'IO': 'british-indian-ocean-territory',
+      'IQ': 'iraq', 'IR': 'iran', 'IS': 'iceland', 'IT': 'italy', 'JE': 'jersey', 'JM': 'jamaica',
+      'JO': 'jordan', 'JP': 'japan', 'KE': 'kenya', 'KG': 'kyrgyzstan', 'KH': 'cambodia',
+      'KI': 'kiribati', 'KM': 'comoros', 'KN': 'saint-kitts-and-nevis', 'KP': 'north-korea',
+      'KR': 'south-korea', 'KW': 'kuwait', 'KY': 'cayman-islands', 'KZ': 'kazakhstan', 'LA': 'laos',
+      'LB': 'lebanon', 'LC': 'saint-lucia', 'LI': 'liechtenstein', 'LK': 'sri-lanka', 'LR': 'liberia',
+      'LS': 'lesotho', 'LT': 'lithuania', 'LU': 'luxembourg', 'LV': 'latvia', 'LY': 'libya',
+      'MA': 'morocco', 'MC': 'monaco', 'MD': 'moldova', 'ME': 'montenegro', 'MF': 'saint-martin',
+      'MG': 'madagascar', 'MH': 'marshall-islands', 'MK': 'north-macedonia', 'ML': 'mali', 'MM': 'myanmar',
+      'MN': 'mongolia', 'MO': 'macau-sar-china', 'MP': 'northern-mariana-islands', 'MQ': 'martinique',
+      'MR': 'mauritania', 'MS': 'montserrat', 'MT': 'malta', 'MU': 'mauritius', 'MV': 'maldives',
+      'MW': 'malawi', 'MX': 'mexico', 'MY': 'malaysia', 'MZ': 'mozambique', 'NA': 'namibia',
+      'NC': 'new-caledonia', 'NE': 'niger', 'NF': 'norfolk-island', 'NG': 'nigeria', 'NI': 'nicaragua',
+      'NL': 'netherlands', 'NO': 'norway', 'NP': 'nepal', 'NR': 'nauru', 'NU': 'niue',
+      'NZ': 'new-zealand', 'OM': 'oman', 'PA': 'panama', 'PE': 'peru', 'PF': 'french-polynesia',
+      'PG': 'papua-new-guinea', 'PH': 'philippines', 'PK': 'pakistan', 'PL': 'poland', 'PM': 'saint-pierre-and-miquelon',
+      'PN': 'pitcairn', 'PR': 'puerto-rico', 'PS': 'palestine', 'PT': 'portugal', 'PW': 'palau',
+      'PY': 'paraguay', 'QA': 'qatar', 'RE': 'reunion', 'RO': 'romania', 'RS': 'serbia',
+      'RU': 'russia', 'RW': 'rwanda', 'SA': 'saudi-arabia', 'SB': 'solomon-islands', 'SC': 'seychelles',
+      'SD': 'sudan', 'SE': 'sweden', 'SG': 'singapore', 'SH': 'saint-helena', 'SI': 'slovenia',
+      'SJ': 'svalbard-and-jan-mayen', 'SK': 'slovakia', 'SL': 'sierra-leone', 'SM': 'san-marino',
+      'SN': 'senegal', 'SO': 'somalia', 'SR': 'suriname', 'SS': 'south-sudan', 'ST': 'sao-tome-and-principe',
+      'SV': 'el-salvador', 'SX': 'sint-maarten', 'SY': 'syria', 'SZ': 'eswatini', 'TC': 'turks-and-caicos',
+      'TD': 'chad', 'TF': 'french-southern-territories', 'TG': 'togo', 'TH': 'thailand', 'TJ': 'tajikistan',
+      'TK': 'tokelau', 'TL': 'timor-leste', 'TM': 'turkmenistan', 'TN': 'tunisia', 'TO': 'tonga',
+      'TR': 'turkey', 'TT': 'trinidad-and-tobago', 'TV': 'tuvalu', 'TW': 'taiwan', 'TZ': 'tanzania',
+      'UA': 'ukraine', 'UG': 'uganda', 'UM': 'us-outlying-islands', 'US': 'united-states', 'UY': 'uruguay',
+      'UZ': 'uzbekistan', 'VA': 'vatican-city', 'VC': 'saint-vincent-and-the-grenadines', 'VE': 'venezuela',
+      'VG': 'british-virgin-islands', 'VI': 'us-virgin-islands', 'VN': 'vietnam', 'VU': 'vanuatu',
+      'WF': 'wallis-and-futuna', 'WS': 'samoa', 'XK': 'kosovo', 'YE': 'yemen', 'YT': 'mayotte',
+      'ZA': 'south-africa', 'ZM': 'zambia', 'ZW': 'zimbabwe'
+    };
+    
+    // Check if this is a country code (2 uppercase letters, e.g., "US", "CN", "HK")
+    if (countryTrimmed.length === 2 && /^[A-Z]{2}$/.test(countryTrimmed)) {
+      const countryName = countryCodeToName[countryTrimmed];
+      if (countryName) {
+        return `emojione-v1:flag-for-${countryName}`;
+      }
+      // If code not found, return null to show text fallback
+      return null;
+    }
+    
+    // Fallback: if it's a country name, convert to flag format
+    // This handles legacy data or manual entries
+    let countryLower = countryTrimmed.toLowerCase();
     
     // Remove common prefixes that don't appear in flag names
     const prefixesToRemove = [
@@ -139,7 +213,9 @@ const pollMs = Number(pollMsProp ?? 5000);
     const specialFlagMap = {
       'hong kong': 'hong-kong-sar-china',
       'hongkong': 'hong-kong-sar-china',
-      'netherlands': 'netherlands', // Explicit mapping for "The Netherlands"
+      'macau': 'macau-sar-china',
+      'macao': 'macau-sar-china',
+      'netherlands': 'netherlands',
       'usa': 'united-states',
       'us': 'united-states',
       'united states': 'united-states',
@@ -154,6 +230,9 @@ const pollMs = Number(pollMsProp ?? 5000);
       'russian federation': 'russia',
       'myanmar': 'myanmar',
       'burma': 'myanmar',
+      'bosnia': 'bosnia-and-herzegovina',
+      'bosnia and herzegovina': 'bosnia-and-herzegovina',
+      'guinea bissau': 'guinea-bissau',
     };
     
     // Check if there's a special mapping (after prefix removal)
