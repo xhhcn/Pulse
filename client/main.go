@@ -2189,3 +2189,4 @@ func envOr(k, def string) string {
 }
 
 // Auto-generated comment to trigger workflow
+// Trigger workflow rebuild with static compilation
