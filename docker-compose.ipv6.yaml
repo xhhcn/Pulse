@@ -12,3 +12,9 @@ services:
 
 volumes:
   pulse-data:
+
+networks:
+  pulse-network:
+    enable_ipv6: true
+    ipam:
+      driver: default
