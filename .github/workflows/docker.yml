@@ -86,58 +86,29 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
 
-      - name: Build Client Binaries
-        uses: actions/github-script@v7
+      - name: Set up Go for client build
+        uses: actions/setup-go@v5
         with:
-          script: |
-            const { data: workflow } = await github.rest.actions.getWorkflow({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'build-clients.yml'
-            });
-            
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: workflow.id,
-              ref: context.ref,
-              inputs: {
-                tag: context.ref_name
-              }
-            });
-            
-            // Wait for client build to complete (with timeout)
-            const maxWaitTime = 300000; // 5 minutes
-            const checkInterval = 10000; // 10 seconds
-            const startTime = Date.now();
-            
-            while (Date.now() - startTime < maxWaitTime) {
-              await new Promise(resolve => setTimeout(resolve, checkInterval));
-              const { data: runs } = await github.rest.actions.listWorkflowRuns({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                workflow_id: workflow.id,
-                per_page: 1
-              });
-              
-              if (runs.workflow_runs.length > 0) {
-                const latestRun = runs.workflow_runs[0];
-                if (latestRun.status === 'completed') {
-                  if (latestRun.conclusion === 'success') {
-                    console.log('Client binaries built successfully');
-                    break;
-                  } else {
-                    throw new Error(`Client build failed: ${latestRun.conclusion}`);
-                  }
-                }
-              }
-            }
+          go-version: '1.21'
+
+      - name: Build Client Binaries
+        run: |
+          cd client
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o probe-client main.go
+          chmod +x probe-client
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o probe-client-arm64 main.go
+          chmod +x probe-client-arm64
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o probe-client.exe main.go
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
           name: Release v${{ steps.version.outputs.version }}
+          files: |
+            client/probe-client
+            client/probe-client-arm64
+            client/probe-client.exe
           body: |
             ## 🚀 Release v${{ steps.version.outputs.version }}
 
@@ -168,18 +139,11 @@ jobs:
             - `xhh1128/pulse:latest`
 
             ### 📥 Client Downloads
-            Client binaries are automatically built and available in the repository: [client/](https://github.com/xhhcn/Pulse/tree/main/client)
+            Client binaries are automatically built and included in this release.
             
             **Supported Platforms:**
             - Linux amd64 (statically compiled)
             - Linux arm64 (statically compiled)
             - Windows amd64 (statically compiled)
-
-            ### 📦 Docker Images
-            - `xhh1128/pulse:${{ steps.version.outputs.version }}`
-            - `xhh1128/pulse:latest`
-
-            ### 📥 Client Downloads
-            Client binaries are available in the repository: [client/](https://github.com/xhhcn/Pulse/tree/main/client)
           draft: false
           prerelease: false
