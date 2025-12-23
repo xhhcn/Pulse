@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 # Default values
 INSTALL_DIR="/opt/pulse"
 SERVICE_NAME="pulse-client"
-GITHUB_REPO="https://github.com/xhhcn/Pulse/raw/main/client"
+GITHUB_REPO="https://raw.githubusercontent.com/xhhcn/Pulse/main/client"
 CLIENT_PORT="9090"
 AGENT_NAME=""
 SECRET=""

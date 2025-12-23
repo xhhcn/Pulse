@@ -42,7 +42,7 @@ $script:Secret = $env:Secret
 # Configuration
 $InstallDir = "$env:ProgramFiles\Pulse"
 $ServiceName = "PulseClient"
-$GitHubRepo = "https://github.com/xhhcn/Pulse/raw/main/client"
+$GitHubRepo = "https://raw.githubusercontent.com/xhhcn/Pulse/main/client"
 $BinaryName = "probe-client.exe"
 
 # Colors
