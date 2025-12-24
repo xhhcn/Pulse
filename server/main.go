@@ -595,7 +595,10 @@ func main() {
 	
 	log.Printf("🌐 Backend listening on %s", addr)
 	
-	if err := http.ListenAndServe(addr, corsMiddleware(mux)); err != nil {
+	// Apply middleware: CORS first, then CDN-friendly headers
+	handler := corsMiddleware(cdnFriendlyMiddleware(mux))
+	
+	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("❌ Server stopped: %v", err)
 	}
 }
@@ -640,13 +643,17 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 		}
 	}
 	
-	// Set headers for SSE
+	// Set headers for SSE with CDN support
 	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	// Important for reverse proxy - tells nginx/other proxies not to buffer
+	// Important for reverse proxy/CDN - tells nginx/other proxies not to buffer
 	w.Header().Set("X-Accel-Buffering", "no")
+	// CDN-specific headers to prevent caching and buffering
+	w.Header().Set("X-Cache-Control", "no-cache")
 
 	// Subscribe to broker
 	ch := broker.Subscribe()
@@ -1177,6 +1184,8 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 
 	registry.Register(payload.ID, payload.Name, payload.Port, ip, ipv6)
 	
+	// CDN-friendly: ensure registration response is not cached
+	// This is critical for client registration which happens frequently
 	writeJSON(w, http.StatusOK, map[string]string{"message": "registered", "id": payload.ID})
 }
 
@@ -1940,8 +1949,30 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// cdnFriendlyMiddleware adds CDN-friendly headers to prevent caching of dynamic API responses
+// This is critical when the server is behind a CDN (e.g., Cloudflare, CloudFront)
+func cdnFriendlyMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only apply to API endpoints (not static files)
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			// For POST/PUT/DELETE requests, ensure they are never cached
+			if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete {
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
+				w.Header().Set("Pragma", "no-cache")
+				w.Header().Set("Expires", "0")
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
+	// CDN-friendly headers: ensure responses are not cached
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		log.Printf("⚠️  Failed to encode JSON response: %v", err)
