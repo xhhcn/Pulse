@@ -124,7 +124,7 @@ func (b *SSEBroker) Subscribe() chan string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	
-	ch := make(chan string, 10)
+	ch := make(chan string, 30) // Increased from 10 to 30: allows 30 updates buffering (10 seconds worth at 3s interval)
 	b.clients[ch] = true
 	return ch
 }
@@ -189,6 +189,9 @@ type ClientInfo struct {
 	// WorkingURL caches the last successful URL (IPv4 or IPv6) to avoid repeated failures
 	// This is set when a connection succeeds and cleared when both URLs fail
 	WorkingURL string `json:"working_url,omitempty"`
+	// Secret is cached from database to avoid repeated lookups during polling
+	// Updated when client registers or when system data is modified
+	Secret string `json:"-"` // Not exposed in JSON (security)
 }
 
 type ClientRegistry struct {
@@ -196,41 +199,77 @@ type ClientRegistry struct {
 	mu      sync.RWMutex
 }
 
-// IP to country cache
+// IP to country cache with expiration
 // Special value "FAILED" is used to cache failed lookups to avoid repeated API calls
+type IPCountryCacheEntry struct {
+	Country   string
+	ExpiresAt time.Time
+}
+
 type IPCountryCache struct {
-	cache map[string]string // key: IP, value: country (or "FAILED" for failed lookups)
+	cache map[string]IPCountryCacheEntry // key: IP, value: cache entry with expiration
 	mu    sync.RWMutex
 }
 
 func NewIPCountryCache() *IPCountryCache {
 	return &IPCountryCache{
-		cache: make(map[string]string),
+		cache: make(map[string]IPCountryCacheEntry),
 	}
 }
 
 func (c *IPCountryCache) Get(ip string) (string, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	country, exists := c.cache[ip]
-	if exists && country == "FAILED" {
+	entry, exists := c.cache[ip]
+	if !exists {
+		return "", false
+	}
+	// Check if expired
+	if time.Now().After(entry.ExpiresAt) {
+		return "", false // Expired, act as cache miss
+	}
+	if entry.Country == "FAILED" {
 		// Return empty string for failed lookups, but indicate it was cached
 		return "", true
 	}
-	return country, exists
+	return entry.Country, true
 }
 
 func (c *IPCountryCache) Set(ip, country string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.cache[ip] = country
+	// Cache for 24 hours
+	c.cache[ip] = IPCountryCacheEntry{
+		Country:   country,
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+	}
 }
 
 // SetFailed marks an IP lookup as failed to avoid repeated API calls
 func (c *IPCountryCache) SetFailed(ip string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.cache[ip] = "FAILED"
+	// Cache failed lookups for 1 hour (shorter than successful lookups)
+	c.cache[ip] = IPCountryCacheEntry{
+		Country:   "FAILED",
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	}
+}
+
+// CleanExpired removes expired entries from cache
+func (c *IPCountryCache) CleanExpired() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	
+	now := time.Now()
+	removed := 0
+	for ip, entry := range c.cache {
+		if now.After(entry.ExpiresAt) {
+			delete(c.cache, ip)
+			removed++
+		}
+	}
+	return removed
 }
 
 func NewClientRegistry() *ClientRegistry {
@@ -630,6 +669,9 @@ func main() {
 	
 	// Start cleanup old tcping data every hour
 	go startTCPingCleanup(store)
+	
+	// Start IP cache cleanup every hour
+	go startIPCacheCleanup(ipCache)
 	
 	// Check if running in standalone mode or Docker mode
 	standalone := hasEmbeddedFiles()
@@ -1305,6 +1347,11 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 
 	registry.Register(payload.ID, payload.Name, payload.Port, ip, ipv6)
 	
+	// Update secret in registry cache (optimization: avoid DB lookups during polling)
+	if client := registry.Get(payload.ID); client != nil {
+		client.Secret = existing.Secret
+	}
+	
 	// CDN-friendly: ensure registration response is not cached
 	// This is critical for client registration which happens frequently
 	writeJSON(w, http.StatusOK, map[string]string{"message": "registered", "id": payload.ID})
@@ -1324,8 +1371,29 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 	failureCount := make(map[string]int)
 	const maxFailures = 30 // Remove from registry after 30 consecutive failures (90 seconds) - very tolerant for cross-continent networks (e.g., Australia-Russia)
 	
+	// Track cleanup cycle for failureCount (cleanup every 100 ticks ≈ 5 minutes)
+	cleanupCounter := 0
+	const cleanupInterval = 100
+	
 	for {
 		tickTime := <-ticker.C
+		
+		// Periodically cleanup failureCount for clients no longer in registry
+		// This prevents memory leak when systems are deleted via admin page
+		cleanupCounter++
+		if cleanupCounter >= cleanupInterval {
+			cleanupCounter = 0
+			
+			// Collect IDs that are in failureCount but not in registry
+			failureCountMu.Lock()
+			for id := range failureCount {
+				if registry.Get(id) == nil {
+					// Client no longer in registry, remove from failureCount
+					delete(failureCount, id)
+				}
+			}
+			failureCountMu.Unlock()
+		}
 		
 		clients := registry.GetAll()
 		if len(clients) == 0 {
@@ -1351,16 +1419,11 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 				continue
 			}
 			
-			// CRITICAL: Verify that the client ID actually exists in the database
-			// This prevents polling clients that were removed from the database
-			// but still have stale entries in the registry
-			systemExists, err := store.Get(client.ID)
-			if err != nil || systemExists == nil {
-				// Client ID doesn't exist in database, remove from registry and skip
-				log.Printf("⚠️  Client %s not found in database, removing from registry", client.ID)
-				registry.Remove(client.ID)
-				continue
-			}
+			// Registry already maintains consistency with database:
+			// - Clients are added when they register (POST /api/clients/register)
+			// - Clients are removed when systems are deleted (handleDeleteMetric)
+			// - No need to verify existence on every poll (reduces DB load by 33 queries/sec)
+			// Note: If a client somehow gets out of sync, it will be removed after maxFailures
 			
 			wg.Add(1)
 			go func(c *ClientInfo) {
@@ -1645,12 +1708,8 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 		}
 	}
 	
-	// Get secret from database for authentication
-	var secret string
-	existing, _ := store.Get(client.ID)
-	if existing != nil {
-		secret = existing.Secret
-	}
+	// Get secret from client registry cache (optimized: no DB lookup)
+	secret := client.Secret
 	
 	var resp *http.Response
 	var err error
@@ -1799,13 +1858,13 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	timeDisplay := formatUptime(payload.Uptime)
 	
 	// Get existing system to preserve order, name, tags, and secret from database
-	// Reuse existing variable from earlier in function (line 1444)
+	var existing *SystemMetric
 	existing, _ = store.Get(client.ID)
 	order := 0
 	name := client.Name // Default to client name if not in database
 	var tcpingData map[string]TCPingTargetData
 	var tags []string
-	// Note: secret variable already declared at line 1443, don't redeclare
+	// Update secret from database (will be synced to registry cache)
 	if existing != nil {
 		order = existing.Order
 		// Preserve name from database (don't override with client name)
@@ -1866,6 +1925,13 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	
 	if err := store.Upsert(metric); err != nil {
 		return false
+	}
+	
+	// Update secret in registry cache if it changed (optimization: keep cache in sync)
+	if existing != nil && existing.Secret != "" {
+		if c := globalClientRegistry.Get(client.ID); c != nil && c.Secret != existing.Secret {
+			c.Secret = existing.Secret
+		}
 	}
 
 	// Return true to indicate this client was successfully updated
@@ -2742,6 +2808,27 @@ func handleSetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// Shared HTTP client for TCPing operations (connection pooling)
+var tcpingHTTPClient *http.Client
+var tcpingHTTPClientOnce sync.Once
+
+func getTCPingHTTPClient() *http.Client {
+	tcpingHTTPClientOnce.Do(func() {
+		// Create a shared HTTP client for tcping with longer timeout for cross-continent networks
+		// Client tcping operation can take up to 5 seconds, plus network overhead for high-latency networks
+		tcpingHTTPClient = &http.Client{
+			Timeout: 15 * time.Second, // Increased from 8s to 15s for cross-continent networks
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+				TLSHandshakeTimeout: 10 * time.Second, // Increased from 3s to 10s for slow TLS
+			},
+		}
+	})
+	return tcpingHTTPClient
+}
+
 // Start tcping polling with configurable interval and targets
 func startTCPingPolling(registry *ClientRegistry, store *Store) {
 	// Get initial config
@@ -2767,17 +2854,8 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 		currentTargets[target.Address] = target
 	}
 	
-	// Create a separate HTTP client for tcping with longer timeout for cross-continent networks
-	// Client tcping operation can take up to 5 seconds, plus network overhead for high-latency networks
-	tcpingHTTPClient := &http.Client{
-		Timeout: 15 * time.Second, // Increased from 8s to 15s for cross-continent networks
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     90 * time.Second,
-			TLSHandshakeTimeout: 10 * time.Second, // Increased from 3s to 10s for slow TLS
-		},
-	}
+	// Use shared HTTP client for connection reuse
+	httpClient := getTCPingHTTPClient()
 	
 	for {
 		<-ticker.C
@@ -2836,16 +2914,11 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 				continue
 			}
 			
-			// CRITICAL: Verify that the client ID actually exists in the database
-			// This prevents sending TCPing requests to clients that were removed from the database
-			// but still have stale entries in the registry
-			systemExists, err := store.Get(client.ID)
-			if err != nil || systemExists == nil {
-				// Client ID doesn't exist in database, remove from registry and skip
-				log.Printf("⚠️  Client %s not found in database, removing from registry", client.ID)
-				registry.Remove(client.ID)
-				continue
-			}
+			// Registry already maintains consistency with database (same as client polling):
+			// - Clients are added when they register (POST /api/clients/register)
+			// - Clients are removed when systems are deleted (handleDeleteMetric)
+			// - Clients are removed after maxFailures in client polling (handled there)
+			// - No need to verify existence on every TCPing poll (consistency with client polling)
 			
 			// Only send tcping to connected clients
 			// CRITICAL: Re-fetch client from registry to get latest WorkingURL before checking connection
@@ -2906,14 +2979,10 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 						}
 					}
 					
-					// Get secret from database for authentication
-					var secret string
-					systemForAuth, _ := store.Get(clientID)
-					if systemForAuth != nil {
-						secret = systemForAuth.Secret
-					}
-					
-					var resp *http.Response
+				// Get secret from client registry cache (optimized: no DB lookup)
+				secret := c.Secret
+				
+				var resp *http.Response
 					var err error
 					var successfulBaseURL string
 					for _, url := range urls {
@@ -2921,35 +2990,35 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 						tcpingRequest := map[string]string{
 							"target": tgt.Address,
 						}
-						requestData, _ := json.Marshal(tcpingRequest)
-						req, reqErr := http.NewRequest("POST", url, strings.NewReader(string(requestData)))
-						if reqErr != nil {
-							// Silent failure - request creation errors are rare and usually indicate programming errors
-							continue
+					requestData, _ := json.Marshal(tcpingRequest)
+					req, reqErr := http.NewRequest("POST", url, strings.NewReader(string(requestData)))
+					if reqErr != nil {
+						// Silent failure - request creation errors are rare and usually indicate programming errors
+						continue
+					}
+					req.Header.Set("Content-Type", "application/json")
+					
+					// Security: Add secret to Authorization header if configured
+					if secret != "" {
+						req.Header.Set("Authorization", "Bearer "+secret)
+					}
+					
+					resp, err = httpClient.Do(req)
+					if err == nil && resp.StatusCode == http.StatusOK {
+						// Extract base URL (remove /tcping suffix)
+						if strings.HasSuffix(url, "/tcping") {
+							successfulBaseURL = strings.TrimSuffix(url, "/tcping")
+						} else {
+							successfulBaseURL = url
 						}
-						req.Header.Set("Content-Type", "application/json")
-						
-						// Security: Add secret to Authorization header if configured
-						if secret != "" {
-							req.Header.Set("Authorization", "Bearer "+secret)
-						}
-						
-						resp, err = tcpingHTTPClient.Do(req)
-						if err == nil && resp.StatusCode == http.StatusOK {
-							// Extract base URL (remove /tcping suffix)
-							if strings.HasSuffix(url, "/tcping") {
-								successfulBaseURL = strings.TrimSuffix(url, "/tcping")
-							} else {
-								successfulBaseURL = url
-							}
-							break // Success, exit loop
-						}
-						// Silent failures - TCPing failures are expected in some network conditions
-						// Only log critical failures that indicate system issues
-						if resp != nil {
-							resp.Body.Close()
-						}
-						resp = nil
+						break // Success, exit loop
+					}
+					// Silent failures - TCPing failures are expected in some network conditions
+					// Only log critical failures that indicate system issues
+					if resp != nil {
+						resp.Body.Close()
+					}
+					resp = nil
 					}
 					
 					if resp == nil {
@@ -3027,6 +3096,22 @@ func startTCPingCleanup(store *Store) {
 	for {
 		<-ticker.C
 		_ = store.CleanupOldTCPingResults()
+	}
+}
+
+// Start IP cache cleanup every hour
+func startIPCacheCleanup(ipCache *IPCountryCache) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		<-ticker.C
+		if ipCache != nil {
+			removed := ipCache.CleanExpired()
+			if removed > 0 {
+				log.Printf("🧹 IP cache cleanup: removed %d expired entries", removed)
+			}
+		}
 	}
 }
 
