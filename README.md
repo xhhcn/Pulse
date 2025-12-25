@@ -68,13 +68,6 @@ chmod +x pulse-server-standalone-linux-arm64
 
 访问 `http://YOUR_IP:8008` 查看监控面板
 
-> **特点**：
-> - 🎯 单文件部署，前端已嵌入
-> - ⚡ 启动速度快（<1秒）
-> - 💾 仅 6MB 大小
-> - 🚫 无需 Docker、Nginx
-> - 📖 详细文档: [STANDALONE_DEPLOYMENT.md](STANDALONE_DEPLOYMENT.md)
-
 ---
 
 ### 方式二：Docker 部署（推荐生产环境）

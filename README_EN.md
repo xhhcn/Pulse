@@ -68,13 +68,6 @@ chmod +x pulse-server-standalone-linux-arm64
 
 Access `http://YOUR_IP:8008` to view the monitoring dashboard
 
-> **Features**:
-> - 🎯 Single-file deployment with embedded frontend
-> - ⚡ Fast startup (<1 second)
-> - 💾 Only 6MB size
-> - 🚫 No Docker, Nginx required
-> - 📖 Detailed guide: [STANDALONE_DEPLOYMENT.md](STANDALONE_DEPLOYMENT.md)
-
 ---
 
 ### Method 2: Docker Deployment (Recommended for Production)
