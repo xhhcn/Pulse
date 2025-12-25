@@ -1257,10 +1257,59 @@ const apiBase = apiBaseProp ?? '';
   const tcpingConfigs = new Map(); // key: systemId, value: TCPingConfig
   // Map to store current active target for each system
   const tcpingActiveTargets = new Map(); // systemId -> { target: address, targetName: name }
+  // Map to track loading state for each system to allow cancellation
+  const tcpingLoadingStates = new Map(); // systemId -> { loading: boolean, cancelled: boolean }
   
   // Global cache for TCPing config (preloaded on page load)
   let cachedTCPingConfig = null;
   let tcpingConfigLoading = null; // Promise to prevent duplicate fetches
+
+  // Cleanup function to destroy tcping chart for a system
+  function cleanupTCPingChart(systemId) {
+    // Cancel any ongoing loading for this system
+    const loadingState = tcpingLoadingStates.get(systemId);
+    if (loadingState && loadingState.loading) {
+      loadingState.cancelled = true;
+    }
+    
+    // Find and destroy all charts for this system
+    const chartsToDestroy = [];
+    tcpingCharts.forEach((value, key) => {
+      if (key.startsWith(`${systemId}_`)) {
+        if (value.chart) {
+          try {
+            value.chart.destroy();
+          } catch (err) {
+            // Chart destroy failed silently
+          }
+        }
+        chartsToDestroy.push(key);
+      }
+    });
+    
+    // Remove from map
+    chartsToDestroy.forEach(key => tcpingCharts.delete(key));
+    
+    // Clear loading state
+    tcpingLoadingStates.delete(systemId);
+    
+    // Reset canvas to ensure clean state for next initialization
+    const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
+    if (container) {
+      const canvas = container.querySelector(`[data-tcping-chart="${systemId}"]`);
+      if (canvas) {
+        // Clear the canvas context
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        // Reset canvas dimensions to ensure proper reinitialization
+        // This will be recalculated when the chart is reopened
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    }
+  }
 
   // Load tcping config (with caching)
   async function loadTCPingConfig(forceRefresh = false) {
@@ -1472,14 +1521,10 @@ const apiBase = apiBaseProp ?? '';
       return;
     }
 
-    // Wait for tabs to be rendered if they exist (tabs are created immediately, but DOM might need a moment)
-    const tabsContainer = container.querySelector(`[data-tcping-tabs="${systemId}"]`);
-    if (tabsContainer && tabsContainer.children.length > 0) {
-      // Tabs exist, wait for layout to stabilize
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
+    // Set loading state
+    tcpingLoadingStates.set(systemId, { loading: true, cancelled: false });
 
-    // Show loading state for chart only (not tabs)
+    // Show loading state for chart only (not tabs) - do this immediately without waiting
     const loadingElement = container.querySelector(`[data-tcping-loading="${systemId}"]`);
     if (loadingElement) {
       loadingElement.style.display = 'flex';
@@ -1494,9 +1539,17 @@ const apiBase = apiBaseProp ?? '';
       // Fallback: load config if tabs weren't initialized
       const loadedConfig = cachedTCPingConfig || await loadTCPingConfig();
       if (!loadedConfig || !loadedConfig.targets || loadedConfig.targets.length === 0) {
+        tcpingLoadingStates.delete(systemId);
         return;
       }
       tcpingConfigs.set(systemId, loadedConfig);
+    }
+
+    // Check if cancelled before proceeding
+    const loadingState = tcpingLoadingStates.get(systemId);
+    if (!loadingState || loadingState.cancelled) {
+      tcpingLoadingStates.delete(systemId);
+      return;
     }
 
     // Get previously selected target from tabs
@@ -1508,13 +1561,19 @@ const apiBase = apiBaseProp ?? '';
     // Otherwise, all lines will be colored
     await updateTCPingChart(systemId, null, null); // null means load all targets
     
+    // Check if cancelled after chart update
+    if (!tcpingLoadingStates.get(systemId) || tcpingLoadingStates.get(systemId).cancelled) {
+      tcpingLoadingStates.delete(systemId);
+      return;
+    }
+    
     // If there was a restored target, update chart colors to match the button state
     if (restoredTarget) {
-      // Small delay to ensure chart is fully initialized
-      setTimeout(() => {
-        updateTCPingChartColors(systemId, restoredTarget);
-      }, 100);
+      updateTCPingChartColors(systemId, restoredTarget);
     }
+    
+    // Clear loading state
+    tcpingLoadingStates.delete(systemId);
   }
 
   // Update tcping chart with data for all targets
@@ -1524,6 +1583,12 @@ const apiBase = apiBaseProp ?? '';
 
     const canvas = container.querySelector(`[data-tcping-chart="${systemId}"]`);
     if (!canvas) return;
+    
+    // Check if loading was cancelled early
+    const loadingState = tcpingLoadingStates.get(systemId);
+    if (loadingState && loadingState.cancelled) {
+      return;
+    }
     
     // Get config for this system
     const config = tcpingConfigs.get(systemId);
@@ -1555,6 +1620,11 @@ const apiBase = apiBaseProp ?? '';
     const allHistoryData = await Promise.all(
       config.targets.map(target => loadTCPingHistory(clientID, target.address))
     );
+    
+    // Check if loading was cancelled after data fetch
+    if (tcpingLoadingStates.get(systemId)?.cancelled) {
+      return;
+    }
     
     // Prepare chart data for all targets
     const PACKET_LOSS_THRESHOLD_MS = 1000;
@@ -1984,9 +2054,22 @@ const apiBase = apiBaseProp ?? '';
       // Use fixed 200px height from CSS, or getBoundingClientRect if available and stable
       const width = rect.width > 0 ? rect.width : parent.offsetWidth || 0;
       const height = 200; // Fixed height from CSS style="height: 200px"
+      
       if (width > 0 && height > 0) {
-        canvas.width = width;
-        canvas.height = height;
+        // Get device pixel ratio for high-DPI displays (Retina, etc.)
+        const dpr = window.devicePixelRatio || 1;
+        
+        // Set the canvas internal size (backing store size) to match device pixel ratio
+        // This prevents blurriness on high-DPI displays
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        
+        // Set the canvas CSS size to match the container
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        
+        // Scale the context to match device pixel ratio
+        // Chart.js will handle this automatically, but we need to set the dimensions
       }
     }
 
@@ -2058,6 +2141,7 @@ const apiBase = apiBaseProp ?? '';
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        devicePixelRatio: window.devicePixelRatio || 1, // Explicitly set for high-DPI displays
         plugins: {
           legend: {
             display: false
@@ -2217,6 +2301,17 @@ const apiBase = apiBaseProp ?? '';
         }
       }
     });
+
+    // Final check if loading was cancelled before storing chart
+    if (tcpingLoadingStates.get(systemId)?.cancelled) {
+      // Destroy the chart we just created since loading was cancelled
+      try {
+        chart.destroy();
+      } catch (err) {
+        // Ignore errors
+      }
+      return;
+    }
 
     tcpingCharts.set(chartKey, { chart, target: 'all' });
     
@@ -2393,6 +2488,45 @@ const apiBase = apiBaseProp ?? '';
         const isExpanding = detailsSection.classList.contains('hidden');
         
         if (isExpanding) {
+          // IMPORTANT: Close all other expanded sections first to prevent CPU overload
+          // Only keep one section expanded at a time
+          const allExpandedSections = container.querySelectorAll('.system-details:not(.hidden)');
+          allExpandedSections.forEach(section => {
+            // Skip the current section we're about to expand
+            const sectionSystemRow = section.closest('.system-row');
+            if (sectionSystemRow && sectionSystemRow.querySelector('[data-system-id]') !== rowElement) {
+              // Get the system ID for cleanup
+              const otherRowElement = sectionSystemRow.querySelector('[data-system-id]');
+              const otherSystemId = otherRowElement ? otherRowElement.dataset.systemId : null;
+              
+              // Cleanup tcping chart for this system
+              if (otherSystemId) {
+                cleanupTCPingChart(otherSystemId);
+              }
+              
+              // Collapse this section
+              section.style.maxHeight = section.scrollHeight + 'px';
+              section.style.opacity = '1';
+              section.offsetHeight; // Trigger reflow
+              
+              section.style.transition = 'max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease-in';
+              section.style.maxHeight = '0';
+              section.style.opacity = '0';
+              
+              setTimeout(() => {
+                section.classList.add('hidden');
+                section.style.maxHeight = '';
+                section.style.opacity = '';
+                section.style.transition = '';
+              }, 250);
+              
+              // Update aria-expanded attribute
+              if (otherRowElement) {
+                otherRowElement.setAttribute('aria-expanded', 'false');
+              }
+            }
+          });
+          
           // Expanding - show and animate in
           detailsSection.classList.remove('hidden');
           detailsSection.style.maxHeight = '0';
@@ -2401,30 +2535,34 @@ const apiBase = apiBaseProp ?? '';
           // Trigger reflow
           detailsSection.offsetHeight;
           
-          // Initialize TCPing tabs immediately (no delay) and wait for them to render
-          // This ensures scrollHeight calculation includes tabs height
-          await initializeTCPingTabs(systemId);
+          // Initialize TCPing tabs and start animation in parallel for better UX
+          // Start tabs initialization (don't wait)
+          const tabsPromise = initializeTCPingTabs(systemId);
           
-          // Wait a bit for tabs DOM to stabilize before calculating scrollHeight
-          await new Promise(resolve => setTimeout(resolve, 10));
-          
-          // Recalculate scrollHeight after tabs are rendered
-          // Trigger reflow again to ensure accurate measurement
-          detailsSection.offsetHeight;
-          
-          // Animate to full height (now includes tabs)
+          // Start animation immediately to avoid perceived lag
           detailsSection.style.transition = 'max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease-out';
-          detailsSection.style.maxHeight = detailsSection.scrollHeight + 'px';
+          // Use a reasonable estimated height, it will adjust as content loads
+          detailsSection.style.maxHeight = '800px'; // Temporary max height
           detailsSection.style.opacity = '1';
           
-          // Clean up after animation
-          setTimeout(() => {
-            detailsSection.style.maxHeight = '';
-            detailsSection.style.transition = '';
-          }, 300);
+          // Wait for tabs to finish loading, then adjust to actual height
+          tabsPromise.then(() => {
+            // Give DOM a moment to update
+            requestAnimationFrame(() => {
+              // Update to actual scroll height
+              detailsSection.style.maxHeight = detailsSection.scrollHeight + 'px';
+              
+              // Clean up after animation completes
+              setTimeout(() => {
+                detailsSection.style.maxHeight = '';
+                detailsSection.style.transition = '';
+              }, 300);
+            });
+          });
           
-          // Initialize tcping chart when expanding - wait for animation to complete (300ms)
-          setTimeout(() => initializeTCPingChart(systemId), 350);
+          // Initialize tcping chart immediately (don't wait for animation)
+          // Chart will load in parallel with the expansion animation
+          setTimeout(() => initializeTCPingChart(systemId), 50);
           
           // Update translations when expanding
           setTimeout(() => updateTranslations(), 0);
@@ -2432,6 +2570,9 @@ const apiBase = apiBaseProp ?? '';
           rowElement.setAttribute('aria-expanded', 'true');
         } else {
           // Collapsing - animate out then hide
+          // Cleanup tcping chart for this system
+          cleanupTCPingChart(systemId);
+          
           detailsSection.style.maxHeight = detailsSection.scrollHeight + 'px';
           detailsSection.style.opacity = '1';
           
@@ -2907,11 +3048,17 @@ const apiBase = apiBaseProp ?? '';
           debouncedLoadData();
           
           // Update tcping charts for visible expanded rows (incremental update only)
-          document.querySelectorAll('.system-details:not(.hidden)').forEach(detailsSection => {
+          // Note: Due to our single-expand policy, there should only be max 1 expanded section
+          const expandedSections = document.querySelectorAll('.system-details:not(.hidden)');
+          expandedSections.forEach(detailsSection => {
             const systemId = detailsSection.dataset.detailsId;
             if (systemId) {
-              // Use incremental update for all targets chart
-              updateTCPingChart(systemId, null, null, true);
+              // Check if this system is not currently loading (to avoid conflicts)
+              const loadingState = tcpingLoadingStates.get(systemId);
+              if (!loadingState || !loadingState.loading) {
+                // Use incremental update for all targets chart
+                updateTCPingChart(systemId, null, null, true);
+              }
             }
           });
         }
