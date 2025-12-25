@@ -22,7 +22,7 @@ const apiBase = apiBaseProp ?? '';
         display: none;
       }
     </style>
-    <div class="min-w-[1050px]">
+    <div class="min-w-[1000px]">
       <SystemTableHeaderRow />
 
       <!-- 表格主体 -->
@@ -657,7 +657,7 @@ const apiBase = apiBaseProp ?? '';
     
     // Set the column width for all rows and header using inline style
     const columnWidth = `${Math.ceil(maxWidth)}px`;
-    const gridTemplateColumns = `minmax(160px,${columnWidth}) minmax(70px,0.8fr) minmax(90px,1fr) minmax(150px,1.8fr) minmax(150px,1.8fr) minmax(150px,1.8fr) minmax(85px,0.9fr) minmax(90px,1fr)`;
+    const gridTemplateColumns = `minmax(160px,${columnWidth}) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.6fr) minmax(130px,1.6fr) minmax(130px,1.6fr) minmax(95px,1fr) minmax(90px,1fr)`;
     
     // Update all table rows
     rows.forEach(systemRow => {
@@ -696,7 +696,7 @@ const apiBase = apiBaseProp ?? '';
   };
 
   const progress = (value, warn = false, isOffline = false) => `
-    <div class="flex items-center gap-1 sm:gap-1.5 pr-2 sm:pr-3 min-w-0 w-full">
+    <div class="flex items-center gap-1 pr-2 sm:pr-3 min-w-0 w-full">
       <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] w-8 sm:w-10 shrink-0">${value.toFixed(1)}%</span>
       <div class="relative h-2.5 sm:h-3 flex-1 min-w-[60px] max-w-[100px] sm:max-w-[120px] overflow-hidden rounded-full bg-[#111] dark:bg-[#111] bg-[#e5e5e5]">
         <div class="absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getProgressColor(value, isOffline)}" style="width:${pct(value)}%"></div>
@@ -739,8 +739,8 @@ const apiBase = apiBaseProp ?? '';
     const safeNameAttr = escapeHtmlAttr(item.name || 'unknown');
     return `
     <div class="system-row" data-system-id="${safeId}">
-      <div class="group grid grid-cols-[minmax(160px,max-content)_minmax(70px,0.8fr)_minmax(90px,1fr)_minmax(150px,1.8fr)_minmax(150px,1.8fr)_minmax(150px,1.8fr)_minmax(85px,0.9fr)_minmax(90px,1fr)] items-center gap-1 sm:gap-2 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}">
-        <div class="flex items-center gap-1.5 sm:gap-2.5 min-h-[20px]">
+      <div class="group grid grid-cols-[minmax(160px,max-content)_minmax(85px,1fr)_minmax(90px,1fr)_minmax(130px,1.6fr)_minmax(130px,1.6fr)_minmax(130px,1.6fr)_minmax(95px,1fr)_minmax(90px,1fr)] items-center gap-1 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}">
+        <div class="flex items-center gap-1.5 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-red-400' : 'bg-emerald-400'} shrink-0"></span>
           <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]">${safeName}</span>
           <button class="copy-btn text-[#737373] dark:text-[#737373] text-[#525252] hover:text-[#d4d4d4] dark:hover:text-[#d4d4d4] hover:text-[#151515] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" data-system-name="${safeNameAttr}" title="Copy system name">
