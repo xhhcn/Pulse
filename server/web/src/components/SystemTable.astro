@@ -1616,15 +1616,35 @@ const apiBase = apiBaseProp ?? '';
     const chartKey = `${systemId}_all`;
     const existingChartData = tcpingCharts.get(chartKey);
     
-    // Load history data for all targets
-    const allHistoryData = await Promise.all(
-      config.targets.map(target => loadTCPingHistory(clientID, target.address))
-    );
+    // Load history data for all targets in a single request (optimized for CPU)
+    // This reduces HTTP requests from N (number of targets) to 1
+    // Also leverages server-side caching for better performance
+    const allHistoryRaw = await loadTCPingHistory(clientID); // No target parameter = fetch all
     
     // Check if loading was cancelled after data fetch
     if (tcpingLoadingStates.get(systemId)?.cancelled) {
       return;
     }
+    
+    // Group history data by target address
+    const historyByTarget = new Map();
+    config.targets.forEach(target => {
+      historyByTarget.set(target.address, []);
+    });
+    
+    // Distribute results to their respective targets
+    if (Array.isArray(allHistoryRaw)) {
+      allHistoryRaw.forEach(result => {
+        if (result.target && historyByTarget.has(result.target)) {
+          historyByTarget.get(result.target).push(result);
+        }
+      });
+    }
+    
+    // Convert to array format matching previous implementation
+    const allHistoryData = config.targets.map(target => 
+      historyByTarget.get(target.address) || []
+    );
     
     // Prepare chart data for all targets
     const PACKET_LOSS_THRESHOLD_MS = 1000;

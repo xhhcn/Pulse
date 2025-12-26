@@ -335,6 +335,54 @@ func (s *Store) DeleteTCPingResultsByTarget(target string) error {
 	return nil
 }
 
+// DeleteTCPingResultsByClient deletes all tcping results for a specific client
+func (s *Store) DeleteTCPingResultsByClient(clientID string) error {
+	var keysToDelete [][]byte
+
+	// First pass: collect keys to delete
+	err := s.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(tcpingBucket))
+		if bucket == nil {
+			return fmt.Errorf("tcping bucket not found")
+		}
+
+		return bucket.ForEach(func(k, v []byte) error {
+			var result TCPingResult
+			if err := json.Unmarshal(v, &result); err != nil {
+				return nil // Skip corrupted entry
+			}
+
+			if result.ClientID == clientID {
+				keysToDelete = append(keysToDelete, k)
+			}
+			return nil
+		})
+	})
+
+	if err != nil {
+		return err
+	}
+
+	// Second pass: delete entries
+	if len(keysToDelete) > 0 {
+		return s.db.Update(func(tx *bolt.Tx) error {
+			bucket := tx.Bucket([]byte(tcpingBucket))
+			if bucket == nil {
+				return fmt.Errorf("tcping bucket not found")
+			}
+
+			for _, key := range keysToDelete {
+				if err := bucket.Delete(key); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+
+	return nil
+}
+
 // CleanupOldTCPingResults removes tcping results older than 24 hours
 func (s *Store) CleanupOldTCPingResults() error {
 	cutoffTime := time.Now().Add(-24 * time.Hour)

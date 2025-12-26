@@ -81,6 +81,84 @@ type TCPingTargetData struct {
 	Timestamp time.Time `json:"timestamp"`  // Latest tcping timestamp
 }
 
+// TCPing query cache to reduce database load
+type tcpingCacheEntry struct {
+	Results   []TCPingResult
+	CachedAt  time.Time
+}
+
+var (
+	tcpingCache   = make(map[string]*tcpingCacheEntry)
+	tcpingCacheMu sync.RWMutex
+	tcpingCacheTTL = 2 * time.Minute // Cache results for 2 minutes
+)
+
+// Get cached TCPing results if available and not expired
+func getCachedTCPingResults(clientID string) ([]TCPingResult, bool) {
+	tcpingCacheMu.RLock()
+	defer tcpingCacheMu.RUnlock()
+	
+	entry, exists := tcpingCache[clientID]
+	if !exists {
+		return nil, false
+	}
+	
+	// Check if cache is expired
+	if time.Since(entry.CachedAt) > tcpingCacheTTL {
+		return nil, false
+	}
+	
+	return entry.Results, true
+}
+
+// Cache TCPing results
+func cacheTCPingResults(clientID string, results []TCPingResult) {
+	tcpingCacheMu.Lock()
+	defer tcpingCacheMu.Unlock()
+	
+	tcpingCache[clientID] = &tcpingCacheEntry{
+		Results:  results,
+		CachedAt: time.Now(),
+	}
+}
+
+// Invalidate TCPing cache for a specific client
+// Called when new TCPing data is saved to ensure data freshness
+func invalidateTCPingCache(clientID string) {
+	tcpingCacheMu.Lock()
+	defer tcpingCacheMu.Unlock()
+	
+	delete(tcpingCache, clientID)
+}
+
+// Clear all TCPing cache
+// Called when TCPing configuration changes or targets are deleted
+func clearAllTCPingCache() {
+	tcpingCacheMu.Lock()
+	defer tcpingCacheMu.Unlock()
+	
+	// Clear the entire cache by creating a new map
+	tcpingCache = make(map[string]*tcpingCacheEntry)
+}
+
+// Cleanup expired cache entries periodically
+func startTCPingCacheCleanup() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	
+	for {
+		<-ticker.C
+		tcpingCacheMu.Lock()
+		now := time.Now()
+		for clientID, entry := range tcpingCache {
+			if now.Sub(entry.CachedAt) > tcpingCacheTTL {
+				delete(tcpingCache, clientID)
+			}
+		}
+		tcpingCacheMu.Unlock()
+	}
+}
+
 type metricPayload struct {
 	ID                 string  `json:"id"`
 	Name               string  `json:"name"`
@@ -674,6 +752,9 @@ func main() {
 	// Start IP cache cleanup every hour
 	go startIPCacheCleanup(ipCache)
 	
+	// Start TCPing query cache cleanup every 5 minutes
+	go startTCPingCacheCleanup()
+	
 	// Check if running in standalone mode or Docker mode
 	standalone := hasEmbeddedFiles()
 	
@@ -1161,6 +1242,12 @@ func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistr
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	
+	// Delete all TCPing history data for this client
+	_ = store.DeleteTCPingResultsByClient(id)
+	
+	// Invalidate TCPing cache for this client
+	invalidateTCPingCache(id)
 
 	// Remove client from registry to stop polling
 	registry.Remove(id)
@@ -2415,6 +2502,9 @@ func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to save result", http.StatusInternalServerError)
 		return
 	}
+	
+	// Invalidate cache for this client to ensure data freshness
+	invalidateTCPingCache(payload.ClientID)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -2488,6 +2578,18 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 	}
 	
 	var results []TCPingResult
+	
+	// If no specific target is requested, try to get from cache first
+	// Cache is only used when requesting all targets (no target parameter)
+	if target == "" {
+		if cachedResults, found := getCachedTCPingResults(clientID); found {
+			// Cache hit - return cached results immediately
+			writeJSON(w, http.StatusOK, cachedResults)
+			return
+		}
+	}
+	
+	// Cache miss or specific target requested - query database
 	if target != "" {
 		results, err = store.GetTCPingResults(clientID, target)
 	} else {
@@ -2497,6 +2599,11 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to get history: %v", err), http.StatusInternalServerError)
 		return
+	}
+	
+	// Cache the results if we fetched all targets (no specific target filter)
+	if target == "" {
+		cacheTCPingResults(clientID, results)
 	}
 	
 	writeJSON(w, http.StatusOK, results)
@@ -2799,6 +2906,9 @@ func handleSetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request)
 				_ = store.DeleteTCPingResultsByTarget(oldTarget)
 			}
 		}
+		
+		// Clear all TCPing cache since targets changed
+		clearAllTCPingCache()
 	}
 	
 	if err := store.SaveTCPingConfig(&config); err != nil {
@@ -3078,6 +3188,9 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 					
 					if err := store.SaveTCPingResult(result); err != nil {
 						// TCPing result save failed, continue silently
+					} else {
+						// Invalidate cache for this client to ensure data freshness
+						invalidateTCPingCache(clientID)
 					}
 					
 					// Update SystemMetric with latest tcping data for this target (only if successful)
