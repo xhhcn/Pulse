@@ -481,12 +481,13 @@ func getSharedHTTPClient() *http.Client {
 			Timeout: 20 * time.Second, // Increased from 8s to 20s for high-latency networks (e.g., Australia-Russia ~300ms RTT)
 			Transport: &http.Transport{
 				DialContext:           dialContext,
-				MaxIdleConns:          200,              // More connections for stability
-				MaxIdleConnsPerHost:   20,               // More per-host connections
+				MaxIdleConns:          200,               // More connections for stability
+				MaxIdleConnsPerHost:   20,                // More per-host connections
 				IdleConnTimeout:       180 * time.Second, // Longer idle timeout for stable connection
-				TLSHandshakeTimeout:   10 * time.Second, // Increased from 5s to 10s for slow TLS
+				TLSHandshakeTimeout:   10 * time.Second,  // Increased from 5s to 10s for slow TLS
+				ResponseHeaderTimeout: 10 * time.Second,  // Wait up to 10s for response headers
 				ExpectContinueTimeout: 5 * time.Second,   // Increased from 2s to 5s
-				DisableCompression:    false,            // Enable compression for efficiency
+				DisableCompression:    false,             // Enable compression for efficiency
 			},
 		}
 	})
@@ -1070,9 +1071,9 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 		if payload.MemoryInfo != "" {
 			memoryInfo = payload.MemoryInfo
 		}
-		if payload.SwapInfo != "" {
-			swapInfo = payload.SwapInfo
-		}
+		// Always update SwapInfo (including "0 B / 0 B" for systems without swap)
+		// This allows frontend to distinguish between "no data yet" (empty) and "no swap" (0 B / 0 B)
+		swapInfo = payload.SwapInfo
 		if payload.DiskInfo != "" {
 			diskInfo = payload.DiskInfo
 		}
@@ -1621,7 +1622,7 @@ func isClientConnected(client *ClientInfo) bool {
 			if err == nil && resp.StatusCode == http.StatusOK {
 				successfulURL = url
 				resp.Body.Close()
-				cancel()
+				cancel() // ✅ Cancel context immediately on success
 				// Update working URL if we successfully connected
 				// CRITICAL: Always update WorkingURL when we successfully connect
 				// Use registry method to update atomically, so it's preserved even during re-registration
@@ -1644,7 +1645,7 @@ func isClientConnected(client *ClientInfo) bool {
 			resp = nil
 		}
 		
-		cancel()
+		cancel() // ✅ Always cancel context after each attempt
 		
 		// If this is not the last attempt, retry
 		if attempt < maxRetries-1 {
@@ -2141,7 +2142,7 @@ func getCountryFromIP(ip string) string {
 			
 			req, err := http.NewRequestWithContext(ctx, "GET", service.url, nil)
 			if err != nil {
-				cancel()
+				cancel() // ✅ Cancel context on error
 				break // Try next service
 			}
 			
@@ -2149,7 +2150,7 @@ func getCountryFromIP(ip string) string {
 			req.Header.Set("Accept", "application/json")
 			
 			resp, err := httpClient.Do(req)
-			cancel()
+			cancel() // ✅ Always cancel context immediately after request completes
 			
 			if err != nil {
 				// Network error - retry if not last attempt
@@ -2816,13 +2817,23 @@ func getTCPingHTTPClient() *http.Client {
 	tcpingHTTPClientOnce.Do(func() {
 		// Create a shared HTTP client for tcping with longer timeout for cross-continent networks
 		// Client tcping operation can take up to 5 seconds, plus network overhead for high-latency networks
+		// Configure DialContext to support both IPv4 and IPv6 with proper timeouts
+		dialer := &net.Dialer{
+			Timeout:   10 * time.Second,  // DNS + TCP connection timeout
+			KeepAlive: 120 * time.Second, // Longer keep-alive for connection reuse
+		}
+		
 		tcpingHTTPClient = &http.Client{
 			Timeout: 15 * time.Second, // Increased from 8s to 15s for cross-continent networks
 			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 10,
-				IdleConnTimeout:     90 * time.Second,
-				TLSHandshakeTimeout: 10 * time.Second, // Increased from 3s to 10s for slow TLS
+				DialContext:           dialer.DialContext, // Enable proper DNS and TCP timeout control
+				MaxIdleConns:          100,
+				MaxIdleConnsPerHost:   10,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,   // Increased from 3s to 10s for slow TLS
+				ResponseHeaderTimeout: 8 * time.Second,    // Wait up to 8s for response headers
+				ExpectContinueTimeout: 5 * time.Second,    // Added for better HTTP/1.1 support
+				DisableCompression:    false,              // Enable compression for efficiency
 			},
 		}
 	})
@@ -2982,6 +2993,11 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 				// Get secret from client registry cache (optimized: no DB lookup)
 				secret := c.Secret
 				
+				// Create context with timeout for TCPing request
+					// Use 12-second timeout (shorter than HTTP client's 15s timeout)
+					ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+					defer cancel()
+					
 				var resp *http.Response
 					var err error
 					var successfulBaseURL string
@@ -2991,7 +3007,7 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 							"target": tgt.Address,
 						}
 					requestData, _ := json.Marshal(tcpingRequest)
-					req, reqErr := http.NewRequest("POST", url, strings.NewReader(string(requestData)))
+					req, reqErr := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(requestData)))
 					if reqErr != nil {
 						// Silent failure - request creation errors are rare and usually indicate programming errors
 						continue

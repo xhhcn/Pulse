@@ -152,9 +152,41 @@ download_binary() {
     success "Downloaded and installed probe-client"
 }
 
+# Configure log rotation
+configure_logrotate() {
+    info "Configuring log rotation..."
+    
+    # Create logrotate configuration
+    cat > /etc/logrotate.d/${SERVICE_NAME} << 'EOF'
+/var/log/pulse-client/*.log {
+    daily
+    rotate 7
+    maxsize 50M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 0640 root root
+    sharedscripts
+}
+EOF
+    
+    # Test logrotate configuration
+    if logrotate -d /etc/logrotate.d/${SERVICE_NAME} >/dev/null 2>&1; then
+        success "Log rotation configured (max 50MB per file, 7 days retention)"
+    else
+        warn "Log rotation config created but validation failed (non-critical)"
+    fi
+}
+
 # Create systemd service
 create_service() {
     info "Creating systemd service..."
+    
+    # Create log directory with proper permissions
+    mkdir -p /var/log/pulse-client
+    chmod 750 /var/log/pulse-client
     
     # Build environment variables for systemd service
     ENV_LINES="Environment=\"AGENT_ID=${AGENT_ID}\"\n"
@@ -178,6 +210,11 @@ $(echo -e "$ENV_LINES")
 ExecStart=${INSTALL_DIR}/probe-client
 Restart=always
 RestartSec=10
+# Log configuration - redirect to file for logrotate management
+StandardOutput=append:/var/log/pulse-client/pulse-client.log
+StandardError=append:/var/log/pulse-client/pulse-client.log
+# Also send to journal for systemctl status
+SyslogIdentifier=pulse-client
 
 [Install]
 WantedBy=multi-user.target
@@ -187,7 +224,9 @@ EOF
     systemctl enable ${SERVICE_NAME}
     systemctl start ${SERVICE_NAME}
     
-    success "Service created and started"
+    configure_logrotate
+    
+    success "Service created and started with log rotation"
 }
 
 # Show status
@@ -208,10 +247,17 @@ show_status() {
     echo ""
     echo "Service Commands:"
     echo "  Check status:   systemctl status ${SERVICE_NAME}"
-    echo "  View logs:      journalctl -u ${SERVICE_NAME} -f"
+    echo "  View logs:      tail -f /var/log/pulse-client/pulse-client.log"
+    echo "  View all logs:  less /var/log/pulse-client/pulse-client.log"
     echo "  Restart:        systemctl restart ${SERVICE_NAME}"
     echo "  Stop:           systemctl stop ${SERVICE_NAME}"
-    echo "  Uninstall:      systemctl stop ${SERVICE_NAME} && systemctl disable ${SERVICE_NAME} && rm -rf ${INSTALL_DIR}/${SERVICE_NAME} /etc/systemd/system/${SERVICE_NAME}.service"
+    echo "  Uninstall:      systemctl stop ${SERVICE_NAME} && systemctl disable ${SERVICE_NAME} && rm -f ${INSTALL_DIR}/probe-client /etc/systemd/system/${SERVICE_NAME}.service /etc/logrotate.d/${SERVICE_NAME} && rm -rf /var/log/pulse-client && systemctl daemon-reload"
+    echo ""
+    echo "Log Management:"
+    echo "  Logs are auto-rotated: 50MB per file, 7 daily rotations (max ~350MB total)"
+    echo "  Location:       /var/log/pulse-client/pulse-client.log"
+    echo "  Rotated logs:   /var/log/pulse-client/pulse-client.log.*.gz"
+    echo "  View live:      tail -f /var/log/pulse-client/pulse-client.log"
     echo ""
 }
 

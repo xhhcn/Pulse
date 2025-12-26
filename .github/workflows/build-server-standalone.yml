@@ -82,6 +82,8 @@ jobs:
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref_name }}
           name: Release v${{ steps.version.outputs.version }}

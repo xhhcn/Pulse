@@ -799,7 +799,7 @@ const apiBase = apiBaseProp ?? '';
             <!-- Swap Info -->
             <div class="flex flex-wrap items-baseline gap-1.5 sm:gap-2">
               <div class="text-[10px] sm:text-xs font-medium text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0" data-translate-detail="swapPartition">Swap:</div>
-              <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] leading-normal" data-detail="swap_info">${escapeHtml(item.swap_info || '0.00 MiB / 0.00 MiB')}</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] leading-normal" data-detail="swap_info">${escapeHtml(item.swap_info || '-')}</div>
             </div>
             <!-- Disk Info -->
             <div class="flex flex-wrap items-baseline gap-1.5 sm:gap-2">
@@ -1235,7 +1235,7 @@ const apiBase = apiBaseProp ?? '';
         
         // Update swap info if changed
         if (swapInfoEl) {
-          const newSwapInfo = String(item.swap_info || '0.00 MiB / 0.00 MiB');
+          const newSwapInfo = String(item.swap_info || '-');
           if (swapInfoEl.textContent !== newSwapInfo) {
             swapInfoEl.textContent = newSwapInfo;
           }

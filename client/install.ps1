@@ -184,7 +184,64 @@ function Add-FirewallRule {
     }
 }
 
-# Create startup script
+# Create log rotation script
+function New-LogRotationScript {
+    Write-Info "Creating log rotation script..."
+    
+    # Create logs directory
+    $logsDir = "$InstallDir\logs"
+    if (-not (Test-Path $logsDir)) {
+        New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
+    }
+    
+    # PowerShell log rotation script
+    $rotationScript = @"
+# Pulse Client Log Rotation Script
+# This script manages log files to prevent disk space issues
+`$LogDir = "$logsDir"
+`$MaxLogSizeMB = 50
+`$MaxLogFiles = 7
+`$LogFile = Join-Path `$LogDir "pulse-client.log"
+
+# Ensure log directory exists
+if (-not (Test-Path `$LogDir)) {
+    New-Item -ItemType Directory -Path `$LogDir -Force | Out-Null
+}
+
+# Rotate logs if current log is too large
+if (Test-Path `$LogFile) {
+    `$LogSize = (Get-Item `$LogFile).Length / 1MB
+    if (`$LogSize -gt `$MaxLogSizeMB) {
+        # Rotate existing logs
+        for (`$i = `$MaxLogFiles - 1; `$i -gt 0; `$i--) {
+            `$oldLog = Join-Path `$LogDir "pulse-client.log.`$i"
+            `$newLog = Join-Path `$LogDir "pulse-client.log.`$(`$i + 1)"
+            if (Test-Path `$oldLog) {
+                if (`$i -eq (`$MaxLogFiles - 1)) {
+                    Remove-Item `$oldLog -Force -ErrorAction SilentlyContinue
+                } else {
+                    Move-Item `$oldLog `$newLog -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+        # Move current log to .1
+        Move-Item `$LogFile (Join-Path `$LogDir "pulse-client.log.1") -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Clean up old logs (keep only MaxLogFiles)
+Get-ChildItem `$LogDir -Filter "pulse-client.log.*" -ErrorAction SilentlyContinue | 
+    Sort-Object Name -Descending | 
+    Select-Object -Skip `$MaxLogFiles | 
+    Remove-Item -Force -ErrorAction SilentlyContinue
+"@
+    
+    $rotationScriptPath = "$InstallDir\rotate-logs.ps1"
+    Set-Content -Path $rotationScriptPath -Value $rotationScript -Encoding UTF8
+    Write-Success "Created log rotation script: $rotationScriptPath"
+}
+
+# Create startup script with logging
 function New-StartupScript {
     $scriptContent = @"
 @echo off
@@ -199,11 +256,19 @@ set CLIENT_PORT=$($script:ClientPort)
         $scriptContent += "`nset SECRET=$($script:Secret)"
     }
     
-    $scriptContent += "`nprobe-client.exe`n"
+    # Add log rotation call and output redirection
+    $scriptContent += @"
+
+REM Rotate logs before starting
+powershell -ExecutionPolicy Bypass -File "$InstallDir\rotate-logs.ps1"
+
+REM Start client with logging (append mode)
+probe-client.exe >> "$InstallDir\logs\pulse-client.log" 2>&1
+"@
     
     $scriptPath = "$InstallDir\start-pulse.bat"
     Set-Content -Path $scriptPath -Value $scriptContent -Encoding ASCII
-    Write-Success "Created startup script: $scriptPath"
+    Write-Success "Created startup script with logging: $scriptPath"
 }
 
 # Create scheduled task to run at startup
@@ -284,10 +349,19 @@ function Show-Status {
     Write-Host "  Start:          Start-ScheduledTask -TaskName '$ServiceName'"
     Write-Host "  Stop:           Stop-ScheduledTask -TaskName '$ServiceName'"
     Write-Host "  Restart:        Stop-ScheduledTask -TaskName '$ServiceName'; Start-ScheduledTask -TaskName '$ServiceName'"
+    Write-Host "  View logs:      Get-Content '$InstallDir\logs\pulse-client.log' -Tail 50 -Wait"
+    Write-Host ""
+    Write-Host "Log Management:"
+    Write-Host "  Logs are limited to 50MB per file, 7 files retention (~350MB total)"
+    Write-Host "  Location:       $InstallDir\logs\"
+    Write-Host "  Rotation:       Automatic on startup"
+    Write-Host "  Manual rotate:  powershell -File '$InstallDir\rotate-logs.ps1'"
     Write-Host ""
     Write-Host "Uninstall:"
-    Write-Host "  Unregister-ScheduledTask -TaskName '$ServiceName' -Confirm:`$false"
-    Write-Host "  Remove-Item -Recurse -Force '$InstallDir'"
+    Write-Host "  Stop-ScheduledTask -TaskName '$ServiceName' -ErrorAction SilentlyContinue"
+    Write-Host "  Unregister-ScheduledTask -TaskName '$ServiceName' -Confirm:`$false -ErrorAction SilentlyContinue"
+    Write-Host "  Remove-NetFirewallRule -DisplayName 'Pulse Monitoring Client*' -ErrorAction SilentlyContinue"
+    Write-Host "  Remove-Item -Recurse -Force '$InstallDir' -ErrorAction SilentlyContinue"
     Write-Host ""
 }
 
@@ -304,6 +378,7 @@ function Main {
     Get-RequiredValues
     Get-Binary
     Add-FirewallRule
+    New-LogRotationScript
     New-StartupScript
     New-ScheduledTaskService
     Show-Status

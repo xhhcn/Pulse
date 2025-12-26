@@ -122,13 +122,14 @@ func getSharedHTTPClient() *http.Client {
 					Timeout:   15 * time.Second, // Increased to 15s for slow connections (DNS + TCP)
 					KeepAlive: 120 * time.Second, // Longer keep-alive for connection reuse
 				}).DialContext,
-				MaxIdleConns:          50, // More idle connections for better reuse
-				MaxIdleConnsPerHost:   20, // More per-host connections
-				IdleConnTimeout:       180 * time.Second, // Longer idle timeout
-				TLSHandshakeTimeout:   15 * time.Second, // Increased to 15s for slow TLS (GFW interference)
-				ExpectContinueTimeout: 5 * time.Second,
-				DisableCompression:    false, // Enable compression
-				DisableKeepAlives:     false, // Enable keep-alive (critical for connection reuse)
+				MaxIdleConns:            50,                 // More idle connections for better reuse
+				MaxIdleConnsPerHost:     20,                 // More per-host connections
+				IdleConnTimeout:         180 * time.Second,  // Longer idle timeout
+				TLSHandshakeTimeout:     15 * time.Second,   // Increased to 15s for slow TLS (GFW interference)
+				ResponseHeaderTimeout:   10 * time.Second,   // Wait up to 10s for response headers
+				ExpectContinueTimeout:   5 * time.Second,
+				DisableCompression:      false, // Enable compression
+				DisableKeepAlives:       false, // Enable keep-alive (critical for connection reuse)
 			},
 		}
 	})
@@ -153,6 +154,10 @@ func registerWithServer() {
 	maxRetries := 10 // Increased from 5 to handle high-latency networks (e.g., China to overseas)
 	for i := 0; i < maxRetries; i++ {
 		time.Sleep(time.Duration(i+1) * time.Second) // Wait before retry
+		
+		// Create context with timeout for registration request
+		// Use 10-second timeout (shorter than HTTP client's 30s timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		
 		// Get public IP addresses (both IPv4 and IPv6)
 		// This ensures consistency and uses the real public IP, not private IP
@@ -183,8 +188,9 @@ func registerWithServer() {
 		// Use shared HTTP client for connection reuse (critical for cross-continent networks)
 		httpClient := getSharedHTTPClient()
 		
-		req, err := http.NewRequest("POST", serverBase+"/api/clients/register", strings.NewReader(string(data)))
+		req, err := http.NewRequestWithContext(ctx, "POST", serverBase+"/api/clients/register", strings.NewReader(string(data)))
 		if err != nil {
+			cancel()
 			continue
 		}
 		
@@ -194,18 +200,20 @@ func registerWithServer() {
 		req.Header.Set("Accept-Encoding", "gzip, deflate") // Enable compression
 		
 		resp, err := httpClient.Do(req)
+		cancel() // ✅ Always cancel context after request completes
 		if err != nil {
 			log.Printf("⚠️  Registration attempt %d/%d failed: %v", i+1, maxRetries, err)
 			continue
 		}
-		defer resp.Body.Close()
 		
 		if resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
 			log.Printf("✅ Successfully registered with server (ID: %s, IPv4: %s, IPv6: %s)", agentID, ipv4, ipv6)
 			return
 		} else {
 			// Read error response body for debugging
 			body, _ := ioutil.ReadAll(resp.Body)
+			resp.Body.Close()
 			log.Printf("❌ Registration failed (attempt %d/%d): HTTP %d - %s", i+1, maxRetries, resp.StatusCode, string(body))
 		}
 	}
@@ -243,6 +251,10 @@ func startPeriodicRegistration() {
 	consecutiveFailures := 0
 	
 	for range ticker.C {
+		// Create context with timeout for registration request
+		// Use 10-second timeout (shorter than HTTP client's 30s timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		
 		// Get public IP addresses (both IPv4 and IPv6)
 		// This ensures consistency and uses the real public IP, not private IP
 		ipv4, ipv6 := getIPAddresses()
@@ -269,8 +281,9 @@ func startPeriodicRegistration() {
 		
 		data, _ := json.Marshal(payload)
 		
-		req, err := http.NewRequest("POST", serverBase+"/api/clients/register", strings.NewReader(string(data)))
+		req, err := http.NewRequestWithContext(ctx, "POST", serverBase+"/api/clients/register", strings.NewReader(string(data)))
 		if err != nil {
+			cancel()
 			consecutiveFailures++
 			continue
 		}
@@ -281,6 +294,7 @@ func startPeriodicRegistration() {
 		req.Header.Set("Accept-Encoding", "gzip, deflate") // Enable compression
 		
 		resp, err := httpClient.Do(req)
+		cancel() // ✅ Always cancel context after request completes
 		if err != nil {
 			consecutiveFailures++
 			continue
@@ -2069,8 +2083,9 @@ func getSwapInfo() string {
 				return fmt.Sprintf("%s / %s", usedStr, totalStr)
 			}
 		}
-		// Windows: return empty string (no swap)
-		return ""
+		// Windows/macOS: return "0 B / 0 B" to indicate no swap (instead of empty string)
+		// This allows frontend to distinguish between "no data yet" (empty) and "no swap" (0 B / 0 B)
+		return "0 B / 0 B"
 	}
 	
 	// Read /proc/meminfo for accurate swap info (Linux)
@@ -2123,7 +2138,9 @@ func getSwapInfo() string {
 	}
 	
 	if swapTotal == 0 {
-		return ""
+		// Linux: return "0 B / 0 B" to indicate no swap (instead of empty string)
+		// This allows frontend to distinguish between "no data yet" (empty) and "no swap" (0 B / 0 B)
+		return "0 B / 0 B"
 	}
 	
 	// Calculate used swap
