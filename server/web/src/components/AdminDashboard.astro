@@ -949,7 +949,7 @@ const apiBase = apiBaseProp ?? '';
               <!-- Left: Name and IPs (all aligned) -->
                 <div class="flex items-center gap-4">
                 <!-- Left: Name -->
-                  <div class="flex flex-col gap-1 min-w-0 flex-shrink-0 min-h-[28px] justify-center">
+                  <div class="flex flex-col gap-1 min-w-0 flex-shrink-0 min-h-[28px]">
                     <div class="flex items-start gap-2 min-h-[20px] min-w-0">
                       <span class="system-name text-sm font-semibold text-[#262626] dark:text-[#f5f5f5] break-words min-w-0">${escapeHtml(system.name || '')}</span>
                   </div>
@@ -961,12 +961,12 @@ const apiBase = apiBaseProp ?? '';
                   </div>
                 </div>
                 
-                  ${(system.ipv4 || system.ipv6 || system.total_net_in_bytes || system.total_net_out_bytes) ? `
-                  <!-- IP Addresses and Network Traffic (Vertical, aligned with name row) - Hidden on mobile -->
-                  <div class="ip-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[28px] justify-center flex-shrink-0">
+                  ${(system.ipv4 || system.ipv6) ? `
+                  <!-- IP Addresses - Hidden on mobile -->
+                  <div class="ip-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
                   ${system.ipv4 ? `
-                  <!-- IPv4 Row with Inbound Traffic -->
-                  <div class="flex items-center gap-1.5 min-h-[16px]">
+                  <!-- IPv4 Row -->
+                  <div class="flex items-center gap-1.5 min-h-[22px]">
                     <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0">IPv4:</span>
                     <span class="system-ipv4 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(system.ipv4 || '')}</span>
                     <button class="copy-ip-btn shrink-0 rounded p-1 text-[#737373] dark:text-[#737373] text-[#525252] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] transition-colors" data-ip="${escapeHtmlAttr(system.ipv4 || '')}" title="Copy IPv4">
@@ -978,13 +978,11 @@ const apiBase = apiBaseProp ?? '';
                         <path d="M20 6L9 17l-5-5"/>
                       </svg>
                     </button>
-                    <span class="flex-1"></span>
-                    ${system.total_net_in_bytes ? `<span class="system-total-net-in text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">In: ${formatBytes(system.total_net_in_bytes)}</span>` : '<span class="min-w-[80px]"></span>'}
                   </div>
                   ` : ''}
                   ${system.ipv6 ? `
-                  <!-- IPv6 Row with Outbound Traffic -->
-                  <div class="flex items-center gap-1.5 min-h-[16px]">
+                  <!-- IPv6 Row -->
+                  <div class="flex items-center gap-1.5 min-h-[22px]">
                     <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0">IPv6:</span>
                     <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(system.ipv6 || '')}</span>
                     <button class="copy-ip-btn shrink-0 rounded p-1 text-[#737373] dark:text-[#737373] text-[#525252] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] transition-colors" data-ip="${escapeHtmlAttr(system.ipv6 || '')}" title="Copy IPv6">
@@ -996,25 +994,32 @@ const apiBase = apiBaseProp ?? '';
                         <path d="M20 6L9 17l-5-5"/>
                       </svg>
                     </button>
-                    <span class="flex-1"></span>
-                    ${system.total_net_out_bytes ? `<span class="system-total-net-out text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">Out: ${formatBytes(system.total_net_out_bytes)}</span>` : '<span class="min-w-[80px]"></span>'}
                   </div>
                   ` : (system.ipv4 && !system.ipv6) ? `
-                  <!-- IPv6 Row (placeholder with Outbound Traffic) -->
-                  <div class="flex items-center gap-1.5 min-h-[16px]">
+                  <!-- IPv6 Row (placeholder) -->
+                  <div class="flex items-center gap-1.5 min-h-[22px]">
                     <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0">IPv6:</span>
                     <span class="text-[#737373] dark:text-[#737373] text-[#404040]">-</span>
-                    <span class="flex-1"></span>
-                    ${system.total_net_out_bytes ? `<span class="system-total-net-out text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">Out: ${formatBytes(system.total_net_out_bytes)}</span>` : '<span class="min-w-[80px]"></span>'}
+                  </div>
+                  ` : ''}
                 </div>
                 ` : ''}
-                </div>
-                ` : `
-                <!-- Placeholder for IP section when no IPs available - Hidden on mobile -->
-                <div class="ip-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[28px] justify-center invisible">
-                  <div class="min-h-[16px]">-</div>
-                </div>
-                `}
+                
+                  ${(system.total_net_in_bytes || system.total_net_out_bytes) ? `
+                  <!-- Network Traffic Stats - Hidden on mobile -->
+                  <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
+                    ${system.total_net_in_bytes ? `
+                    <div class="flex items-center min-h-[22px]">
+                      <span class="system-total-net-in text-[#737373] dark:text-[#737373] text-[#525252]">In: ${formatBytes(system.total_net_in_bytes)}</span>
+                    </div>
+                    ` : '<div class="min-h-[22px]"></div>'}
+                    ${system.total_net_out_bytes ? `
+                    <div class="flex items-center min-h-[22px]">
+                      <span class="system-total-net-out text-[#737373] dark:text-[#737373] text-[#525252]">Out: ${formatBytes(system.total_net_out_bytes)}</span>
+                    </div>
+                    ` : '<div class="min-h-[22px]"></div>'}
+                  </div>
+                  ` : ''}
               </div>
             </div>
 
@@ -1161,37 +1166,42 @@ const apiBase = apiBaseProp ?? '';
       }
       
       // Update CPU brand icon in the background (absolute positioned, centered)
+      // Only update if CPU model actually changed to avoid unnecessary icon reloading
       if (oldItemNormalized.cpu_model !== newItemNormalized.cpu_model) {
         const draggableItem = itemElement; // The root draggable-item
         // Find existing icon container by looking for the cpu-brand-icon span's parent
         const cpuBrandIconSpan = draggableItem.querySelector('.cpu-brand-icon');
         const existingIconContainer = cpuBrandIconSpan?.parentElement;
-        const cpuBrandIcon = getCPUBrandIcon(item.cpu_model);
+        const oldCPUBrandIcon = getCPUBrandIcon(oldItemNormalized.cpu_model);
+        const newCPUBrandIcon = getCPUBrandIcon(item.cpu_model);
         
-        if (cpuBrandIcon) {
-          if (existingIconContainer) {
-            // Update existing icon
-            const iconSpan = existingIconContainer.querySelector('.cpu-brand-icon');
-            if (iconSpan) {
-              iconSpan.dataset.icon = cpuBrandIcon;
-              iconSpan.innerHTML = '';
+        // Only update if the brand icon actually changed (e.g., Intel → AMD)
+        if (oldCPUBrandIcon !== newCPUBrandIcon) {
+          if (newCPUBrandIcon) {
+            if (existingIconContainer) {
+              // Update existing icon only if brand changed
+              const iconSpan = existingIconContainer.querySelector('.cpu-brand-icon');
+              if (iconSpan && iconSpan.dataset.icon !== newCPUBrandIcon) {
+                iconSpan.dataset.icon = newCPUBrandIcon;
+                iconSpan.innerHTML = '';
+                loadCPUBrandIcons();
+              }
+            } else {
+              // Create new icon container in the center (absolute positioning, background)
+              const iconContainer = document.createElement('div');
+              iconContainer.className = 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none opacity-20';
+              iconContainer.style.zIndex = '0';
+              const iconSpan = document.createElement('span');
+              iconSpan.className = 'cpu-brand-icon block leading-none';
+              iconSpan.dataset.icon = newCPUBrandIcon;
+              iconContainer.appendChild(iconSpan);
+              draggableItem.appendChild(iconContainer);
               loadCPUBrandIcons();
             }
-          } else {
-            // Create new icon container in the center (absolute positioning, background)
-            const iconContainer = document.createElement('div');
-            iconContainer.className = 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none opacity-20';
-            iconContainer.style.zIndex = '0';
-            const iconSpan = document.createElement('span');
-            iconSpan.className = 'cpu-brand-icon block leading-none';
-            iconSpan.dataset.icon = cpuBrandIcon;
-            iconContainer.appendChild(iconSpan);
-            draggableItem.appendChild(iconContainer);
-            loadCPUBrandIcons();
+          } else if (existingIconContainer) {
+            // Remove icon container if no brand detected
+            existingIconContainer.remove();
           }
-        } else if (existingIconContainer) {
-          // Remove icon container if no brand detected
-          existingIconContainer.remove();
         }
       }
       
@@ -1255,29 +1265,6 @@ const apiBase = apiBaseProp ?? '';
             ipv4CopyBtn.dataset.ip = item.ipv4;
             ipv4CopyBtn.title = 'Copy IPv4';
           }
-          // Also update traffic stats if changed (even if IP didn't change)
-          if (oldItemNormalized.total_net_in_bytes !== newItemNormalized.total_net_in_bytes) {
-            let netInSpan = ipv4Row.querySelector('.system-total-net-in');
-            let spacer = ipv4Row.querySelector('.flex-1');
-            if (!spacer) {
-              spacer = document.createElement('span');
-              spacer.className = 'flex-1';
-              ipv4Row.appendChild(spacer);
-            }
-            if (item && item.total_net_in_bytes && item.total_net_in_bytes > 0) {
-              const formattedIn = typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B';
-              if (netInSpan) {
-                netInSpan.textContent = `In: ${formattedIn}`;
-              } else {
-                netInSpan = document.createElement('span');
-                netInSpan.className = 'system-total-net-in text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left';
-                netInSpan.textContent = `In: ${formattedIn}`;
-                ipv4Row.appendChild(netInSpan);
-              }
-            } else if (netInSpan) {
-              netInSpan.remove();
-            }
-          }
         } else {
           // Need to create IPv4 row
           if (ipContainer) {
@@ -1285,7 +1272,7 @@ const apiBase = apiBaseProp ?? '';
             // Remove invisible class if present
             ipContainer.classList.remove('invisible');
             // Clear placeholder content - find any child div that looks like placeholder
-            // The placeholder has class "min-h-[16px]" and contains "-"
+            // The placeholder has class "min-h-[22px]" and contains "-"
             const placeholder = Array.from(ipContainer.children).find(child => {
               const hasMinHeight = child.classList.toString().includes('min-h') || 
                                    child.style.minHeight || 
@@ -1298,9 +1285,8 @@ const apiBase = apiBaseProp ?? '';
             }
             
             // Create new IPv4 row
-            const netInDisplay = (item.total_net_in_bytes && item.total_net_in_bytes > 0) ? `<span class="flex-1"></span><span class="system-total-net-in text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>` : '<span class="flex-1"></span><span class="min-w-[80px]"></span>';
             const ipv4RowHTML = `
-              <div class="flex items-center gap-1.5 min-h-[16px]">
+              <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] shrink-0">IPv4:</span>
                 <span class="system-ipv4 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
                 <button class="copy-ip-btn shrink-0 rounded p-1 text-[#737373] dark:text-[#737373] text-[#525252] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="Copy IPv4">
@@ -1312,7 +1298,6 @@ const apiBase = apiBaseProp ?? '';
                     <path d="M20 6L9 17l-5-5"/>
                   </svg>
                 </button>
-                ${netInDisplay}
               </div>
             `;
             const tempDiv = document.createElement('div');
@@ -1329,18 +1314,15 @@ const apiBase = apiBaseProp ?? '';
             }
           } else if (nameAndIpContainer) {
             // No container exists, need to create it
-            const netInDisplay = (item.total_net_in_bytes && item.total_net_in_bytes > 0) ? `<span class="flex-1"></span><span class="system-total-net-in text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>` : '<span class="flex-1"></span><span class="min-w-[80px]"></span>';
             const ipv6Placeholder = (!item.ipv6) ? `
-                <div class="flex items-center gap-1.5 min-h-[16px]">
+                <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0">IPv6:</span>
                   <span class="text-[#737373] dark:text-[#737373] text-[#525252]">-</span>
-                  <span class="flex-1"></span>
-                  ${(item.total_net_out_bytes && item.total_net_out_bytes > 0) ? `<span class="system-total-net-out text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>` : '<span class="min-w-[80px]"></span>'}
                 </div>
             ` : '';
             const ipContainerHTML = `
-              <div class="ip-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[28px] justify-center flex-shrink-0">
-                <div class="flex items-center gap-1.5 min-h-[16px]">
+              <div class="ip-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
+                <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0">IPv4:</span>
                   <span class="system-ipv4 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
                   <button class="copy-ip-btn shrink-0 rounded p-1 text-[#737373] dark:text-[#737373] text-[#525252] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="Copy IPv4">
@@ -1352,7 +1334,6 @@ const apiBase = apiBaseProp ?? '';
                       <path d="M20 6L9 17l-5-5"/>
                     </svg>
                   </button>
-                  ${netInDisplay}
                 </div>
                 ${ipv6Placeholder}
               </div>
@@ -1414,28 +1395,6 @@ const apiBase = apiBaseProp ?? '';
             ipv6CopyBtn.dataset.ip = item.ipv6;
             ipv6CopyBtn.title = 'Copy IPv6';
           }
-          // Update total net out traffic
-          let netOutSpan = ipv6Row.querySelector('.system-total-net-out');
-          if (item.total_net_out_bytes && item.total_net_out_bytes > 0) {
-            const formattedOut = typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B';
-            if (netOutSpan) {
-              netOutSpan.textContent = `Out: ${formattedOut}`;
-            } else {
-              netOutSpan = document.createElement('span');
-              // Add spacer if not exists
-              let spacer = ipv6Row.querySelector('.flex-1');
-              if (!spacer) {
-                spacer = document.createElement('span');
-                spacer.className = 'flex-1';
-                ipv6Row.appendChild(spacer);
-              }
-              netOutSpan.className = 'system-total-net-out text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left';
-              netOutSpan.textContent = `Out: ${formattedOut}`;
-              ipv6Row.appendChild(netOutSpan);
-            }
-          } else if (netOutSpan) {
-            netOutSpan.remove();
-          }
         } else {
           // Need to create IPv6 row
           if (ipContainer) {
@@ -1443,7 +1402,7 @@ const apiBase = apiBaseProp ?? '';
             // Remove invisible class if present
             ipContainer.classList.remove('invisible');
             // Clear placeholder content - find any child div that looks like placeholder
-            // The placeholder has class "min-h-[16px]" and contains "-"
+            // The placeholder has class "min-h-[22px]" and contains "-"
             const placeholder = Array.from(ipContainer.children).find(child => {
               const hasMinHeight = child.classList.toString().includes('min-h') || 
                                    child.style.minHeight || 
@@ -1456,9 +1415,8 @@ const apiBase = apiBaseProp ?? '';
             }
             
             // Create new IPv6 row (append at end)
-            const netOutDisplay = (item.total_net_out_bytes && item.total_net_out_bytes > 0) ? `<span class="flex-1"></span><span class="system-total-net-out text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>` : '<span class="flex-1"></span><span class="min-w-[80px]"></span>';
             const ipv6RowHTML = `
-              <div class="flex items-center gap-1.5 min-h-[16px]">
+              <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] shrink-0">IPv6:</span>
                 <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv6 || '')}</span>
                 <button class="copy-ip-btn shrink-0 rounded p-1 text-[#737373] dark:text-[#737373] text-[#525252] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="Copy IPv6">
@@ -1470,7 +1428,6 @@ const apiBase = apiBaseProp ?? '';
                     <path d="M20 6L9 17l-5-5"/>
                   </svg>
                 </button>
-                ${netOutDisplay}
               </div>
             `;
             const tempDiv = document.createElement('div');
@@ -1481,10 +1438,9 @@ const apiBase = apiBaseProp ?? '';
             }
           } else if (nameAndIpContainerForIPv6) {
             // No container exists, need to create it
-            const netOutDisplayForIPv6 = (item.total_net_out_bytes && item.total_net_out_bytes > 0) ? `<span class="flex-1"></span><span class="system-total-net-out text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>` : '<span class="flex-1"></span><span class="min-w-[80px]"></span>';
             const ipContainerHTML = `
-              <div class="ip-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[28px] justify-center flex-shrink-0">
-                <div class="flex items-center gap-1.5 min-h-[16px]">
+              <div class="ip-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
+                <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0">IPv6:</span>
                   <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv6 || '')}</span>
                   <button class="copy-ip-btn shrink-0 rounded p-1 text-[#737373] dark:text-[#737373] text-[#525252] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="Copy IPv6">
@@ -1496,7 +1452,6 @@ const apiBase = apiBaseProp ?? '';
                       <path d="M20 6L9 17l-5-5"/>
                     </svg>
                   </button>
-                  ${netOutDisplayForIPv6}
                 </div>
               </div>
             `;
@@ -1534,11 +1489,9 @@ const apiBase = apiBaseProp ?? '';
           if (item.ipv4 && !item.ipv6) {
             // Replace IPv6 row with placeholder
             const placeholderHTML = `
-              <div class="flex items-center gap-1.5 min-h-[16px]">
+              <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0">IPv6:</span>
-                <span class="text-[#737373] dark:text-[#737373] text-[#404040]">-</span>
-                <span class="flex-1"></span>
-                ${(item.total_net_out_bytes && item.total_net_out_bytes > 0) ? `<span class="system-total-net-out text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>` : '<span class="min-w-[80px]"></span>'}
+                <span class="text-[#737373] dark:text-[#737373] text-[#525252]">-</span>
               </div>
             `;
             const tempDiv = document.createElement('div');
@@ -1555,11 +1508,9 @@ const apiBase = apiBaseProp ?? '';
           const ipv4RowExists = ipContainer.querySelector('.system-ipv4');
           if (ipv4RowExists) {
             const placeholderHTML = `
-              <div class="flex items-center gap-1.5 min-h-[16px]">
+              <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0">IPv6:</span>
-                <span class="text-[#737373] dark:text-[#737373] text-[#404040]">-</span>
-                <span class="flex-1"></span>
-                ${(item.total_net_out_bytes && item.total_net_out_bytes > 0) ? `<span class="system-total-net-out text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>` : '<span class="min-w-[80px]"></span>'}
+                <span class="text-[#737373] dark:text-[#737373] text-[#525252]">-</span>
               </div>
             `;
             const tempDiv = document.createElement('div');
@@ -1577,198 +1528,124 @@ const apiBase = apiBaseProp ?? '';
       }
     }
     
-    // Update total network traffic on IPv4 row (separate from IP update)
+    // Update total network In traffic (separate from IP update)
     // This handles cases where traffic stats change but IP address hasn't changed
-    // Also handles cases where IP container needs to be created for traffic stats
     if (oldItemNormalized.total_net_in_bytes !== newItemNormalized.total_net_in_bytes) {
-      const nameAndIpContainerForTraffic = itemElement.querySelector('.flex.items-center.gap-4');
-      if (!nameAndIpContainerForTraffic) {
+      const nameAndIpContainer = itemElement.querySelector('.flex.items-center.gap-4');
+      if (!nameAndIpContainer) {
         return; // Can't update without container
       }
-      let ipContainerForTraffic = nameAndIpContainerForTraffic.querySelector('.ip-info-container');
-      // Also check for invisible placeholder
-      if (!ipContainerForTraffic) {
-        ipContainerForTraffic = nameAndIpContainerForTraffic.querySelector('.invisible');
-      }
-      let ipv4Row = itemElement.querySelector('.system-ipv4')?.closest('.flex.items-center');
       
-      // If IPv4 row doesn't exist but we have traffic data and IP address, create the container
-      if (!ipv4Row && item.ipv4 && item.total_net_in_bytes && item.total_net_in_bytes > 0) {
-        // IP container should exist if IPv4 is present, but let's make sure
-        if (!ipContainerForTraffic && nameAndIpContainerForTraffic) {
-          // Create IP container with IPv4 row and traffic stats
-          const netInDisplay = `<span class="flex-1"></span><span class="system-total-net-in text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>`;
-          const ipv4RowHTML = `
-            <div class="flex items-center gap-1.5 min-h-[16px]">
-              <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#525252] shrink-0">IPv4:</span>
-              <span class="system-ipv4 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
-              <button class="copy-ip-btn shrink-0 rounded p-1 text-[#737373] dark:text-[#737373] text-[#525252] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f5f5f5] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="Copy IPv4">
-                <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-                </svg>
-                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
-                  <path d="M20 6L9 17l-5-5"/>
-                </svg>
-              </button>
-              ${netInDisplay}
+      let trafficContainer = nameAndIpContainer.querySelector('.traffic-info-container');
+      
+      // If traffic container doesn't exist and we have traffic data, create it
+      if (!trafficContainer && (item.total_net_in_bytes || item.total_net_out_bytes)) {
+        const trafficHTML = `
+          <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
+            ${item.total_net_in_bytes ? `
+            <div class="flex items-center min-h-[22px]">
+              <span class="system-total-net-in text-[#737373] dark:text-[#737373] text-[#525252]">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
             </div>
-          `;
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = `<div class="ip-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[28px] justify-center flex-shrink-0">${ipv4RowHTML}</div>`.trim();
-          const newContainer = tempDiv.firstElementChild;
-          if (newContainer && nameAndIpContainerForTraffic) {
-            const placeholder = nameAndIpContainerForTraffic.querySelector('.invisible');
-            if (placeholder) {
-              nameAndIpContainerForTraffic.replaceChild(newContainer, placeholder);
-            } else {
-              nameAndIpContainerForTraffic.appendChild(newContainer);
-            }
-            ipContainerForTraffic = newContainer;
-            ipv4Row = newContainer.querySelector('.system-ipv4')?.closest('.flex.items-center');
-            setupSystemEventHandlers(itemElement);
-          }
+            ` : '<div class="min-h-[22px]"></div>'}
+            ${item.total_net_out_bytes ? `
+            <div class="flex items-center min-h-[22px]">
+              <span class="system-total-net-out text-[#737373] dark:text-[#737373] text-[#525252]">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
+            </div>
+            ` : '<div class="min-h-[22px]"></div>'}
+          </div>
+        `;
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = trafficHTML.trim();
+        trafficContainer = tempDiv.firstElementChild;
+        if (trafficContainer) {
+          nameAndIpContainer.appendChild(trafficContainer);
         }
       }
       
-      if (ipv4Row) {
-        let netInSpan = ipv4Row.querySelector('.system-total-net-in');
+      // Update In traffic value
+      if (trafficContainer) {
+        const allRows = trafficContainer.querySelectorAll('.flex.items-center');
+        let inRow = allRows[0]; // First row is In
+        
         if (item.total_net_in_bytes && item.total_net_in_bytes > 0) {
           const formattedIn = typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B';
+          let netInSpan = inRow?.querySelector('.system-total-net-in');
           if (netInSpan) {
             netInSpan.textContent = `In: ${formattedIn}`;
-          } else {
+          } else if (inRow) {
+            // Create the span if it doesn't exist
             netInSpan = document.createElement('span');
-            // Add spacer if not exists
-            let spacer = ipv4Row.querySelector('.flex-1');
-            if (!spacer) {
-              spacer = document.createElement('span');
-              spacer.className = 'flex-1';
-              ipv4Row.appendChild(spacer);
-            }
-            netInSpan.className = 'system-total-net-in text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left';
+            netInSpan.className = 'system-total-net-in text-[#737373] dark:text-[#737373] text-[#525252]';
             netInSpan.textContent = `In: ${formattedIn}`;
-            ipv4Row.appendChild(netInSpan);
+            inRow.appendChild(netInSpan);
           }
-        } else if (netInSpan) {
-          netInSpan.remove();
+        } else {
+          // Remove In value if traffic is 0 or null
+          let netInSpan = inRow?.querySelector('.system-total-net-in');
+          if (netInSpan) {
+            netInSpan.remove();
+          }
         }
       }
     }
     
-    // Update total network traffic on IPv6 row or placeholder (separate from IP update)
+    // Update total network Out traffic (separate from IP update)
     // This handles cases where traffic stats change but IP address hasn't changed
-    // Also handles cases where IP container needs to be created for traffic stats
     if (oldItemNormalized.total_net_out_bytes !== newItemNormalized.total_net_out_bytes) {
-      const nameAndIpContainerForTraffic = itemElement.querySelector('.flex.items-center.gap-4');
-      if (!nameAndIpContainerForTraffic) {
+      const nameAndIpContainer = itemElement.querySelector('.flex.items-center.gap-4');
+      if (!nameAndIpContainer) {
         return; // Can't update without container
       }
-      let ipContainer = nameAndIpContainerForTraffic.querySelector('.ip-info-container');
-      // Also check for invisible placeholder
-      if (!ipContainer) {
-        ipContainer = nameAndIpContainerForTraffic.querySelector('.invisible');
-      }
-      let ipv6Row = itemElement.querySelector('.system-ipv6')?.closest('.flex.items-center');
       
-      // If IPv6 row doesn't exist but we have traffic data, try to find or create placeholder
-      if (!ipv6Row && item.total_net_out_bytes && item.total_net_out_bytes > 0) {
-        // If we have IPv6 address, container should have been created in IPv6 update block
-        if (item.ipv6 && !ipContainer && nameAndIpContainerForTraffic) {
-          // IPv6 exists but container doesn't - should have been created in IPv6 update block
-          // Just re-find it
-          ipContainer = nameAndIpContainerForTraffic.querySelector('.ip-info-container');
-          ipv6Row = itemElement.querySelector('.system-ipv6')?.closest('.flex.items-center');
-        } else if (item.ipv4 && !item.ipv6 && ipContainer) {
-          // We have IPv4 but no IPv6 - find or create IPv6 placeholder row
-          const allRows = Array.from(ipContainer.querySelectorAll('.flex.items-center'));
-          const ipv6PlaceholderRow = allRows.find(row => {
-            const spans = row.querySelectorAll('span');
-            let ipv6Label = false;
-            let hasDash = false;
-            for (const span of spans) {
-              const text = span.textContent?.trim();
-              if (text === 'IPv6:') {
-                ipv6Label = true;
-              }
-              if (text === '-') {
-                hasDash = true;
-              }
-            }
-            const noIpv6 = !row.querySelector('.system-ipv6');
-            return ipv6Label && hasDash && noIpv6;
-          });
-          if (ipv6PlaceholderRow) {
-            ipv6Row = ipv6PlaceholderRow;
-          } else {
-            // Create IPv6 placeholder row with traffic stats
-            const placeholderHTML = `
-              <div class="flex items-center gap-1.5 min-h-[16px]">
-                <span class="text-[#a3a3a3] dark:text-[#a3a3a3] text-[#404040] shrink-0">IPv6:</span>
-                <span class="text-[#737373] dark:text-[#737373] text-[#404040]">-</span>
-                <span class="flex-1"></span>
-                <span class="system-total-net-out text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
-              </div>
-            `;
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = placeholderHTML.trim();
-            const placeholderRow = tempDiv.firstElementChild;
-            if (placeholderRow && ipContainer) {
-              ipContainer.appendChild(placeholderRow);
-              ipv6Row = placeholderRow;
-            }
-          }
+      let trafficContainer = nameAndIpContainer.querySelector('.traffic-info-container');
+      
+      // If traffic container doesn't exist and we have traffic data, create it
+      if (!trafficContainer && (item.total_net_in_bytes || item.total_net_out_bytes)) {
+        const trafficHTML = `
+          <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
+            ${item.total_net_in_bytes ? `
+            <div class="flex items-center min-h-[22px]">
+              <span class="system-total-net-in text-[#737373] dark:text-[#737373] text-[#525252]">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
+            </div>
+            ` : '<div class="min-h-[22px]"></div>'}
+            ${item.total_net_out_bytes ? `
+            <div class="flex items-center min-h-[22px]">
+              <span class="system-total-net-out text-[#737373] dark:text-[#737373] text-[#525252]">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
+            </div>
+            ` : '<div class="min-h-[22px]"></div>'}
+          </div>
+        `;
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = trafficHTML.trim();
+        trafficContainer = tempDiv.firstElementChild;
+        if (trafficContainer) {
+          nameAndIpContainer.appendChild(trafficContainer);
         }
       }
       
-      // Find IPv6 placeholder row (has "-" text and no system-ipv6 class) if not found yet
-      if (!ipv6Row && ipContainer) {
-        const allRows = Array.from(ipContainer.querySelectorAll('.flex.items-center'));
-        const ipv6PlaceholderRow = allRows.find(row => {
-          // Find IPv6 label by checking all spans in the row
-          const spans = row.querySelectorAll('span');
-          let ipv6Label = false;
-          let hasDash = false;
-          for (const span of spans) {
-            const text = span.textContent?.trim();
-            if (text === 'IPv6:') {
-              ipv6Label = true;
-            }
-            if (text === '-') {
-              hasDash = true;
-            }
-          }
-          const noIpv6 = !row.querySelector('.system-ipv6');
-          return ipv6Label && hasDash && noIpv6;
-        });
-        if (ipv6PlaceholderRow) {
-          ipv6Row = ipv6PlaceholderRow;
-        }
-      }
-      
-      const targetIpv6Row = ipv6Row;
-      
-      if (targetIpv6Row) {
-        let netOutSpan = targetIpv6Row.querySelector('.system-total-net-out');
+      // Update Out traffic value
+      if (trafficContainer) {
+        const allRows = trafficContainer.querySelectorAll('.flex.items-center');
+        let outRow = allRows[1]; // Second row is Out
+        
         if (item.total_net_out_bytes && item.total_net_out_bytes > 0) {
           const formattedOut = typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B';
+          let netOutSpan = outRow?.querySelector('.system-total-net-out');
           if (netOutSpan) {
             netOutSpan.textContent = `Out: ${formattedOut}`;
-          } else {
+          } else if (outRow) {
+            // Create the span if it doesn't exist
             netOutSpan = document.createElement('span');
-            // Add spacer if not exists
-            let spacer = targetIpv6Row.querySelector('.flex-1');
-            if (!spacer) {
-              spacer = document.createElement('span');
-              spacer.className = 'flex-1';
-              targetIpv6Row.appendChild(spacer);
-            }
-            netOutSpan.className = 'system-total-net-out text-[#737373] dark:text-[#737373] text-[#404040] min-w-[80px] text-left';
+            netOutSpan.className = 'system-total-net-out text-[#737373] dark:text-[#737373] text-[#525252]';
             netOutSpan.textContent = `Out: ${formattedOut}`;
-            targetIpv6Row.appendChild(netOutSpan);
+            outRow.appendChild(netOutSpan);
           }
-        } else if (netOutSpan) {
-          netOutSpan.remove();
+        } else {
+          // Remove Out value if traffic is 0 or null
+          let netOutSpan = outRow?.querySelector('.system-total-net-out');
+          if (netOutSpan) {
+            netOutSpan.remove();
+          }
         }
       }
     }

@@ -2,7 +2,7 @@
 import Icon from './Icon.astro';
 ---
 
-<div id="system-table-header-row" class="grid grid-cols-[minmax(160px,max-content)_minmax(85px,1fr)_minmax(90px,1fr)_minmax(130px,1.6fr)_minmax(130px,1.6fr)_minmax(130px,1.6fr)_minmax(95px,1fr)_minmax(90px,1fr)] items-center gap-1 border-b border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-medium tracking-wide text-[#737373] dark:text-[#737373] text-[#404040]">
+<div id="system-table-header-row" class="grid items-center gap-1 border-b border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-medium tracking-wide text-[#737373] dark:text-[#737373] text-[#404040]" style="grid-template-columns: minmax(160px, var(--first-col-width, 160px)) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.6fr) minmax(130px,1.6fr) minmax(130px,1.6fr) minmax(95px,1fr) minmax(90px,1fr);">
   <div class="h-5 flex items-center gap-1.5">
     <Icon name="server" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
     <span data-translate="system">Service</span>

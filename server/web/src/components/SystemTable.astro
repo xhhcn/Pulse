@@ -12,6 +12,7 @@ const apiBase = apiBaseProp ?? '';
   id="monitor-root"
   data-api-base={apiBase}
   class="mx-auto mt-2 sm:mt-3 max-w-7xl rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#a3a3a3]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-2 sm:p-4 md:p-6"
+  style="--first-col-width: 160px;"
 >
   <SystemTableHeader />
 
@@ -21,6 +22,8 @@ const apiBase = apiBaseProp ?? '';
       #monitor-root .overflow-x-auto::-webkit-scrollbar {
         display: none;
       }
+      /* CSS variable --first-col-width is now defined inline on #monitor-root element
+         This avoids timing issues between <style> rules and inline style modifications */
     </style>
     <div class="min-w-[1000px]">
       <SystemTableHeaderRow />
@@ -590,100 +593,83 @@ const apiBase = apiBaseProp ?? '';
 
   const pct = (val) => Math.min(Math.max(val || 0, 0), 100);
 
-  // Calculate and adjust server name column width based on longest name
-  function adjustServerNameColumnWidth() {
-    if (!body) return;
-    
-    const rows = body.querySelectorAll('.system-row');
-    if (rows.length === 0) return;
+  // Pre-calculate server name column width from data (before rendering DOM)
+  // This prevents visual jitter by setting the correct width from the start
+  function calculateServerNameColumnWidth(items) {
+    if (!items || items.length === 0) return 160;
     
     let maxWidth = 160; // Minimum width in pixels
     
-    // Find the maximum width of server name cells by measuring actual cell width
-    rows.forEach(systemRow => {
-      const rowElement = systemRow.querySelector('[data-system-id]');
-      if (!rowElement) return;
-      
-      const nameCell = rowElement.querySelector('div:first-child');
-      if (nameCell) {
-        // Measure the actual width of the entire cell (including all internal elements)
-        // This gives us the most accurate measurement
-        const cellWidth = nameCell.offsetWidth;
-        if (cellWidth > 0) {
-          maxWidth = Math.max(maxWidth, cellWidth);
-        }
-      }
-    });
-    
-    // If we couldn't measure any cells (they might not be rendered yet), use a fallback
-    if (maxWidth === 160) {
-      // Try to measure text width as fallback
-      rows.forEach(systemRow => {
-        const rowElement = systemRow.querySelector('[data-system-id]');
-        if (!rowElement) return;
-        
-        const nameCell = rowElement.querySelector('div:first-child');
-        if (nameCell) {
-          const spans = nameCell.querySelectorAll('span');
-          for (let i = 0; i < spans.length; i++) {
-            const span = spans[i];
-            if (!span.classList.contains('rounded-full') && span.textContent && span.textContent.trim() !== '') {
-              const tempSpan = document.createElement('span');
-              const computedStyle = window.getComputedStyle(span);
-              tempSpan.style.cssText = `
-                position: absolute;
-                visibility: hidden;
-                white-space: nowrap;
-                font-family: ${computedStyle.fontFamily};
-                font-size: ${computedStyle.fontSize};
-                font-weight: ${computedStyle.fontWeight};
-                letter-spacing: ${computedStyle.letterSpacing};
-              `;
-              tempSpan.textContent = span.textContent.trim();
-              document.body.appendChild(tempSpan);
-              
-              const textWidth = tempSpan.offsetWidth;
-              // Add space for status dot, gaps, and copy button
-              const estimatedCellWidth = textWidth + 40;
-              maxWidth = Math.max(maxWidth, estimatedCellWidth);
-              
-              document.body.removeChild(tempSpan);
-              break;
-            }
-          }
-        }
-      });
+    // Create a temporary hidden span to measure text width accurately
+    const tempSpan = document.createElement('span');
+    tempSpan.style.cssText = `
+      position: absolute;
+      visibility: hidden;
+      white-space: nowrap;
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: normal;
+    `;
+    // Add responsive font size calculation (text-[10px] sm:text-xs)
+    const isSmallScreen = window.innerWidth < 640;
+    if (isSmallScreen) {
+      tempSpan.style.fontSize = '10px';
     }
     
-    // Set the column width for all rows and header using inline style
-    const columnWidth = `${Math.ceil(maxWidth)}px`;
-    const gridTemplateColumns = `minmax(160px,${columnWidth}) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.6fr) minmax(130px,1.6fr) minmax(130px,1.6fr) minmax(95px,1fr) minmax(90px,1fr)`;
+    document.body.appendChild(tempSpan);
     
-    // Update all table rows
-    rows.forEach(systemRow => {
-      const rowElement = systemRow.querySelector('[data-system-id]');
-      if (rowElement) {
-        rowElement.style.gridTemplateColumns = gridTemplateColumns;
-      }
+    // Measure each server name
+    items.forEach(item => {
+      const name = item.name || 'unknown';
+      tempSpan.textContent = name;
+      const textWidth = tempSpan.offsetWidth;
+      
+      // Add space for:
+      // - Status dot: ~8px (w-1.5 sm:w-2)
+      // - Gap after dot: 6px (gap-1.5)
+      // - Gap before button: 6px (gap-1.5)
+      // - Copy button: ~14px (w-2.5 sm:w-3)
+      // - Padding/margin buffer: ~6px
+      const estimatedCellWidth = textWidth + 40;
+      maxWidth = Math.max(maxWidth, estimatedCellWidth);
     });
     
-    // Update table header row to match - this ensures perfect alignment
-    const headerRow = document.getElementById('system-table-header-row');
-    if (headerRow) {
-      headerRow.style.gridTemplateColumns = gridTemplateColumns;
+    document.body.removeChild(tempSpan);
+    
+    return Math.ceil(maxWidth);
+  }
+  
+  // Apply the pre-calculated column width to all rows and header
+  function applyServerNameColumnWidth(columnWidth) {
+    // Update CSS variable at root level - this automatically affects all elements using var(--first-col-width)
+    // Including: header row, loading skeleton rows, and all data rows
+    const root = document.getElementById('monitor-root');
+    if (root) {
+      // CRITICAL: Only increase width, never decrease
+      // This prevents LoadingState from being too narrow during SSE updates
+      // When adding a system with a longer name, the LoadingState will expand correctly
+      const currentWidthStr = root.style.getPropertyValue('--first-col-width');
+      const currentWidth = parseInt(currentWidthStr) || 160;
+      
+      // Use the larger of current width or new calculated width
+      const newWidth = Math.max(currentWidth, columnWidth);
+      
+      root.style.setProperty('--first-col-width', `${newWidth}px`);
+      
+      // CRITICAL: Force browser to immediately recalculate styles (trigger reflow)
+      // Reading offsetHeight forces a synchronous layout recalculation
+      // This ensures the CSS variable change is applied immediately
+      void root.offsetHeight;
     }
   }
   
-  // Debounced version for performance
-  let adjustColumnWidthTimeout = null;
-  function adjustServerNameColumnWidthDebounced() {
-    if (adjustColumnWidthTimeout) {
-      clearTimeout(adjustColumnWidthTimeout);
-    }
-    adjustColumnWidthTimeout = setTimeout(() => {
-      adjustServerNameColumnWidth();
-      adjustColumnWidthTimeout = null;
-    }, 100);
+  // Recalculate column width from current data (used for incremental updates)
+  function recalculateColumnWidthFromCurrentData() {
+    if (currentData.size === 0) return;
+    const items = Array.from(currentData.values());
+    const width = calculateServerNameColumnWidth(items);
+    applyServerNameColumnWidth(width);
   }
 
   // Get color class based on value threshold
@@ -739,7 +725,7 @@ const apiBase = apiBaseProp ?? '';
     const safeNameAttr = escapeHtmlAttr(item.name || 'unknown');
     return `
     <div class="system-row" data-system-id="${safeId}">
-      <div class="group grid grid-cols-[minmax(160px,max-content)_minmax(85px,1fr)_minmax(90px,1fr)_minmax(130px,1.6fr)_minmax(130px,1.6fr)_minmax(130px,1.6fr)_minmax(95px,1fr)_minmax(90px,1fr)] items-center gap-1 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}">
+      <div class="group grid items-center gap-1 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}" style="grid-template-columns: minmax(160px, var(--first-col-width, 160px)) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.6fr) minmax(130px,1.6fr) minmax(130px,1.6fr) minmax(95px,1fr) minmax(90px,1fr);">
         <div class="flex items-center gap-1.5 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-red-400' : 'bg-emerald-400'} shrink-0"></span>
           <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]">${safeName}</span>
@@ -948,6 +934,21 @@ const apiBase = apiBaseProp ?? '';
 
   const showEmpty = () => {
     if (loadingIndicator) loadingIndicator.style.display = 'none';
+    
+    // CRITICAL: Clear currentData to ensure next load triggers column width calculation
+    // This fixes the issue where deleting all systems and re-adding doesn't recalculate width
+    currentData.clear();
+    
+    // CRITICAL: Force reset column width to default (bypass "only increase" logic)
+    // When showing empty state, we need to actually reset the width, not just try to set a smaller value
+    // The applyServerNameColumnWidth function uses Math.max which prevents decreasing
+    // So we directly set the CSS variable here to force a reset
+    const root = document.getElementById('monitor-root');
+    if (root) {
+      root.style.setProperty('--first-col-width', '160px');
+      void root.offsetHeight; // Force reflow to apply the reset immediately
+    }
+    
     if (body) {
       const lang = getCurrentLanguage();
       body.innerHTML = `
@@ -1066,7 +1067,7 @@ const apiBase = apiBaseProp ?? '';
           copyBtn.dataset.systemName = item.name || 'unknown';
         }
         // Recalculate column width when name changes
-        adjustServerNameColumnWidthDebounced();
+        recalculateColumnWidthFromCurrentData();
       }
     }
     
@@ -1398,14 +1399,16 @@ const apiBase = apiBaseProp ?? '';
       const res = await fetch(authUrl, { headers });
       if (res.ok) {
         const data = await res.json();
-        // Ensure we always return an array
-        return Array.isArray(data) ? data : [];
+        // Return API response as is (can be new format with stats or old format as array)
+        // Backward compatible: if data is array (old format), return it directly
+        // If data is object with results (new format), return the whole object
+        return data;
       }
     } catch (err) {
       // History load failed silently
     }
-    // Always return an empty array if there's an error or no data
-    return [];
+    // Return empty object for consistency (new format)
+    return {};
   }
 
   // Helper function to create tabs for TCPing targets
@@ -1619,12 +1622,19 @@ const apiBase = apiBaseProp ?? '';
     // Load history data for all targets in a single request (optimized for CPU)
     // This reduces HTTP requests from N (number of targets) to 1
     // Also leverages server-side caching for better performance
-    const allHistoryRaw = await loadTCPingHistory(clientID); // No target parameter = fetch all
+    // Response format: { results: [...], stats: { avg_latency, packet_loss_rate } }
+    const apiResponse = await loadTCPingHistory(clientID); // No target parameter = fetch all
     
     // Check if loading was cancelled after data fetch
     if (tcpingLoadingStates.get(systemId)?.cancelled) {
       return;
     }
+    
+    // Extract results and pre-calculated stats from API response
+    // Backward compatible: if apiResponse is array (old format), use it directly
+    // If apiResponse is object with results (new format), extract results and stats
+    const allHistoryRaw = Array.isArray(apiResponse) ? apiResponse : (apiResponse?.results || []);
+    const preCalculatedStats = (!Array.isArray(apiResponse) && apiResponse?.stats) ? apiResponse.stats : null;
     
     // Group history data by target address
     const historyByTarget = new Map();
@@ -1750,8 +1760,14 @@ const apiBase = apiBaseProp ?? '';
       });
     });
     
-    // Calculate statistics for all targets (will be updated when target is selected)
-    calculateAndUpdateStats(systemId, selectedTarget);
+    // Calculate statistics for all targets (use pre-calculated stats if available from backend)
+    if (preCalculatedStats && !selectedTarget) {
+      // Use pre-calculated statistics from backend (much faster!)
+      updateTCPingStats(systemId, preCalculatedStats.avg_latency, preCalculatedStats.packet_loss_rate);
+    } else {
+      // Calculate statistics on frontend (for selected target or if backend stats unavailable)
+      calculateAndUpdateStats(systemId, selectedTarget);
+    }
     
     // Check if there's no data - show "No data" state instead of empty chart
     if (!hasAnyData) {
@@ -1873,7 +1889,14 @@ const apiBase = apiBaseProp ?? '';
             }
             
             chart.update('none');
-            calculateAndUpdateStats(systemId, selectedTarget);
+            
+            // Update statistics after incremental update
+            // Use pre-calculated stats if available and no target is selected
+            if (preCalculatedStats && !selectedTarget) {
+              updateTCPingStats(systemId, preCalculatedStats.avg_latency, preCalculatedStats.packet_loss_rate);
+            } else {
+              calculateAndUpdateStats(systemId, selectedTarget);
+            }
           }
         } catch (err) {
           // Chart update failed silently
@@ -2737,9 +2760,8 @@ const apiBase = apiBaseProp ?? '';
   const render = async (items) => {
     if (!body) return;
     
-    if (loadingIndicator) loadingIndicator.style.display = 'none';
-    
     if (!items || items.length === 0) {
+      if (loadingIndicator) loadingIndicator.style.display = 'none';
       showEmpty();
       currentData.clear();
       return;
@@ -2764,6 +2786,9 @@ const apiBase = apiBaseProp ?? '';
     
     // Initial render - if no existing data, render everything
     if (currentData.size === 0) {
+      // Hide loading indicator - width already adjusted by loadData
+      if (loadingIndicator) loadingIndicator.style.display = 'none';
+      
       body.innerHTML = items.map(item => renderRow(item, tcpingConfigured)).join('');
       currentData = newData;
       
@@ -2787,8 +2812,6 @@ const apiBase = apiBaseProp ?? '';
       setupRowClickHandlers(body);
       // Update translations after DOM is ready
       setTimeout(() => updateTranslations(), 0);
-      // Calculate and set server name column width based on longest name
-      setTimeout(() => adjustServerNameColumnWidth(), 0);
       return;
     }
     
@@ -2945,8 +2968,8 @@ const apiBase = apiBaseProp ?? '';
       setupRowClickHandlers(body);
       // Update translations after DOM is ready
       setTimeout(() => updateTranslations(), 0);
-      // Calculate and set server name column width based on longest name
-      setTimeout(() => adjustServerNameColumnWidth(), 0);
+      // Recalculate column width when new rows are added (names might be longer)
+      setTimeout(() => recalculateColumnWidthFromCurrentData(), 0);
     }
     
     // Handle reordering if needed - ALWAYS check order, even if no other changes
@@ -2973,8 +2996,13 @@ const apiBase = apiBaseProp ?? '';
     
     // Cache already updated at the beginning of the function
     
-    // Recalculate server name column width after any DOM changes
-    setTimeout(() => adjustServerNameColumnWidth(), 0);
+    // Recalculate column width if rows were added or names changed
+    if (rowsToAdd.length > 0 || rowsToUpdate.some(({ item }) => {
+      const old = previousData.get(item.id);
+      return old && old.name !== item.name;
+    })) {
+      setTimeout(() => recalculateColumnWidthFromCurrentData(), 0);
+    }
   };
 
   // Fetch data from backend - ONLY source of truth
@@ -2985,6 +3013,37 @@ const apiBase = apiBaseProp ?? '';
       if (data.length === 0) {
         showEmpty();
       } else {
+        // CRITICAL: Always calculate and apply column width to handle SSE updates
+        // This ensures LoadingState always has correct width, even during incremental updates
+        const preCalculatedWidth = calculateServerNameColumnWidth(data);
+        applyServerNameColumnWidth(preCalculatedWidth); // Only increases, never decreases + forces reflow
+        
+        // Only wait for browser repaint on first load (when LoadingState is visible)
+        // For incremental updates, proceed immediately to avoid unnecessary delay
+        if (currentData.size === 0 && data.length > 0) {
+          // Force browser to recalculate LoadingState styles by reading computed style
+          // This ensures the CSS variable has been applied to LoadingState elements
+          if (loadingIndicator) {
+            // CRITICAL: Always force style calculation on loadingIndicator itself
+            // This works even if the child elements haven't fully rendered yet
+            void window.getComputedStyle(loadingIndicator).display;
+            
+            // Additionally, if we can find the LoadingState rows, force their style calculation too
+            // This is a belt-and-suspenders approach for maximum reliability
+            const loadingRows = loadingIndicator.querySelectorAll('[style*="grid-template-columns"]');
+            if (loadingRows.length > 0) {
+              // Reading gridTemplateColumns forces style recalculation for this element
+              void window.getComputedStyle(loadingRows[0]).gridTemplateColumns;
+            }
+          }
+          
+          // Wait for browser to repaint LoadingState with correct width
+          // This is crucial - LoadingState must show correct width before hiding
+          await new Promise(resolve => requestAnimationFrame(() => {
+            requestAnimationFrame(resolve);
+          }));
+        }
+        
         // Apply filter first, then sorting
         const filteredData = filterSystems(data);
         const sortedData = sortSystems(filteredData);
@@ -3145,7 +3204,6 @@ const apiBase = apiBaseProp ?? '';
     preloadTCPingConfig();
   }
 
-  // Cleanup on page unload
   // Recalculate column width on window resize (with debounce)
   let resizeTimeout = null;
   window.addEventListener('resize', () => {
@@ -3153,7 +3211,7 @@ const apiBase = apiBaseProp ?? '';
       clearTimeout(resizeTimeout);
     }
     resizeTimeout = setTimeout(() => {
-      adjustServerNameColumnWidthDebounced();
+      recalculateColumnWidthFromCurrentData();
       resizeTimeout = null;
     }, 250);
   });

@@ -11,20 +11,20 @@ import (
 	"sort"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
 	bolt "go.etcd.io/bbolt"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	defaultDBPath = "./data/metrics.db"
-	bucketName    = "systems"
-	tcpingBucket  = "tcping"
-	configBucket  = "config"
-	configKey     = "tcping"
-	navbarConfigKey = "navbar"
+	defaultDBPath    = "./data/metrics.db"
+	bucketName       = "systems"
+	tcpingBucket     = "tcping"
+	configBucket     = "config"
+	configKey        = "tcping"
+	navbarConfigKey  = "navbar"
 	privacyConfigKey = "privacy"
-	authBucket    = "auth"
-	passwordKey   = "admin_password"
+	authBucket       = "auth"
+	passwordKey      = "admin_password"
 )
 
 // Store represents the persistent storage
@@ -79,9 +79,9 @@ func NewStore(dbPath string) (*Store, error) {
 	}
 
 	log.Printf("✅ Database initialized: %s", dbPath)
-	
+
 	store := &Store{db: db}
-	
+
 	// Log current data count
 	count := store.Count()
 	if count == 0 {
@@ -217,10 +217,10 @@ func DBPath() string {
 
 // TCPingResult represents a tcping result
 type TCPingResult struct {
-	ClientID  string     `json:"client_id"`
-	Target    string     `json:"target"`    // Target address (e.g., "8.8.8.8:53")
-	Latency   *float64   `json:"latency"`   // Latency in milliseconds (nil for timeout/failure)
-	Timestamp time.Time  `json:"timestamp"`
+	ClientID  string    `json:"client_id"`
+	Target    string    `json:"target"`  // Target address (e.g., "8.8.8.8:53")
+	Latency   *float64  `json:"latency"` // Latency in milliseconds (nil for timeout/failure)
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // SaveTCPingResult saves a tcping result
@@ -442,20 +442,20 @@ type TCPingTargetEntry struct {
 
 // TCPingConfig represents the tcping configuration
 type TCPingConfig struct {
-	Targets      []TCPingTargetEntry `json:"targets"`      // List of target entries with name and address
+	Targets      []TCPingTargetEntry `json:"targets"`       // List of target entries with name and address
 	IntervalSecs int                 `json:"interval_secs"` // Polling interval in seconds
 }
 
 // GetTCPingConfig retrieves the tcping configuration
 func (s *Store) GetTCPingConfig() (*TCPingConfig, error) {
 	var config TCPingConfig
-	
+
 	err := s.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(configBucket))
 		if bucket == nil {
 			return fmt.Errorf("config bucket not found")
 		}
-		
+
 		data := bucket.Get([]byte(configKey))
 		if data == nil {
 			// Return default config if not found: no targets, 60s interval
@@ -465,13 +465,13 @@ func (s *Store) GetTCPingConfig() (*TCPingConfig, error) {
 			}
 			return nil
 		}
-		
+
 		// Try to unmarshal as new format first
 		if err := json.Unmarshal(data, &config); err == nil {
 			// Successfully unmarshaled as new format
 			return nil
 		}
-		
+
 		// Try to unmarshal as old format ([]string) for backward compatibility
 		var oldTargets []string
 		var oldConfig struct {
@@ -490,7 +490,7 @@ func (s *Store) GetTCPingConfig() (*TCPingConfig, error) {
 			}
 			return nil
 		}
-		
+
 		// If both fail, try just the targets array
 		if err := json.Unmarshal(data, &oldTargets); err == nil {
 			// Convert old format to new format
@@ -504,15 +504,15 @@ func (s *Store) GetTCPingConfig() (*TCPingConfig, error) {
 			}
 			return nil
 		}
-		
+
 		// If all fail, return the original error
 		return json.Unmarshal(data, &config)
 	})
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &config, nil
 }
 
@@ -523,12 +523,12 @@ func (s *Store) SaveTCPingConfig(config *TCPingConfig) error {
 		if bucket == nil {
 			return fmt.Errorf("config bucket not found")
 		}
-		
+
 		data, err := json.Marshal(config)
 		if err != nil {
 			return fmt.Errorf("failed to marshal config: %w", err)
 		}
-		
+
 		return bucket.Put([]byte(configKey), data)
 	})
 }
@@ -604,13 +604,13 @@ type NavbarConfig struct {
 // GetNavbarConfig retrieves the navbar configuration
 func (s *Store) GetNavbarConfig() (*NavbarConfig, error) {
 	var config NavbarConfig
-	
+
 	err := s.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(configBucket))
 		if bucket == nil {
 			return fmt.Errorf("config bucket not found")
 		}
-		
+
 		data := bucket.Get([]byte(navbarConfigKey))
 		if data == nil {
 			// Return default config if not found
@@ -620,14 +620,14 @@ func (s *Store) GetNavbarConfig() (*NavbarConfig, error) {
 			}
 			return nil
 		}
-		
+
 		return json.Unmarshal(data, &config)
 	})
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &config, nil
 }
 
@@ -638,34 +638,34 @@ func (s *Store) SaveNavbarConfig(config *NavbarConfig) error {
 		if bucket == nil {
 			return fmt.Errorf("config bucket not found")
 		}
-		
+
 		data, err := json.Marshal(config)
 		if err != nil {
 			return fmt.Errorf("failed to marshal config: %w", err)
 		}
-		
+
 		return bucket.Put([]byte(navbarConfigKey), data)
 	})
 }
 
 // PrivacyConfig represents the privacy configuration
 type PrivacyConfig struct {
-	Enabled          bool      `json:"enabled"`           // Whether privacy mode is enabled
-	ShareToken       string    `json:"share_token"`       // Temporary share token
-	TokenExpires     time.Time `json:"token_expires"`     // Token expiration time
+	Enabled          bool      `json:"enabled"`            // Whether privacy mode is enabled
+	ShareToken       string    `json:"share_token"`        // Temporary share token
+	TokenExpires     time.Time `json:"token_expires"`      // Token expiration time
 	ExpiresInSeconds int       `json:"expires_in_seconds"` // Saved expiration seconds value for UI
 }
 
 // GetPrivacyConfig retrieves the privacy configuration
 func (s *Store) GetPrivacyConfig() (*PrivacyConfig, error) {
 	var config PrivacyConfig
-	
+
 	err := s.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(configBucket))
 		if bucket == nil {
 			return fmt.Errorf("config bucket not found")
 		}
-		
+
 		data := bucket.Get([]byte(privacyConfigKey))
 		if data == nil {
 			// Return default config if not found
@@ -677,14 +677,14 @@ func (s *Store) GetPrivacyConfig() (*PrivacyConfig, error) {
 			}
 			return nil
 		}
-		
+
 		return json.Unmarshal(data, &config)
 	})
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &config, nil
 }
 
@@ -695,12 +695,12 @@ func (s *Store) SavePrivacyConfig(config *PrivacyConfig) error {
 		if bucket == nil {
 			return fmt.Errorf("config bucket not found")
 		}
-		
+
 		data, err := json.Marshal(config)
 		if err != nil {
 			return fmt.Errorf("failed to marshal config: %w", err)
 		}
-		
+
 		return bucket.Put([]byte(privacyConfigKey), data)
 	})
 }

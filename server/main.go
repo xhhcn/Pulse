@@ -46,80 +46,126 @@ func hasEmbeddedFiles() bool {
 }
 
 type SystemMetric struct {
-	ID                 string    `json:"id"`
-	Name               string    `json:"name"`
-	IPv4               string    `json:"ipv4,omitempty"`
-	IPv6               string    `json:"ipv6,omitempty"`
-	Time               string    `json:"time,omitempty"`
-	Location           string    `json:"location,omitempty"`
-	VirtualizationType string    `json:"virtualization_type,omitempty"` // "VPS" or "DS"
-	OS                 string    `json:"os,omitempty"`
-	OSIcon             string    `json:"os_icon,omitempty"`
-	CPU                float64   `json:"cpu"`
-	CPUModel           string    `json:"cpu_model,omitempty"`
-	Memory             float64   `json:"memory"`
-	MemoryInfo         string    `json:"memory_info,omitempty"`   // Format: "383.60 MiB / 1.88 GiB"
-	SwapInfo           string    `json:"swap_info,omitempty"`     // Format: "75.12 MiB / 975.00 MiB"
-	Disk               float64   `json:"disk"`
-	DiskInfo           string    `json:"disk_info,omitempty"`     // Format: "9.86 GiB / 18.58 GiB"
-	NetInMBps          float64   `json:"net_in_mb_s"`
-	NetOutMBps         float64   `json:"net_out_mb_s"`
-	TotalNetInBytes    uint64    `json:"total_net_in_bytes,omitempty"`  // Total received bytes
-	TotalNetOutBytes   uint64    `json:"total_net_out_bytes,omitempty"` // Total transmitted bytes
-	AgentVersion       string                        `json:"agent_version"`
-	Order              int                           `json:"order"` // Display order for sorting
-	Alert              bool                          `json:"alert"`
-	UpdatedAt          time.Time                     `json:"updated_at"`
-	TCPingData         map[string]TCPingTargetData   `json:"tcping_data,omitempty"` // Map of target -> latest tcping data
-	Tags               []string                      `json:"tags,omitempty"`        // User-defined tags for the service
-	Secret             string                         `json:"secret,omitempty"`      // Secret for client authentication
+	ID                 string                      `json:"id"`
+	Name               string                      `json:"name"`
+	IPv4               string                      `json:"ipv4,omitempty"`
+	IPv6               string                      `json:"ipv6,omitempty"`
+	Time               string                      `json:"time,omitempty"`
+	Location           string                      `json:"location,omitempty"`
+	VirtualizationType string                      `json:"virtualization_type,omitempty"` // "VPS" or "DS"
+	OS                 string                      `json:"os,omitempty"`
+	OSIcon             string                      `json:"os_icon,omitempty"`
+	CPU                float64                     `json:"cpu"`
+	CPUModel           string                      `json:"cpu_model,omitempty"`
+	Memory             float64                     `json:"memory"`
+	MemoryInfo         string                      `json:"memory_info,omitempty"` // Format: "383.60 MiB / 1.88 GiB"
+	SwapInfo           string                      `json:"swap_info,omitempty"`   // Format: "75.12 MiB / 975.00 MiB"
+	Disk               float64                     `json:"disk"`
+	DiskInfo           string                      `json:"disk_info,omitempty"` // Format: "9.86 GiB / 18.58 GiB"
+	NetInMBps          float64                     `json:"net_in_mb_s"`
+	NetOutMBps         float64                     `json:"net_out_mb_s"`
+	TotalNetInBytes    uint64                      `json:"total_net_in_bytes,omitempty"`  // Total received bytes
+	TotalNetOutBytes   uint64                      `json:"total_net_out_bytes,omitempty"` // Total transmitted bytes
+	AgentVersion       string                      `json:"agent_version"`
+	Order              int                         `json:"order"` // Display order for sorting
+	Alert              bool                        `json:"alert"`
+	UpdatedAt          time.Time                   `json:"updated_at"`
+	TCPingData         map[string]TCPingTargetData `json:"tcping_data,omitempty"` // Map of target -> latest tcping data
+	Tags               []string                    `json:"tags,omitempty"`        // User-defined tags for the service
+	Secret             string                      `json:"secret,omitempty"`      // Secret for client authentication
 }
 
 // TCPingTargetData represents the latest tcping data for a specific target
 type TCPingTargetData struct {
-	Latency   float64   `json:"latency"`    // Latest tcping latency in ms
-	Timestamp time.Time `json:"timestamp"`  // Latest tcping timestamp
+	Latency   float64   `json:"latency"`   // Latest tcping latency in ms
+	Timestamp time.Time `json:"timestamp"` // Latest tcping timestamp
 }
 
-// TCPing query cache to reduce database load
+// TCPing statistics
+type TCPingStats struct {
+	AvgLatency     float64 `json:"avg_latency"`      // Average latency in milliseconds
+	PacketLossRate float64 `json:"packet_loss_rate"` // Packet loss rate in percentage
+}
+
+// TCPing API response with statistics
+type TCPingHistoryResponse struct {
+	Results []TCPingResult `json:"results"`
+	Stats   TCPingStats    `json:"stats"`
+}
+
+// TCPing query cache to reduce database load (with pre-calculated statistics)
 type tcpingCacheEntry struct {
-	Results   []TCPingResult
-	CachedAt  time.Time
+	Response TCPingHistoryResponse
+	CachedAt time.Time
 }
 
 var (
-	tcpingCache   = make(map[string]*tcpingCacheEntry)
-	tcpingCacheMu sync.RWMutex
+	tcpingCache    = make(map[string]*tcpingCacheEntry)
+	tcpingCacheMu  sync.RWMutex
 	tcpingCacheTTL = 2 * time.Minute // Cache results for 2 minutes
 )
 
-// Get cached TCPing results if available and not expired
-func getCachedTCPingResults(clientID string) ([]TCPingResult, bool) {
+// Get cached TCPing results with statistics if available and not expired
+func getCachedTCPingResults(clientID string) (*TCPingHistoryResponse, bool) {
 	tcpingCacheMu.RLock()
 	defer tcpingCacheMu.RUnlock()
-	
+
 	entry, exists := tcpingCache[clientID]
 	if !exists {
 		return nil, false
 	}
-	
+
 	// Check if cache is expired
 	if time.Since(entry.CachedAt) > tcpingCacheTTL {
 		return nil, false
 	}
-	
-	return entry.Results, true
+
+	return &entry.Response, true
 }
 
-// Cache TCPing results
-func cacheTCPingResults(clientID string, results []TCPingResult) {
+// Cache TCPing results with statistics
+func cacheTCPingResults(clientID string, response TCPingHistoryResponse) {
 	tcpingCacheMu.Lock()
 	defer tcpingCacheMu.Unlock()
-	
+
 	tcpingCache[clientID] = &tcpingCacheEntry{
-		Results:  results,
+		Response: response,
 		CachedAt: time.Now(),
 	}
+}
+
+// Calculate TCPing statistics from results
+func calculateTCPingStats(results []TCPingResult) TCPingStats {
+	const PACKET_LOSS_THRESHOLD_MS = 1000.0
+
+	totalCount := 0
+	successCount := 0
+	totalLatency := 0.0
+
+	for _, result := range results {
+		totalCount++
+		if result.Latency != nil && *result.Latency <= PACKET_LOSS_THRESHOLD_MS {
+			successCount++
+			totalLatency += *result.Latency
+		}
+		// nil latency or > 1000ms is considered packet loss
+	}
+
+	stats := TCPingStats{
+		AvgLatency:     0.0,
+		PacketLossRate: 0.0,
+	}
+
+	if successCount > 0 {
+		stats.AvgLatency = totalLatency / float64(successCount)
+	}
+
+	if totalCount > 0 {
+		packetLossCount := totalCount - successCount
+		stats.PacketLossRate = float64(packetLossCount) / float64(totalCount) * 100.0
+	}
+
+	return stats
 }
 
 // Invalidate TCPing cache for a specific client
@@ -127,7 +173,7 @@ func cacheTCPingResults(clientID string, results []TCPingResult) {
 func invalidateTCPingCache(clientID string) {
 	tcpingCacheMu.Lock()
 	defer tcpingCacheMu.Unlock()
-	
+
 	delete(tcpingCache, clientID)
 }
 
@@ -136,7 +182,7 @@ func invalidateTCPingCache(clientID string) {
 func clearAllTCPingCache() {
 	tcpingCacheMu.Lock()
 	defer tcpingCacheMu.Unlock()
-	
+
 	// Clear the entire cache by creating a new map
 	tcpingCache = make(map[string]*tcpingCacheEntry)
 }
@@ -145,7 +191,7 @@ func clearAllTCPingCache() {
 func startTCPingCacheCleanup() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-	
+
 	for {
 		<-ticker.C
 		tcpingCacheMu.Lock()
@@ -160,29 +206,29 @@ func startTCPingCacheCleanup() {
 }
 
 type metricPayload struct {
-	ID                 string  `json:"id"`
-	Name               string  `json:"name"`
-	IPv4               string  `json:"ipv4,omitempty"`
-	IPv6               string  `json:"ipv6,omitempty"`
-	Uptime             int64   `json:"uptime"` // Uptime in seconds
-	Location           string  `json:"location,omitempty"`
-	VirtualizationType string  `json:"virtualization_type,omitempty"` // "VPS" or "DS"
-	OS                 string  `json:"os,omitempty"`
-	OSIcon             string  `json:"os_icon,omitempty"`
-	CPU                float64 `json:"cpu"`
-	CPUModel           string  `json:"cpu_model,omitempty"`
-	Memory             float64 `json:"memory"`
-	MemoryInfo         string  `json:"memory_info,omitempty"`   // Format: "383.60 MiB / 1.88 GiB"
-	SwapInfo           string  `json:"swap_info,omitempty"`     // Format: "75.12 MiB / 975.00 MiB"
-	Disk               float64 `json:"disk"`
-	DiskInfo           string  `json:"disk_info,omitempty"`     // Format: "9.86 GiB / 18.58 GiB"
-	NetInMBps          float64 `json:"net_in_mb_s"`
-	NetOutMBps         float64 `json:"net_out_mb_s"`
-	TotalNetInBytes    uint64  `json:"total_net_in_bytes,omitempty"`  // Total received bytes
-	TotalNetOutBytes   uint64  `json:"total_net_out_bytes,omitempty"` // Total transmitted bytes
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	IPv4               string   `json:"ipv4,omitempty"`
+	IPv6               string   `json:"ipv6,omitempty"`
+	Uptime             int64    `json:"uptime"` // Uptime in seconds
+	Location           string   `json:"location,omitempty"`
+	VirtualizationType string   `json:"virtualization_type,omitempty"` // "VPS" or "DS"
+	OS                 string   `json:"os,omitempty"`
+	OSIcon             string   `json:"os_icon,omitempty"`
+	CPU                float64  `json:"cpu"`
+	CPUModel           string   `json:"cpu_model,omitempty"`
+	Memory             float64  `json:"memory"`
+	MemoryInfo         string   `json:"memory_info,omitempty"` // Format: "383.60 MiB / 1.88 GiB"
+	SwapInfo           string   `json:"swap_info,omitempty"`   // Format: "75.12 MiB / 975.00 MiB"
+	Disk               float64  `json:"disk"`
+	DiskInfo           string   `json:"disk_info,omitempty"` // Format: "9.86 GiB / 18.58 GiB"
+	NetInMBps          float64  `json:"net_in_mb_s"`
+	NetOutMBps         float64  `json:"net_out_mb_s"`
+	TotalNetInBytes    uint64   `json:"total_net_in_bytes,omitempty"`  // Total received bytes
+	TotalNetOutBytes   uint64   `json:"total_net_out_bytes,omitempty"` // Total transmitted bytes
 	AgentVersion       string   `json:"agent_version"`
 	Alert              bool     `json:"alert"`
-	Tags               []string `json:"tags,omitempty"` // User-defined tags
+	Tags               []string `json:"tags,omitempty"`   // User-defined tags
 	Secret             string   `json:"secret,omitempty"` // Secret for client authentication (sent by client during registration)
 }
 
@@ -201,7 +247,7 @@ func NewSSEBroker() *SSEBroker {
 func (b *SSEBroker) Subscribe() chan string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	
+
 	ch := make(chan string, 30) // Increased from 10 to 30: allows 30 updates buffering (10 seconds worth at 3s interval)
 	b.clients[ch] = true
 	return ch
@@ -210,7 +256,7 @@ func (b *SSEBroker) Subscribe() chan string {
 func (b *SSEBroker) Unsubscribe(ch chan string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	
+
 	delete(b.clients, ch)
 	close(ch)
 }
@@ -218,7 +264,7 @@ func (b *SSEBroker) Unsubscribe(ch chan string) {
 func (b *SSEBroker) Broadcast(event string) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	
+
 	for ch := range b.clients {
 		select {
 		case ch <- event:
@@ -234,7 +280,7 @@ func broadcastJSON(broker *SSEBroker, eventType string, data map[string]interfac
 	if broker == nil {
 		return
 	}
-	
+
 	// Build event data with type
 	eventData := map[string]interface{}{
 		"type": eventType,
@@ -243,7 +289,7 @@ func broadcastJSON(broker *SSEBroker, eventType string, data map[string]interfac
 	for k, v := range data {
 		eventData[k] = v
 	}
-	
+
 	// Marshal to JSON safely
 	jsonData, err := json.Marshal(eventData)
 	if err != nil {
@@ -251,7 +297,7 @@ func broadcastJSON(broker *SSEBroker, eventType string, data map[string]interfac
 		log.Printf("⚠️  Failed to marshal broadcast event: %v", err)
 		return
 	}
-	
+
 	broker.Broadcast(string(jsonData))
 }
 
@@ -338,7 +384,7 @@ func (c *IPCountryCache) SetFailed(ip string) {
 func (c *IPCountryCache) CleanExpired() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	now := time.Now()
 	removed := 0
 	for ip, entry := range c.cache {
@@ -375,14 +421,14 @@ func buildURL(ip, port string) string {
 func (r *ClientRegistry) Register(id, name, port, ip, ipv6 string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	// IMPORTANT: One client per ID - this ensures a client can only connect to one service
 	// If a client with this ID already exists, we replace it with the new registration
 	// This is the correct behavior: the latest registration wins (handles client restarts, IP changes, etc.)
 	// Note: We don't check IP/Port differences because clients may change IP addresses (e.g., dynamic IP, VPN, etc.)
 	// CRITICAL: Strict ID-based isolation - each ID is managed independently
 	// Registering ID=3 only affects ID=3, never touches ID=4, even if they share the same IP
-	// 
+	//
 	// However, if another client (different ID) is using the same IP/port combination,
 	// and the new registration is from the same physical machine (same IP/port),
 	// we should remove the old registration to prevent confusion.
@@ -402,7 +448,7 @@ func (r *ClientRegistry) Register(id, name, port, ip, ipv6 string) {
 					exactMatch = true
 				}
 			}
-			
+
 			if exactMatch {
 				// Same physical machine registering with a different ID
 				// Remove the old registration to prevent duplicate polling/TCPing
@@ -411,24 +457,24 @@ func (r *ClientRegistry) Register(id, name, port, ip, ipv6 string) {
 			}
 		}
 	}
-	
+
 	// Construct client URLs - prefer IPv4, fallback to IPv6
 	var url, url6 string
-	
+
 	// Build IPv4 URL if available (and not localhost/loopback)
 	if ip != "" && ip != "127.0.0.1" && ip != "localhost" && ip != "::1" {
 		url = buildURL(ip, port)
 	}
-	
+
 	// Build IPv6 URL if available (and not loopback)
 	if ipv6 != "" && ipv6 != "::1" && ipv6 != "localhost" {
 		url6 = buildURL(ipv6, port)
 	}
-	
+
 	// Register or update the client (one client per ID)
 	// Note: It's OK if both URLs are empty - client might be behind NAT
 	// The client will still be tracked, but polling will fail (which is expected)
-	
+
 	// Preserve WorkingURL if client already exists
 	// Always preserve WorkingURL unless URLs actually changed, as it represents a working connection
 	existingClient, exists := r.clients[id]
@@ -456,7 +502,7 @@ func (r *ClientRegistry) Register(id, name, port, ip, ipv6 string) {
 			}
 		}
 	}
-	
+
 	// CRITICAL: Before creating new object, double-check existingClient.WorkingURL
 	// This handles the case where pollClient updated WorkingURL after we first checked
 	// Since we're still holding the lock, we can safely check again
@@ -471,7 +517,7 @@ func (r *ClientRegistry) Register(id, name, port, ip, ipv6 string) {
 			workingURL = existingClient.WorkingURL
 		}
 	}
-	
+
 	r.clients[id] = &ClientInfo{
 		ID:         id,
 		Name:       name,
@@ -482,7 +528,7 @@ func (r *ClientRegistry) Register(id, name, port, ip, ipv6 string) {
 		URL6:       url6,
 		WorkingURL: workingURL,
 	}
-	
+
 	// Log registration details
 	if url == "" && url6 == "" {
 		log.Printf("⚠️  Client %s registered but no valid URL (IPv4=%s, IPv6=%s) - client may be behind NAT", id, ip, ipv6)
@@ -496,7 +542,7 @@ func getServerIP() string {
 		return ""
 	}
 	defer conn.Close()
-	
+
 	// Safe type assertion to prevent panic
 	localAddr := conn.LocalAddr()
 	udpAddr, ok := localAddr.(*net.UDPAddr)
@@ -527,7 +573,7 @@ func (r *ClientRegistry) UpdateWorkingURL(id, workingURL string) {
 func (r *ClientRegistry) GetAll() []*ClientInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	clients := make([]*ClientInfo, 0, len(r.clients))
 	for _, client := range r.clients {
 		clients = append(clients, client)
@@ -544,17 +590,17 @@ func getSharedHTTPClient() *http.Client {
 		// Create a shared HTTP client with optimized connection pooling for cross-continent networks
 		// Configure DialContext to support both IPv4 and IPv6
 		dialer := &net.Dialer{
-			Timeout:   10 * time.Second, // Increased from 5s to 10s for slow connections
+			Timeout:   10 * time.Second,  // Increased from 5s to 10s for slow connections
 			KeepAlive: 120 * time.Second, // Longer keep-alive for connection reuse (like LAN)
 		}
-		
+
 		// Create custom DialContext that supports IPv6
 		dialContext := func(ctx context.Context, network, addr string) (net.Conn, error) {
 			// Try IPv6 first if address contains IPv6 format, otherwise use default
 			// Go's net.Dial will automatically try both IPv4 and IPv6
 			return dialer.DialContext(ctx, network, addr)
 		}
-		
+
 		sharedHTTPClient = &http.Client{
 			Timeout: 20 * time.Second, // Increased from 8s to 20s for high-latency networks (e.g., Australia-Russia ~300ms RTT)
 			Transport: &http.Transport{
@@ -591,10 +637,10 @@ func main() {
 
 	// Initialize SSE broker
 	broker := NewSSEBroker()
-	
+
 	// Initialize client registry
 	clientRegistry := NewClientRegistry()
-	
+
 	// Initialize IP country cache
 	ipCache := NewIPCountryCache()
 
@@ -638,7 +684,7 @@ func main() {
 			http.Error(w, "missing system id", http.StatusBadRequest)
 			return
 		}
-		
+
 		switch r.Method {
 		case http.MethodDelete:
 			handleDeleteMetric(store, broker, clientRegistry, w, r, id)
@@ -701,7 +747,7 @@ func main() {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
-	
+
 	// Auth endpoints
 	mux.HandleFunc("/api/auth/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
@@ -745,32 +791,32 @@ func main() {
 
 	// Start tcping polling with configurable interval
 	go startTCPingPolling(clientRegistry, store)
-	
+
 	// Start cleanup old tcping data every hour
 	go startTCPingCleanup(store)
-	
+
 	// Start IP cache cleanup every hour
 	go startIPCacheCleanup(ipCache)
-	
+
 	// Start TCPing query cache cleanup every 5 minutes
 	go startTCPingCacheCleanup()
-	
+
 	// Check if running in standalone mode or Docker mode
 	standalone := hasEmbeddedFiles()
-	
+
 	var handler http.Handler
-	
+
 	if standalone {
 		// Standalone mode: serve embedded static files
 		log.Printf("🌐 Server listening on %s (standalone mode with embedded frontend)", addr)
 		log.Printf("📁 Frontend files embedded from web/dist")
 		log.Printf("🎉 Access the dashboard at http://localhost%s", addr)
-		
+
 		distFS, err := fs.Sub(webFiles, "web/dist")
 		if err != nil {
 			log.Fatalf("❌ Failed to access embedded files: %v", err)
 		}
-		
+
 		// Create a handler that combines API routes and static files
 		finalHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Try API routes first
@@ -778,13 +824,13 @@ func main() {
 				mux.ServeHTTP(w, r)
 				return
 			}
-			
+
 			// Handle static files
 			path := strings.TrimPrefix(r.URL.Path, "/")
 			if path == "" {
 				path = "index.html"
 			}
-			
+
 			// Try to open the file from embedded FS
 			if f, err := distFS.Open(path); err == nil {
 				// File exists, serve it
@@ -792,14 +838,14 @@ func main() {
 				http.FileServer(http.FS(distFS)).ServeHTTP(w, r)
 				return
 			}
-			
+
 			// File doesn't exist - try directory index.html
 			// For paths like /admin, /login, try opening admin/index.html, login/index.html
 			if filepath.Ext(path) == "" {
 				// Remove trailing slash if present
 				cleanPath := strings.TrimSuffix(path, "/")
 				indexPath := cleanPath + "/index.html"
-				
+
 				if f, err := distFS.Open(indexPath); err == nil {
 					// Directory index.html exists, read and serve it
 					defer f.Close()
@@ -812,7 +858,7 @@ func main() {
 					w.Write(content)
 					return
 				}
-				
+
 				// No directory index, serve root index.html for SPA routing
 				indexFile, err := distFS.Open("index.html")
 				if err != nil {
@@ -820,29 +866,29 @@ func main() {
 					return
 				}
 				defer indexFile.Close()
-				
+
 				content, err := io.ReadAll(indexFile)
 				if err != nil {
 					http.Error(w, "failed to read index.html", http.StatusInternalServerError)
 					return
 				}
-				
+
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Write(content)
 				return
 			}
-			
+
 			// File with extension not found
 			http.NotFound(w, r)
 		})
-		
+
 		handler = corsMiddleware(cdnFriendlyMiddleware(finalHandler))
 	} else {
 		// Docker mode: only serve API (Nginx handles static files)
 		log.Printf("🌐 Backend listening on %s (Docker mode - Nginx serves frontend)", addr)
 		handler = corsMiddleware(cdnFriendlyMiddleware(mux))
 	}
-	
+
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("❌ Server stopped: %v", err)
 	}
@@ -858,12 +904,12 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 	if err == nil && privacyConfig.Enabled {
 		// Privacy mode is enabled, check authentication
 		authenticated := isAuthenticated(r)
-		
+
 		// If not authenticated, check for share token or admin token in query
 		if !authenticated {
 			shareToken := r.URL.Query().Get("token")
 			adminToken := r.URL.Query().Get("admin_token")
-			
+
 			if shareToken != "" {
 				// Verify share token
 				if shareToken == privacyConfig.ShareToken && !privacyConfig.TokenExpires.IsZero() && time.Now().Before(privacyConfig.TokenExpires) {
@@ -879,7 +925,7 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 					authenticated = true
 				}
 			}
-			
+
 			if !authenticated {
 				// No valid authentication or share token, deny access
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -887,7 +933,7 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 			}
 		}
 	}
-	
+
 	// Set headers for SSE with CDN support
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
@@ -936,7 +982,7 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 	if err == nil && privacyConfig.Enabled {
 		// Privacy mode is enabled, check authentication
 		authenticated := isAuthenticated(r)
-		
+
 		// If not authenticated, check for share token
 		if !authenticated {
 			shareToken := r.URL.Query().Get("token")
@@ -948,7 +994,7 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 					authenticated = isAuthenticated(r)
 				}
 			}
-			
+
 			if !authenticated && shareToken != "" {
 				// Verify share token
 				if shareToken == privacyConfig.ShareToken && !privacyConfig.TokenExpires.IsZero() && time.Now().Before(privacyConfig.TokenExpires) {
@@ -966,24 +1012,24 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	
+
 	metrics, err := store.List()
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Mark systems as offline if they haven't updated in the last 5 seconds
 	// This matches the 3-second polling interval with a 2-second buffer for network delays
 	// Also mark as offline if UpdatedAt is zero (newly added systems)
 	now := time.Now().UTC()
 	authenticated := isAuthenticated(r)
-	
+
 	for i := range metrics {
 		// Check if system should be marked as offline based on update time
 		// Use 5 seconds threshold (3s polling + 2s buffer) to ensure accurate status
 		shouldBeOffline := metrics[i].UpdatedAt.IsZero() || now.Sub(metrics[i].UpdatedAt) > 5*time.Second
-		
+
 		// Always calculate Alert based on update time for consistency
 		// This ensures the status is always accurate based on the latest update
 		if shouldBeOffline {
@@ -991,13 +1037,13 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 		} else {
 			metrics[i].Alert = false // Online state
 		}
-		
+
 		// Hide IP addresses if not authenticated (security)
 		if !authenticated {
 			metrics[i].IPv4 = ""
 			metrics[i].IPv6 = ""
 		}
-		
+
 		// CRITICAL SECURITY: Never expose secret to unauthenticated users
 		// For authenticated admin users, return secret so they can generate install commands
 		if !authenticated {
@@ -1005,7 +1051,7 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 		}
 		// Authenticated admin users can see secret for generating install commands
 	}
-	
+
 	writeJSON(w, http.StatusOK, metrics)
 }
 
@@ -1048,12 +1094,12 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 			order = 0
 		}
 	}
-	
+
 	// Determine if this is from admin page (manual add/edit) or from client
 	// Admin page adds/edits systems with no uptime and no real data
 	// Client sends data with uptime > 0 or has real metrics
 	isFromClient := payload.Uptime > 0 || payload.IPv4 != "" || payload.OS != ""
-	
+
 	// SECURITY: Authentication/Authorization
 	// - If from admin page (!isFromClient): require admin authentication
 	// - If from client (isFromClient): verify secret matches database and system exists
@@ -1071,7 +1117,7 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 			http.Error(w, "system not found", http.StatusNotFound)
 			return
 		}
-		
+
 		// Verify secret if configured
 		if existing.Secret != "" {
 			authHeader := r.Header.Get("Authorization")
@@ -1082,7 +1128,7 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 				// Fallback: check query parameter
 				providedSecret = r.URL.Query().Get("secret")
 			}
-			
+
 			if providedSecret != existing.Secret {
 				http.Error(w, "unauthorized: invalid secret", http.StatusUnauthorized)
 				return
@@ -1091,7 +1137,7 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 		// If no secret configured, allow for backward compatibility (but log warning)
 		// This matches the behavior of /metrics endpoint on client
 	}
-	
+
 	if isFromClient {
 		// Client is sending data, system is online - update timestamp
 		updatedAt = time.Now().UTC()
@@ -1100,10 +1146,10 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 		updatedAt = time.Time{}
 	}
 	// If existing system and not from client, preserve existing UpdatedAt
-	
+
 	// Initialize metric with payload values
 	var metric SystemMetric
-	
+
 	if !isFromClient && existing != nil {
 		// Admin page is updating existing system - preserve ALL existing data, only update name and tags
 		metric = *existing
@@ -1135,12 +1181,12 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 				}
 			}
 		}
-		
+
 		// Generate secret for new systems (only if not from client and doesn't exist)
 		if !isFromClient && existing == nil && secret == "" {
 			secret = generateSecret()
 		}
-		
+
 		// Update tags if provided in payload (from admin form)
 		if payload.Tags != nil {
 			tags = payload.Tags
@@ -1204,7 +1250,7 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 			"id": metric.ID,
 		})
 	}
-	
+
 	// CRITICAL SECURITY: Never expose secret in API responses to unauthenticated users
 	// For authenticated admin users, return secret so they can generate install commands
 	responseMetric := metric
@@ -1214,7 +1260,7 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 		responseMetric.Secret = ""
 	}
 	// Authenticated admin users can see secret for generating install commands
-	
+
 	writeJSON(w, http.StatusAccepted, responseMetric)
 }
 
@@ -1224,7 +1270,7 @@ func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistr
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	
+
 	id = strings.TrimSpace(id)
 	if id == "" {
 		http.Error(w, "system id is required", http.StatusBadRequest)
@@ -1242,16 +1288,16 @@ func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistr
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Delete all TCPing history data for this client
 	_ = store.DeleteTCPingResultsByClient(id)
-	
+
 	// Invalidate TCPing cache for this client
 	invalidateTCPingCache(id)
 
 	// Remove client from registry to stop polling
 	registry.Remove(id)
-	
+
 	// Broadcast deletion to all connected clients
 	if broker != nil {
 		// SECURITY: Use JSON marshaling to prevent injection from user-controlled ID
@@ -1259,13 +1305,13 @@ func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistr
 			"id": id,
 		})
 	}
-	
+
 	writeJSON(w, http.StatusOK, map[string]string{"message": "deleted", "id": id})
 }
 
 func handleClientRegister(store *Store, registry *ClientRegistry, w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	
+
 	var payload struct {
 		ID     string `json:"id"`
 		Name   string `json:"name"`
@@ -1274,19 +1320,19 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 		IPv6   string `json:"ipv6,omitempty"`   // IPv6 address
 		Secret string `json:"secret,omitempty"` // Secret for authentication
 	}
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		log.Printf("❌ Client registration failed: invalid JSON payload from %s", r.RemoteAddr)
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 		return
 	}
-	
+
 	if strings.TrimSpace(payload.ID) == "" {
 		log.Printf("❌ Client registration failed: missing ID")
 		http.Error(w, "id is required", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Verify that the server ID exists in the database
 	existing, err := store.Get(payload.ID)
 	if err != nil || existing == nil {
@@ -1294,7 +1340,7 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 		http.Error(w, fmt.Sprintf("server id '%s' not found in database. Please add the server in admin page first", payload.ID), http.StatusNotFound)
 		return
 	}
-	
+
 	// Verify secret if it's set in the database
 	if existing.Secret != "" {
 		if payload.Secret == "" {
@@ -1308,7 +1354,7 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 			return
 		}
 	}
-	
+
 	// Check if there's already a client registered with this ID
 	// If yes, verify it's the same client (same IP/port) or reject the new registration
 	existingRegisteredClient := registry.Get(payload.ID)
@@ -1316,13 +1362,13 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 		// There's already a client registered with this ID
 		// Check if it's the same client (same IP and port) or a different one
 		isSameClient := false
-		
+
 		// Normalize IPs for comparison (handle IPv4/IPv6)
 		newIPv4 := payload.IP
 		newIPv6 := payload.IPv6
 		existingIPv4 := existingRegisteredClient.IP
 		existingIPv6 := existingRegisteredClient.IPv6
-		
+
 		// Check if it's the same client by comparing IPs and port
 		if payload.Port == existingRegisteredClient.Port {
 			// Port matches, check IPs
@@ -1338,30 +1384,30 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 				isSameClient = true
 			}
 		}
-		
+
 		if !isSameClient {
 			// Different client trying to register with the same ID
-			log.Printf("❌ Client registration failed: ID '%s' is already registered by another client (existing: IPv4=%s, IPv6=%s, Port=%s; new: IPv4=%s, IPv6=%s, Port=%s)", 
+			log.Printf("❌ Client registration failed: ID '%s' is already registered by another client (existing: IPv4=%s, IPv6=%s, Port=%s; new: IPv4=%s, IPv6=%s, Port=%s)",
 				payload.ID, existingIPv4, existingIPv6, existingRegisteredClient.Port, newIPv4, newIPv6, payload.Port)
 			http.Error(w, fmt.Sprintf("client ID '%s' is already registered by another client. Please use a different ID or disconnect the existing client first", payload.ID), http.StatusConflict)
 			return
 		}
-		
+
 		// Same client re-registering (e.g., after restart or IP change)
 		// Silent re-registration - no log needed for normal operation
 	}
-	
+
 	// IMPORTANT: For client registration, we should trust the client's reported IP addresses
 	// The client knows its own public IPs better than we can detect from the connection
 	// This is especially important when:
 	// 1. Client is behind NAT (connection IP is not the client's public IP)
 	// 2. Client connects through proxy/load balancer (RemoteAddr is proxy IP)
 	// 3. Client has both IPv4 and IPv6 (we need both for proper fallback)
-	
+
 	// Use IPv4 and IPv6 directly from payload (client reports its own IPs)
 	ip := payload.IP
 	ipv6 := payload.IPv6
-	
+
 	// Only use connection IP as fallback if payload IP is missing or invalid
 	// This handles edge cases where client doesn't report its IP
 	if ip == "" || ip == "127.0.0.1" || ip == "localhost" {
@@ -1370,7 +1416,7 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 		if ip == "" {
 			ip = r.Header.Get("X-Real-IP")
 		}
-		
+
 		// If not in headers, get from connection
 		if ip == "" {
 			// Parse RemoteAddr (format: "IP:PORT" or "[IP]:PORT" for IPv6)
@@ -1393,19 +1439,19 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 				}
 			}
 		}
-		
+
 		// Clean up IP (take first if comma-separated, remove whitespace)
 		if idx := strings.Index(ip, ","); idx > 0 {
 			ip = strings.TrimSpace(ip[:idx])
 		}
 		ip = strings.TrimSpace(ip)
-		
+
 		// If connection IP is still localhost, clear it
 		if ip == "127.0.0.1" || ip == "localhost" || ip == "::1" {
 			ip = ""
 		}
 	}
-	
+
 	// Validate IPv4: if it's not a valid IPv4, clear it
 	if ip != "" {
 		parsedIP := net.ParseIP(ip)
@@ -1423,7 +1469,7 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 			ip = ""
 		}
 	}
-	
+
 	// Validate IPv6: if it's not a valid IPv6, clear it
 	if ipv6 != "" {
 		parsedIP := net.ParseIP(ipv6)
@@ -1434,12 +1480,12 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 	}
 
 	registry.Register(payload.ID, payload.Name, payload.Port, ip, ipv6)
-	
+
 	// Update secret in registry cache (optimization: avoid DB lookups during polling)
 	if client := registry.Get(payload.ID); client != nil {
 		client.Secret = existing.Secret
 	}
-	
+
 	// CDN-friendly: ensure registration response is not cached
 	// This is critical for client registration which happens frequently
 	writeJSON(w, http.StatusOK, map[string]string{"message": "registered", "id": payload.ID})
@@ -1453,25 +1499,25 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 	globalClientRegistry = registry
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
-	
+
 	// Track consecutive failures for each client - MUST use mutex for concurrent access
 	var failureCountMu sync.RWMutex
 	failureCount := make(map[string]int)
 	const maxFailures = 30 // Remove from registry after 30 consecutive failures (90 seconds) - very tolerant for cross-continent networks (e.g., Australia-Russia)
-	
+
 	// Track cleanup cycle for failureCount (cleanup every 100 ticks ≈ 5 minutes)
 	cleanupCounter := 0
 	const cleanupInterval = 100
-	
+
 	for {
 		tickTime := <-ticker.C
-		
+
 		// Periodically cleanup failureCount for clients no longer in registry
 		// This prevents memory leak when systems are deleted via admin page
 		cleanupCounter++
 		if cleanupCounter >= cleanupInterval {
 			cleanupCounter = 0
-			
+
 			// Collect IDs that are in failureCount but not in registry
 			failureCountMu.Lock()
 			for id := range failureCount {
@@ -1482,7 +1528,7 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 			}
 			failureCountMu.Unlock()
 		}
-		
+
 		clients := registry.GetAll()
 		if len(clients) == 0 {
 			// Still broadcast even if no clients to maintain stable interval
@@ -1491,13 +1537,13 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 			}
 			continue
 		}
-		
+
 		// Use WaitGroup with timeout pattern
 		var wg sync.WaitGroup
 		// Use mutex-protected slice to collect results safely
 		var mu sync.Mutex
 		var updatedClientIDs []string
-		
+
 		// Poll all clients in parallel - skip health check to avoid blocking
 		// Health checks can be slow and cause false negatives, so we poll directly
 		// This ensures we always try to get data, even if health check would fail
@@ -1506,27 +1552,27 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 			if client == nil || client.ID == "" || (client.URL == "" && client.URL6 == "") {
 				continue
 			}
-			
+
 			// Registry already maintains consistency with database:
 			// - Clients are added when they register (POST /api/clients/register)
 			// - Clients are removed when systems are deleted (handleDeleteMetric)
 			// - No need to verify existence on every poll (reduces DB load by 33 queries/sec)
 			// Note: If a client somehow gets out of sync, it will be removed after maxFailures
-			
+
 			wg.Add(1)
 			go func(c *ClientInfo) {
 				defer wg.Done()
-				
+
 				// Additional safety check inside goroutine
 				// Must have at least one URL (IPv4 or IPv6)
 				if c == nil || c.ID == "" || (c.URL == "" && c.URL6 == "") {
 					return
 				}
-				
+
 				// Try to poll client directly - this is faster and more reliable than health check
 				// pollClient has its own timeout (8s) which is sufficient for cross-continent networks
 				updated := pollClient(store, c, ipCache)
-				
+
 				if updated {
 					// Polling succeeded, reset failure count
 					failureCountMu.Lock()
@@ -1534,7 +1580,7 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 						delete(failureCount, c.ID)
 					}
 					failureCountMu.Unlock()
-					
+
 					mu.Lock()
 					updatedClientIDs = append(updatedClientIDs, c.ID)
 					mu.Unlock()
@@ -1544,7 +1590,7 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 					failureCount[c.ID]++
 					currentCount := failureCount[c.ID]
 					failureCountMu.Unlock()
-					
+
 					// Only mark as offline after 2 consecutive failures to avoid false negatives
 					// This prevents temporary network glitches from causing false offline status
 					if currentCount >= 2 {
@@ -1552,7 +1598,7 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 						if currentCount == 2 {
 							go markSystemAsOffline(store, broker, c.ID)
 						}
-						
+
 						// Remove from registry after max failures to stop polling
 						if currentCount >= maxFailures {
 							registry.Remove(c.ID)
@@ -1564,7 +1610,7 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 				}
 			}(client)
 		}
-		
+
 		// Wait with timeout - don't wait for slow clients
 		// Use a channel to detect when WaitGroup is done
 		done := make(chan struct{})
@@ -1572,7 +1618,7 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 			wg.Wait()
 			close(done)
 		}()
-		
+
 		// Wait for polling to complete (with timeout) and then schedule broadcast at fixed time
 		// This ensures broadcasts happen at consistent intervals regardless of polling completion time
 		go func() {
@@ -1585,7 +1631,7 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 				// Slow clients will complete in background and update DB
 				// Their data will be included in next broadcast
 			}
-			
+
 			// Calculate time elapsed since tick to ensure stable 3-second intervals
 			elapsed := time.Since(tickTime)
 			remainingTime := 2900*time.Millisecond - elapsed
@@ -1594,14 +1640,14 @@ func startClientPolling(store *Store, broker *SSEBroker, registry *ClientRegistr
 				time.Sleep(remainingTime)
 			}
 			// If already past 2.9 seconds, broadcast immediately (shouldn't happen in normal operation)
-			
+
 			// Broadcast all updates at once
 			// Always broadcast every 3 seconds to ensure frontend gets updates even if no data changed
 			// This maintains the 3-second update frequency for all metrics (except TCPing)
 			mu.Lock()
 			count := len(updatedClientIDs)
 			mu.Unlock()
-			
+
 			// Always broadcast to maintain 3-second update frequency
 			// Frontend will check if data actually changed and update accordingly
 			if broker != nil {
@@ -1623,23 +1669,23 @@ func markSystemAsOffline(store *Store, broker *SSEBroker, systemID string) {
 	if store == nil || broker == nil || systemID == "" {
 		return
 	}
-	
+
 	existing, err := store.Get(systemID)
 	if err != nil || existing == nil {
 		return // System doesn't exist, nothing to update
 	}
-	
+
 	// Only update if system is currently marked as online
 	if !existing.Alert {
 		// Mark as offline and set UpdatedAt to 11 seconds ago
 		// This ensures handleListMetrics will correctly detect it as offline
-		existing.Alert = true // Mark as offline/paused
+		existing.Alert = true                                        // Mark as offline/paused
 		existing.UpdatedAt = time.Now().UTC().Add(-11 * time.Second) // Set to past to trigger offline detection
-		
+
 		if err := store.Upsert(*existing); err != nil {
 			return
 		}
-		
+
 		// DO NOT broadcast here - let the polling loop handle all broadcasts
 		// This ensures stable 3-second update frequency without interruptions
 		// The offline status will be included in the next regular broadcast from startClientPolling
@@ -1653,15 +1699,15 @@ func isClientConnected(client *ClientInfo) bool {
 	if client == nil {
 		return false
 	}
-	
+
 	// Must have at least one URL (IPv4 or IPv6)
 	if client.URL == "" && client.URL6 == "" {
 		return false
 	}
-	
+
 	// Use shared HTTP client for connection reuse
 	httpClient := getSharedHTTPClient()
-	
+
 	// Retry health check up to 2 times with shorter timeout to avoid blocking
 	// This prevents false negatives from temporary network glitches
 	maxRetries := 2
@@ -1669,7 +1715,7 @@ func isClientConnected(client *ClientInfo) bool {
 		// Use shorter timeout for health check (5s) to avoid blocking polling
 		// If health check fails, we'll retry once more
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		
+
 		// Build URL list: prioritize working URL if available
 		// CRITICAL: If WorkingURL is set (especially if it's IPv6), use ONLY that URL
 		// This ensures that once IPv6 connection succeeds, we never try IPv4 again
@@ -1688,7 +1734,7 @@ func isClientConnected(client *ClientInfo) bool {
 				urls = append(urls, client.URL6)
 			}
 		}
-		
+
 		var resp *http.Response
 		var err error
 		var successfulURL string
@@ -1699,12 +1745,12 @@ func isClientConnected(client *ClientInfo) bool {
 			if reqErr != nil {
 				continue
 			}
-			
+
 			// Set proper headers for connection reuse
 			req.Header.Set("User-Agent", "PulseMonitor/1.0")
 			req.Header.Set("Connection", "keep-alive")
 			req.Header.Set("Accept", "*/*")
-			
+
 			resp, err = httpClient.Do(req)
 			if err == nil && resp.StatusCode == http.StatusOK {
 				successfulURL = url
@@ -1731,21 +1777,21 @@ func isClientConnected(client *ClientInfo) bool {
 			}
 			resp = nil
 		}
-		
+
 		cancel() // ✅ Always cancel context after each attempt
-		
+
 		// If this is not the last attempt, retry
 		if attempt < maxRetries-1 {
 			time.Sleep(100 * time.Millisecond) // Brief delay before retry
 			continue
 		}
-		
+
 		// Health check failed after all retries
 		// Don't clear WorkingURL here - let the polling loop handle it
 		// This prevents clearing WorkingURL due to temporary health check failures
 		return false
 	}
-	
+
 	// This should never be reached, but required by Go compiler
 	return false
 }
@@ -1758,25 +1804,25 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	if store == nil || ipCache == nil {
 		return false
 	}
-	
+
 	// Must have at least one URL (IPv4 or IPv6)
 	if client.URL == "" && client.URL6 == "" {
 		return false
 	}
-	
+
 	// Use shared HTTP client for connection reuse and efficiency
 	httpClient := getSharedHTTPClient()
 	if httpClient == nil {
 		return false
 	}
-	
+
 	// Create request with context for timeout control
 	// Use longer timeout (15s) for cross-continent networks (e.g., China to overseas)
 	// This is important for high-latency networks where RTT can be 200-400ms
 	// The polling loop waits up to 2.8s, but slow clients will complete in background
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second) // Increased to 15s for cross-continent networks
 	defer cancel()
-	
+
 	// Build URL list: prioritize working URL if available
 	// CRITICAL: If WorkingURL is set (especially if it's IPv6), use ONLY that URL
 	// This ensures that once IPv6 connection succeeds, we never try IPv4 again
@@ -1795,10 +1841,10 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 			urls = append(urls, client.URL6)
 		}
 	}
-	
+
 	// Get secret from client registry cache (optimized: no DB lookup)
 	secret := client.Secret
-	
+
 	var resp *http.Response
 	var err error
 	var successfulURL string
@@ -1810,18 +1856,18 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 			// Silent failure - request creation errors are rare
 			continue
 		}
-		
+
 		// Set proper headers for connection reuse and efficiency
 		req.Header.Set("User-Agent", "PulseMonitor/1.0")
 		req.Header.Set("Connection", "keep-alive")
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Accept-Encoding", "gzip, deflate") // Enable compression
-		
+
 		// Security: Add secret to Authorization header if configured
 		if secret != "" {
 			req.Header.Set("Authorization", "Bearer "+secret)
 		}
-		
+
 		resp, err = httpClient.Do(req)
 		if err == nil && resp.StatusCode == http.StatusOK {
 			successfulURL = url
@@ -1841,7 +1887,7 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 		}
 		resp = nil
 	}
-	
+
 	if resp == nil {
 		// All URLs failed, clear working URL only if it was in the failed list
 		// Don't clear if WorkingURL wasn't tried (e.g., if it was removed during registration)
@@ -1866,11 +1912,11 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 		return false
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return false
 	}
-	
+
 	// Update working URL if we successfully connected
 	// CRITICAL: Always update WorkingURL when we successfully connect, even if it's the same
 	// This ensures WorkingURL is preserved across registrations
@@ -1886,18 +1932,18 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 			globalClientRegistry.UpdateWorkingURL(client.ID, successfulURL)
 		}
 	}
-	
+
 	var payload metricPayload
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return false
 	}
-	
+
 	// Get location from IP if not provided
 	// Try IPv4 first, then IPv6 as fallback
 	if payload.Location == "" {
 		var country string
 		var found bool
-		
+
 		// Try IPv4 first
 		if payload.IPv4 != "" {
 			if country, found = ipCache.Get(payload.IPv4); found {
@@ -1917,7 +1963,7 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 				}
 			}
 		}
-		
+
 		// If IPv4 lookup failed or IPv4 is empty, try IPv6
 		if payload.Location == "" && payload.IPv6 != "" {
 			if country, found = ipCache.Get(payload.IPv6); found {
@@ -1941,10 +1987,10 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 		// Ensure location is only country
 		payload.Location = extractCountry(payload.Location)
 	}
-	
+
 	// Format uptime for display
 	timeDisplay := formatUptime(payload.Uptime)
-	
+
 	// Get existing system to preserve order, name, tags, and secret from database
 	var existing *SystemMetric
 	existing, _ = store.Get(client.ID)
@@ -1968,13 +2014,13 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 			}
 		}
 	}
-	
+
 	// Check if system was previously offline and is now back online
 	wasOffline := false
 	if existing != nil && existing.Alert {
 		wasOffline = true
 	}
-	
+
 	// Client is sending data, so system is definitely online
 	// Set Alert to false (online) and update timestamp
 	// CRITICAL: Always preserve Tags and Secret from database - client should never override these
@@ -1988,33 +2034,33 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 		VirtualizationType: payload.VirtualizationType,
 		OS:                 payload.OS,
 		OSIcon:             payload.OSIcon,
-		CPU:          payload.CPU,
-		CPUModel:     payload.CPUModel,
-		Memory:       payload.Memory,
-		MemoryInfo:   payload.MemoryInfo,
-		SwapInfo:     payload.SwapInfo,
-		Disk:            payload.Disk,
-		DiskInfo:        payload.DiskInfo,
-		NetInMBps:       payload.NetInMBps,
-		NetOutMBps:      payload.NetOutMBps,
-		TotalNetInBytes: payload.TotalNetInBytes,
-		TotalNetOutBytes: payload.TotalNetOutBytes,
-		AgentVersion:    payload.AgentVersion,
-		Order:           order,
-		Alert:           false, // Client is sending data, so system is online
-		UpdatedAt:    time.Now().UTC(),
-		TCPingData:   tcpingData,
-		Tags:         tags,   // CRITICAL: Preserve tags from database
-		Secret:       secret, // CRITICAL: Preserve secret from database
+		CPU:                payload.CPU,
+		CPUModel:           payload.CPUModel,
+		Memory:             payload.Memory,
+		MemoryInfo:         payload.MemoryInfo,
+		SwapInfo:           payload.SwapInfo,
+		Disk:               payload.Disk,
+		DiskInfo:           payload.DiskInfo,
+		NetInMBps:          payload.NetInMBps,
+		NetOutMBps:         payload.NetOutMBps,
+		TotalNetInBytes:    payload.TotalNetInBytes,
+		TotalNetOutBytes:   payload.TotalNetOutBytes,
+		AgentVersion:       payload.AgentVersion,
+		Order:              order,
+		Alert:              false, // Client is sending data, so system is online
+		UpdatedAt:          time.Now().UTC(),
+		TCPingData:         tcpingData,
+		Tags:               tags,   // CRITICAL: Preserve tags from database
+		Secret:             secret, // CRITICAL: Preserve secret from database
 	}
-	
+
 	// If system was offline and is now online, log the reconnection
 	_ = wasOffline // Can be used for notifications in the future
-	
+
 	if err := store.Upsert(metric); err != nil {
 		return false
 	}
-	
+
 	// Update secret in registry cache if it changed (optimization: keep cache in sync)
 	if existing != nil && existing.Secret != "" {
 		if c := globalClientRegistry.Get(client.ID); c != nil && c.Secret != existing.Secret {
@@ -2032,7 +2078,7 @@ func isPrivateIP(ip net.IP) bool {
 	if ip == nil {
 		return true
 	}
-	
+
 	// Check IPv4 private ranges
 	if ip4 := ip.To4(); ip4 != nil {
 		// Loopback: 127.0.0.0/8
@@ -2061,7 +2107,7 @@ func isPrivateIP(ip net.IP) bool {
 		}
 		return false
 	}
-	
+
 	// Check IPv6 private ranges
 	// Loopback: ::1
 	if ip.IsLoopback() {
@@ -2087,7 +2133,7 @@ func isPrivateIP(ip net.IP) bool {
 		ipv4 := net.IP(ip[12:16])
 		return isPrivateIP(ipv4)
 	}
-	
+
 	return false
 }
 
@@ -2098,25 +2144,25 @@ func getCountryFromIP(ip string) string {
 	if ip == "" {
 		return ""
 	}
-	
+
 	// Check if it's a private/local IP
 	parsedIP := net.ParseIP(ip)
 	if parsedIP == nil {
 		return ""
 	}
-	
+
 	// Skip private/local IPs (IPv4 and IPv6)
 	// Note: Go 1.15 doesn't have IsPrivate(), so we check manually
 	if isPrivateIP(parsedIP) {
 		return ""
 	}
-	
+
 	// Use shared HTTP client for connection reuse
 	httpClient := getSharedHTTPClient()
 	if httpClient == nil {
 		return ""
 	}
-	
+
 	// Try multiple services with fallback for better reliability
 	// Priority: ipinfo.io first (most accurate), then fallback to others
 	// Some services may be blocked in China, so we try multiple options
@@ -2219,26 +2265,26 @@ func getCountryFromIP(ip string) string {
 			},
 		},
 	}
-	
+
 	// Try each service with retry mechanism
 	maxRetries := 2
 	for _, service := range services {
 		for attempt := 0; attempt < maxRetries; attempt++ {
 			// Use longer timeout for cross-continent networks (15 seconds)
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			
+
 			req, err := http.NewRequestWithContext(ctx, "GET", service.url, nil)
 			if err != nil {
 				cancel() // ✅ Cancel context on error
-				break // Try next service
+				break    // Try next service
 			}
-			
+
 			req.Header.Set("User-Agent", "PulseMonitor/1.0")
 			req.Header.Set("Accept", "application/json")
-			
+
 			resp, err := httpClient.Do(req)
 			cancel() // ✅ Always cancel context immediately after request completes
-			
+
 			if err != nil {
 				// Network error - retry if not last attempt
 				if attempt < maxRetries-1 {
@@ -2247,7 +2293,7 @@ func getCountryFromIP(ip string) string {
 				}
 				break // Try next service
 			}
-			
+
 			// Handle rate limiting (429 Too Many Requests)
 			if resp.StatusCode == http.StatusTooManyRequests {
 				resp.Body.Close()
@@ -2255,7 +2301,7 @@ func getCountryFromIP(ip string) string {
 				time.Sleep(1 * time.Second)
 				break // Try next service
 			}
-			
+
 			if resp.StatusCode == http.StatusOK {
 				country := service.parser(resp)
 				resp.Body.Close()
@@ -2271,7 +2317,7 @@ func getCountryFromIP(ip string) string {
 			}
 		}
 	}
-	
+
 	return ""
 }
 
@@ -2280,7 +2326,7 @@ func extractCountry(location string) string {
 	if location == "" {
 		return ""
 	}
-	
+
 	// If location contains comma, take the last part (usually country)
 	parts := strings.Split(location, ",")
 	if len(parts) > 0 {
@@ -2292,7 +2338,7 @@ func extractCountry(location string) string {
 		}
 		return country
 	}
-	
+
 	return strings.TrimSpace(location)
 }
 
@@ -2314,30 +2360,30 @@ func handleUpdateOrder(store *Store, broker *SSEBroker, w http.ResponseWriter, r
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	
+
 	defer r.Body.Close()
-	
+
 	var payload struct {
 		Order []string `json:"order"` // Array of system IDs in desired order
 	}
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 		return
 	}
-	
+
 	if len(payload.Order) == 0 {
 		http.Error(w, "order array is required", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Update order for each system
 	for i, id := range payload.Order {
 		system, err := store.Get(id)
 		if err != nil || system == nil {
 			continue
 		}
-		
+
 		system.Order = i
 		if err := store.Upsert(*system); err != nil {
 			continue
@@ -2351,7 +2397,7 @@ func handleUpdateOrder(store *Store, broker *SSEBroker, w http.ResponseWriter, r
 			"count": len(payload.Order),
 		})
 	}
-	
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "order updated",
 		"count":   len(payload.Order),
@@ -2432,7 +2478,7 @@ func formatUptime(seconds int64) string {
 // TCPingResultPayload represents the payload from client
 type TCPingResultPayload struct {
 	ClientID string  `json:"client_id"`
-	Target   string  `json:"target"`   // Target address (e.g., "8.8.8.8:53")
+	Target   string  `json:"target"` // Target address (e.g., "8.8.8.8:53")
 	Latency  float64 `json:"latency"`
 	Success  bool    `json:"success"`
 	Error    string  `json:"error,omitempty"`
@@ -2453,19 +2499,19 @@ func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 		return
 	}
-	
+
 	if payload.ClientID == "" {
 		http.Error(w, "client_id is required", http.StatusBadRequest)
 		return
 	}
-	
+
 	// SECURITY: Verify that the client_id exists and verify secret if configured
 	existing, err := store.Get(payload.ClientID)
 	if err != nil || existing == nil {
 		http.Error(w, "client not found", http.StatusNotFound)
 		return
 	}
-	
+
 	// If secret is configured in database, require authentication
 	if existing.Secret != "" {
 		authHeader := r.Header.Get("Authorization")
@@ -2476,13 +2522,13 @@ func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 			// Fallback: check query parameter
 			providedSecret = r.URL.Query().Get("secret")
 		}
-		
+
 		if providedSecret != existing.Secret {
 			http.Error(w, "unauthorized: invalid secret", http.StatusUnauthorized)
 			return
 		}
 	}
-	
+
 	// Save result regardless of success/failure (nil latency for failures)
 	var latency *float64
 	if payload.Success {
@@ -2490,19 +2536,19 @@ func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 	} else {
 		latency = nil // nil indicates timeout/failure
 	}
-	
+
 	result := TCPingResult{
 		ClientID:  payload.ClientID,
 		Target:    payload.Target,
 		Latency:   latency,
 		Timestamp: time.Now().UTC(),
 	}
-	
+
 	if err := store.SaveTCPingResult(result); err != nil {
 		http.Error(w, "failed to save result", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Invalidate cache for this client to ensure data freshness
 	invalidateTCPingCache(payload.ClientID)
 
@@ -2534,7 +2580,7 @@ func handleGetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request)
 			}
 		}
 	}
-	
+
 	config, err := store.GetTCPingConfig()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to get config: %v", err), http.StatusInternalServerError)
@@ -2568,45 +2614,54 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 			}
 		}
 	}
-	
+
 	clientID := r.URL.Query().Get("client_id")
 	target := r.URL.Query().Get("target")
-	
+
 	if clientID == "" {
 		http.Error(w, "client_id is required", http.StatusBadRequest)
 		return
 	}
-	
+
 	var results []TCPingResult
-	
+
 	// If no specific target is requested, try to get from cache first
 	// Cache is only used when requesting all targets (no target parameter)
 	if target == "" {
-		if cachedResults, found := getCachedTCPingResults(clientID); found {
-			// Cache hit - return cached results immediately
-			writeJSON(w, http.StatusOK, cachedResults)
+		if cachedResponse, found := getCachedTCPingResults(clientID); found {
+			// Cache hit - return cached results with pre-calculated statistics immediately
+			writeJSON(w, http.StatusOK, cachedResponse)
 			return
 		}
 	}
-	
+
 	// Cache miss or specific target requested - query database
 	if target != "" {
 		results, err = store.GetTCPingResults(clientID, target)
 	} else {
 		results, err = store.GetTCPingResults(clientID)
 	}
-	
+
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to get history: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
-	// Cache the results if we fetched all targets (no specific target filter)
-	if target == "" {
-		cacheTCPingResults(clientID, results)
+
+	// Calculate statistics from results
+	stats := calculateTCPingStats(results)
+
+	// Build response with statistics
+	response := TCPingHistoryResponse{
+		Results: results,
+		Stats:   stats,
 	}
-	
-	writeJSON(w, http.StatusOK, results)
+
+	// Cache the response if we fetched all targets (no specific target filter)
+	if target == "" {
+		cacheTCPingResults(clientID, response)
+	}
+
+	writeJSON(w, http.StatusOK, response)
 }
 
 // Handle get navbar config
@@ -2626,24 +2681,24 @@ func handleSetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	
+
 	defer r.Body.Close()
 	var config NavbarConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Validate config
 	if config.Text == "" {
 		config.Text = "Pulse" // Default to "Pulse" if empty
 	}
-	
+
 	if err := store.SaveNavbarConfig(&config); err != nil {
 		http.Error(w, fmt.Sprintf("failed to save navbar config: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	writeJSON(w, http.StatusOK, map[string]string{"message": "navbar config saved"})
 }
 
@@ -2653,16 +2708,16 @@ func handleGetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request
 		http.Error(w, fmt.Sprintf("failed to get privacy config: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Check if user is authenticated - only authenticated users can see share_token
 	authenticated := isAuthenticated(r)
-	
+
 	// Convert TokenExpires to RFC3339 string for JSON serialization
 	configResponse := map[string]interface{}{
-		"enabled":           config.Enabled,
-		"server_time":       time.Now().Format(time.RFC3339), // Include server time for client to calculate time difference
+		"enabled":     config.Enabled,
+		"server_time": time.Now().Format(time.RFC3339), // Include server time for client to calculate time difference
 	}
-	
+
 	// Only include share_token and expiration info if authenticated
 	if authenticated {
 		configResponse["share_token"] = config.ShareToken
@@ -2682,7 +2737,7 @@ func handleGetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request
 		configResponse["token_expires"] = ""
 		configResponse["token_expired"] = false
 	}
-	
+
 	writeJSON(w, http.StatusOK, configResponse)
 }
 
@@ -2691,25 +2746,25 @@ func handleSetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	
+
 	defer r.Body.Close()
 	var payload struct {
-		Enabled      bool   `json:"enabled"`
-		ShareToken   string `json:"share_token"`
-		TokenExpires string `json:"token_expires"` // ISO 8601 string or empty
-		ExpiresInSeconds int `json:"expires_in_seconds"` // Alternative: seconds from now
+		Enabled          bool   `json:"enabled"`
+		ShareToken       string `json:"share_token"`
+		TokenExpires     string `json:"token_expires"`      // ISO 8601 string or empty
+		ExpiresInSeconds int    `json:"expires_in_seconds"` // Alternative: seconds from now
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 		return
 	}
-	
+
 	config := PrivacyConfig{
 		Enabled:          payload.Enabled,
 		ShareToken:       payload.ShareToken,
 		ExpiresInSeconds: payload.ExpiresInSeconds, // Save the expiration seconds value
 	}
-	
+
 	// Calculate expiration time on server side
 	if payload.ShareToken != "" {
 		if payload.ExpiresInSeconds > 0 {
@@ -2730,19 +2785,19 @@ func handleSetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request
 		config.TokenExpires = time.Time{}
 		config.ExpiresInSeconds = 0
 	}
-	
+
 	if err := store.SavePrivacyConfig(&config); err != nil {
 		http.Error(w, fmt.Sprintf("failed to save privacy config: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Return the saved config with server-calculated expiration time
 	// Convert TokenExpires to RFC3339 string for JSON serialization
 	configResponse := map[string]interface{}{
-		"enabled":           config.Enabled,
-		"share_token":       config.ShareToken,
-		"expires_in_seconds": config.ExpiresInSeconds, // Include saved expiration seconds value
-		"server_time":       time.Now().Format(time.RFC3339), // Include server time for client to calculate time difference
+		"enabled":            config.Enabled,
+		"share_token":        config.ShareToken,
+		"expires_in_seconds": config.ExpiresInSeconds,         // Include saved expiration seconds value
+		"server_time":        time.Now().Format(time.RFC3339), // Include server time for client to calculate time difference
 	}
 	if !config.TokenExpires.IsZero() {
 		configResponse["token_expires"] = config.TokenExpires.Format(time.RFC3339)
@@ -2752,7 +2807,7 @@ func handleSetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request
 		configResponse["token_expires"] = ""
 		configResponse["token_expired"] = false
 	}
-	
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "privacy config saved",
 		"config":  configResponse,
@@ -2768,31 +2823,31 @@ func handleVerifyShareToken(store *Store, w http.ResponseWriter, r *http.Request
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 		return
 	}
-	
+
 	config, err := store.GetPrivacyConfig()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to get privacy config: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Check if privacy is enabled
 	if !config.Enabled {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "reason": "privacy_not_enabled"})
 		return
 	}
-	
+
 	// Check if token matches
 	if config.ShareToken == "" || config.ShareToken != payload.Token {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "reason": "invalid_token"})
 		return
 	}
-	
+
 	// Check if token is expired
 	if !config.TokenExpires.IsZero() && time.Now().After(config.TokenExpires) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "reason": "token_expired"})
 		return
 	}
-	
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{"valid": true})
 }
 
@@ -2802,14 +2857,14 @@ func handleSetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	
+
 	defer r.Body.Close()
 	var config TCPingConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Validate config
 	if config.IntervalSecs < 1 {
 		http.Error(w, "interval_secs must be at least 1", http.StatusBadRequest)
@@ -2817,7 +2872,7 @@ func handleSetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request)
 	}
 	// Allow empty targets list (default state)
 	// Empty targets means tcping is disabled
-	
+
 	// SECURITY: Validate target format with enhanced checks
 	// - Check length to prevent DoS attacks
 	// - Validate format (host:port)
@@ -2828,54 +2883,54 @@ func handleSetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request)
 			http.Error(w, "target name is required", http.StatusBadRequest)
 			return
 		}
-		
+
 		// Validate name length
 		if len(target.Name) > 100 {
 			http.Error(w, fmt.Sprintf("target name too long (max 100 characters) for target: %s", target.Name), http.StatusBadRequest)
 			return
 		}
-		
+
 		if target.Address == "" {
 			http.Error(w, fmt.Sprintf("target address is required for target: %s", target.Name), http.StatusBadRequest)
 			return
 		}
-		
+
 		// Validate address length (RFC 1035: Domain names limited to 255 characters)
 		address := strings.TrimSpace(target.Address)
 		if len(address) > 255 {
 			http.Error(w, fmt.Sprintf("target address too long for target: %s", target.Name), http.StatusBadRequest)
 			return
 		}
-		
+
 		// Must contain ":" to separate host and port
 		if !strings.Contains(address, ":") {
 			http.Error(w, fmt.Sprintf("invalid target format: %s (expected format: host:port) for target: %s", address, target.Name), http.StatusBadRequest)
 			return
 		}
-		
+
 		// Split host and port
 		parts := strings.SplitN(address, ":", 2)
 		if len(parts) != 2 {
 			http.Error(w, fmt.Sprintf("invalid target format: %s (expected format: host:port) for target: %s", address, target.Name), http.StatusBadRequest)
 			return
 		}
-		
+
 		host := strings.TrimSpace(parts[0])
 		portStr := strings.TrimSpace(parts[1])
-		
+
 		// Validate host is not empty
 		if host == "" {
 			http.Error(w, fmt.Sprintf("target host cannot be empty for target: %s", target.Name), http.StatusBadRequest)
 			return
 		}
-		
+
 		// Validate port is a number and in valid range (1-65535)
 		port, err := strconv.Atoi(portStr)
 		if err != nil || port < 1 || port > 65535 {
 			http.Error(w, fmt.Sprintf("invalid port number (must be 1-65535) for target: %s", target.Name), http.StatusBadRequest)
 			return
 		}
-		
+
 		// Additional validation: check for common injection patterns
 		// Allow valid characters for hostnames and IP addresses
 		// Hostname regex: alphanumeric, dots, hyphens, brackets (for IPv6)
@@ -2885,7 +2940,7 @@ func handleSetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	
+
 	// Get old config to compare targets
 	oldConfig, err := store.GetTCPingConfig()
 	if err == nil && oldConfig != nil {
@@ -2894,28 +2949,28 @@ func handleSetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request)
 		for _, t := range oldConfig.Targets {
 			oldTargets[t.Address] = true
 		}
-		
+
 		newTargets := make(map[string]bool)
 		for _, t := range config.Targets {
 			newTargets[t.Address] = true
 		}
-		
+
 		// Delete data for removed targets
 		for oldTarget := range oldTargets {
 			if !newTargets[oldTarget] {
 				_ = store.DeleteTCPingResultsByTarget(oldTarget)
 			}
 		}
-		
+
 		// Clear all TCPing cache since targets changed
 		clearAllTCPingCache()
 	}
-	
+
 	if err := store.SaveTCPingConfig(&config); err != nil {
 		http.Error(w, fmt.Sprintf("failed to save config: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -2932,7 +2987,7 @@ func getTCPingHTTPClient() *http.Client {
 			Timeout:   10 * time.Second,  // DNS + TCP connection timeout
 			KeepAlive: 120 * time.Second, // Longer keep-alive for connection reuse
 		}
-		
+
 		tcpingHTTPClient = &http.Client{
 			Timeout: 15 * time.Second, // Increased from 8s to 15s for cross-continent networks
 			Transport: &http.Transport{
@@ -2940,10 +2995,10 @@ func getTCPingHTTPClient() *http.Client {
 				MaxIdleConns:          100,
 				MaxIdleConnsPerHost:   10,
 				IdleConnTimeout:       90 * time.Second,
-				TLSHandshakeTimeout:   10 * time.Second,   // Increased from 3s to 10s for slow TLS
-				ResponseHeaderTimeout: 8 * time.Second,    // Wait up to 8s for response headers
-				ExpectContinueTimeout: 5 * time.Second,    // Added for better HTTP/1.1 support
-				DisableCompression:    false,              // Enable compression for efficiency
+				TLSHandshakeTimeout:   10 * time.Second, // Increased from 3s to 10s for slow TLS
+				ResponseHeaderTimeout: 8 * time.Second,  // Wait up to 8s for response headers
+				ExpectContinueTimeout: 5 * time.Second,  // Added for better HTTP/1.1 support
+				DisableCompression:    false,            // Enable compression for efficiency
 			},
 		}
 	})
@@ -2960,46 +3015,46 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 			IntervalSecs: 60,
 		}
 	}
-	
+
 	// Create ticker with initial interval
 	ticker := time.NewTicker(time.Duration(config.IntervalSecs) * time.Second)
 	defer ticker.Stop()
-	
+
 	// Format targets for logging
 	// TCPing disabled if no targets configured
-	
+
 	// Track current config to detect changes
 	currentInterval := config.IntervalSecs
 	currentTargets := make(map[string]TCPingTargetEntry)
 	for _, target := range config.Targets {
 		currentTargets[target.Address] = target
 	}
-	
+
 	// Use shared HTTP client for connection reuse
 	httpClient := getTCPingHTTPClient()
-	
+
 	for {
 		<-ticker.C
-		
+
 		// Reload config on each tick to support dynamic updates
 		config, err := store.GetTCPingConfig()
 		if err != nil {
 			continue
 		}
-		
+
 		// Check if interval changed
 		if config.IntervalSecs != currentInterval {
 			newInterval := time.Duration(config.IntervalSecs) * time.Second
 			ticker.Reset(newInterval)
 			currentInterval = config.IntervalSecs
 		}
-		
+
 		// Check if targets changed
 		newTargets := make(map[string]TCPingTargetEntry)
 		for _, target := range config.Targets {
 			newTargets[target.Address] = target
 		}
-		
+
 		// Compare targets to detect changes
 		targetsChanged := false
 		if len(newTargets) != len(currentTargets) {
@@ -3013,34 +3068,34 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 				}
 			}
 		}
-		
+
 		if targetsChanged {
 			currentTargets = newTargets
 		}
-		
+
 		// Skip if no targets configured
 		if len(config.Targets) == 0 {
 			continue
 		}
-		
+
 		clients := registry.GetAll()
 		if len(clients) == 0 {
 			continue
 		}
-		
+
 		for _, client := range clients {
 			// Safety check: skip nil clients or clients with empty ID
 			// Must have at least one URL (IPv4 or IPv6)
 			if client == nil || client.ID == "" || (client.URL == "" && client.URL6 == "") {
 				continue
 			}
-			
+
 			// Registry already maintains consistency with database (same as client polling):
 			// - Clients are added when they register (POST /api/clients/register)
 			// - Clients are removed when systems are deleted (handleDeleteMetric)
 			// - Clients are removed after maxFailures in client polling (handled there)
 			// - No need to verify existence on every TCPing poll (consistency with client polling)
-			
+
 			// Only send tcping to connected clients
 			// CRITICAL: Re-fetch client from registry to get latest WorkingURL before checking connection
 			// This ensures we use the most up-to-date WorkingURL (especially IPv6) which may have been
@@ -3060,14 +3115,14 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 				// Silent skip - no log needed for normal operation
 				continue
 			}
-			
+
 			// Send tcping request for each target
 			for _, target := range config.Targets {
 				// Safety check: skip empty target address
 				if target.Address == "" {
 					continue
 				}
-				
+
 				go func(clientID string, tgt TCPingTargetEntry) {
 					// CRITICAL: Re-fetch client from registry inside goroutine to get latest WorkingURL
 					// This ensures we always use the most up-to-date WorkingURL (especially IPv6)
@@ -3080,7 +3135,7 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 					if c.URL == "" && c.URL6 == "" {
 						return
 					}
-					
+
 					// Build URL list: prioritize working URL if available
 					// CRITICAL: If WorkingURL is set (especially if it's IPv6), use ONLY that URL
 					// This ensures that once IPv6 connection succeeds, we never try IPv4 again
@@ -3099,16 +3154,16 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 							urls = append(urls, c.URL6+"/tcping")
 						}
 					}
-					
-				// Get secret from client registry cache (optimized: no DB lookup)
-				secret := c.Secret
-				
-				// Create context with timeout for TCPing request
+
+					// Get secret from client registry cache (optimized: no DB lookup)
+					secret := c.Secret
+
+					// Create context with timeout for TCPing request
 					// Use 12-second timeout (shorter than HTTP client's 15s timeout)
 					ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 					defer cancel()
-					
-				var resp *http.Response
+
+					var resp *http.Response
 					var err error
 					var successfulBaseURL string
 					for _, url := range urls {
@@ -3116,47 +3171,47 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 						tcpingRequest := map[string]string{
 							"target": tgt.Address,
 						}
-					requestData, _ := json.Marshal(tcpingRequest)
-					req, reqErr := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(requestData)))
-					if reqErr != nil {
-						// Silent failure - request creation errors are rare and usually indicate programming errors
-						continue
-					}
-					req.Header.Set("Content-Type", "application/json")
-					
-					// Security: Add secret to Authorization header if configured
-					if secret != "" {
-						req.Header.Set("Authorization", "Bearer "+secret)
-					}
-					
-					resp, err = httpClient.Do(req)
-					if err == nil && resp.StatusCode == http.StatusOK {
-						// Extract base URL (remove /tcping suffix)
-						if strings.HasSuffix(url, "/tcping") {
-							successfulBaseURL = strings.TrimSuffix(url, "/tcping")
-						} else {
-							successfulBaseURL = url
+						requestData, _ := json.Marshal(tcpingRequest)
+						req, reqErr := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(requestData)))
+						if reqErr != nil {
+							// Silent failure - request creation errors are rare and usually indicate programming errors
+							continue
 						}
-						break // Success, exit loop
+						req.Header.Set("Content-Type", "application/json")
+
+						// Security: Add secret to Authorization header if configured
+						if secret != "" {
+							req.Header.Set("Authorization", "Bearer "+secret)
+						}
+
+						resp, err = httpClient.Do(req)
+						if err == nil && resp.StatusCode == http.StatusOK {
+							// Extract base URL (remove /tcping suffix)
+							if strings.HasSuffix(url, "/tcping") {
+								successfulBaseURL = strings.TrimSuffix(url, "/tcping")
+							} else {
+								successfulBaseURL = url
+							}
+							break // Success, exit loop
+						}
+						// Silent failures - TCPing failures are expected in some network conditions
+						// Only log critical failures that indicate system issues
+						if resp != nil {
+							resp.Body.Close()
+						}
+						resp = nil
 					}
-					// Silent failures - TCPing failures are expected in some network conditions
-					// Only log critical failures that indicate system issues
-					if resp != nil {
-						resp.Body.Close()
-					}
-					resp = nil
-					}
-					
+
 					if resp == nil {
 						// Silent failure - TCPing failures are expected and handled gracefully
 						// Results are saved to database even on failure, so no log needed
 						return // All attempts failed
 					}
-					
+
 					// CRITICAL: defer resp.Body.Close() must be before any early returns
 					// This ensures the response body is always closed, even if there's an error
 					defer resp.Body.Close()
-					
+
 					// Update working URL if we successfully connected via TCPing
 					// CRITICAL: Always update WorkingURL when we successfully connect via TCPing
 					// This ensures WorkingURL is preserved and reflects the actual working connection
@@ -3165,12 +3220,12 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 						// Update working URL via the registry to ensure atomicity and persistence across re-registrations
 						registry.UpdateWorkingURL(clientID, successfulBaseURL)
 					}
-					
+
 					var tcpingResp TCPingResponse
 					if err := json.NewDecoder(resp.Body).Decode(&tcpingResp); err != nil {
 						return
 					}
-					
+
 					// Save result directly to database and update SystemMetric (save even if failed)
 					var latency *float64
 					if tcpingResp.Success {
@@ -3178,21 +3233,21 @@ func startTCPingPolling(registry *ClientRegistry, store *Store) {
 					} else {
 						latency = nil // nil indicates timeout/failure
 					}
-					
+
 					result := TCPingResult{
 						ClientID:  clientID,
 						Target:    tgt.Address,
 						Latency:   latency,
 						Timestamp: time.Now().UTC(),
 					}
-					
+
 					if err := store.SaveTCPingResult(result); err != nil {
 						// TCPing result save failed, continue silently
 					} else {
 						// Invalidate cache for this client to ensure data freshness
 						invalidateTCPingCache(clientID)
 					}
-					
+
 					// Update SystemMetric with latest tcping data for this target (only if successful)
 					if tcpingResp.Success {
 						existing, err := store.Get(clientID)
@@ -3250,18 +3305,20 @@ var authTokensMu sync.Mutex
 
 // Login attempt tracking for brute force protection
 type loginAttempt struct {
-	count     int
+	count       int
 	lastAttempt time.Time
 	lockedUntil time.Time
 }
+
 var loginAttempts = make(map[string]*loginAttempt) // key: IP address
 var loginAttemptsMu sync.RWMutex
 
 // Token verification attempt tracking
 type verifyAttempt struct {
-	count     int
+	count       int
 	lastAttempt time.Time
 }
+
 var verifyAttempts = make(map[string]*verifyAttempt) // key: IP address
 var verifyAttemptsMu sync.RWMutex
 
@@ -3281,7 +3338,7 @@ func init() {
 				}
 			}
 			authTokensMu.Unlock()
-			
+
 			// Cleanup old login attempts (older than 1 hour)
 			loginAttemptsMu.Lock()
 			for ip, attempt := range loginAttempts {
@@ -3290,7 +3347,7 @@ func init() {
 				}
 			}
 			loginAttemptsMu.Unlock()
-			
+
 			// Cleanup old verify attempts (older than 5 minutes)
 			verifyAttemptsMu.Lock()
 			for ip, attempt := range verifyAttempts {
@@ -3364,12 +3421,12 @@ func getClientIP(r *http.Request) string {
 			return strings.TrimSpace(ips[0])
 		}
 	}
-	
+
 	// 2. Check X-Real-IP header (for nginx proxy)
 	if ip := r.Header.Get("X-Real-IP"); ip != "" {
 		return strings.TrimSpace(ip)
 	}
-	
+
 	// 3. Fall back to RemoteAddr
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -3388,7 +3445,7 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 		attempt = &loginAttempt{count: 0, lastAttempt: time.Now()}
 		loginAttempts[clientIP] = attempt
 	}
-	
+
 	// Check if IP is locked due to too many failed attempts
 	if time.Now().Before(attempt.lockedUntil) {
 		loginAttemptsMu.Unlock()
@@ -3396,13 +3453,13 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid password", http.StatusUnauthorized)
 		return
 	}
-	
+
 	// Reset count if last attempt was more than 15 minutes ago
 	if time.Since(attempt.lastAttempt) > 15*time.Minute {
 		attempt.count = 0
 	}
 	loginAttemptsMu.Unlock()
-	
+
 	var payload struct {
 		Password string `json:"password"`
 	}
@@ -3476,23 +3533,23 @@ func handleAuthVerify(store *Store, w http.ResponseWriter, r *http.Request) {
 		attempt = &verifyAttempt{count: 0, lastAttempt: time.Now()}
 		verifyAttempts[clientIP] = attempt
 	}
-	
+
 	// Reset count if last attempt was more than 1 minute ago
 	if time.Since(attempt.lastAttempt) > 1*time.Minute {
 		attempt.count = 0
 	}
-	
+
 	// Limit to 30 attempts per minute per IP
 	if attempt.count >= 30 {
 		verifyAttemptsMu.Unlock()
 		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return
 	}
-	
+
 	attempt.count++
 	attempt.lastAttempt = time.Now()
 	verifyAttemptsMu.Unlock()
-	
+
 	var payload struct {
 		Token string `json:"token"`
 	}
@@ -3566,7 +3623,7 @@ func handleAuthChangePassword(store *Store, w http.ResponseWriter, r *http.Reque
 func isAuthenticated(r *http.Request) bool {
 	// SECURITY: Prefer Authorization header over query parameter
 	// Query parameters can leak tokens via logs, referer headers, etc.
-	
+
 	// Check Authorization header (preferred method)
 	authHeader := r.Header.Get("Authorization")
 	if authHeader != "" {
@@ -3600,5 +3657,3 @@ func isAuthenticated(r *http.Request) bool {
 
 	return false
 }
-
-

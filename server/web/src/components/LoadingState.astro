@@ -7,8 +7,8 @@
   <!-- Skeleton rows with staggered animation -->
   {[0, 1, 2, 3, 4].map((i) => (
     <div
-      class="grid grid-cols-[minmax(160px,max-content)_minmax(85px,1fr)_minmax(90px,1fr)_minmax(130px,1.6fr)_minmax(130px,1.6fr)_minmax(130px,1.6fr)_minmax(95px,1fr)_minmax(90px,1fr)] items-center gap-1 px-3 sm:px-4 md:px-6 py-2 sm:py-3 border-b border-[#404040]/30 dark:border-[#404040]/30 border-[#e5e5e5]/50 animate-stagger-in"
-      style={`animation-delay: ${i * 80}ms`}
+      class="grid items-center gap-1 px-3 sm:px-4 md:px-6 py-2 sm:py-3 border-b border-[#404040]/30 dark:border-[#404040]/30 border-[#e5e5e5]/50 animate-stagger-in"
+      style={`grid-template-columns: minmax(160px, var(--first-col-width, 160px)) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.6fr) minmax(130px,1.6fr) minmax(130px,1.6fr) minmax(95px,1fr) minmax(90px,1fr); animation-delay: ${i * 80}ms`}
     >
       <!-- Name column -->
       <div class="flex items-center gap-1.5 min-h-[20px]">
