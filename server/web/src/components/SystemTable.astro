@@ -1259,6 +1259,15 @@ const apiBase = apiBaseProp ?? '';
   const showEmpty = () => {
     if (loadingIndicator) loadingIndicator.style.display = 'none';
     
+    // Tear down the per-system chart state the way the row-removal path
+    // does; otherwise an expanded row's Chart.js instance survives on the
+    // detached DOM when the list empties (last system hidden or deleted).
+    currentData.forEach((_, id) => {
+      try { cleanupTCPingChart(id); } catch (_) {}
+      tcpingConfigs.delete(id);
+      tcpingActiveTargets.delete(id);
+    });
+
     // CRITICAL: Clear currentData to ensure next load triggers column width calculation
     // This fixes the issue where deleting all systems and re-adding doesn't recalculate width
     currentData.clear();
@@ -1774,8 +1783,11 @@ const apiBase = apiBaseProp ?? '';
   // Cleanup function to destroy tcping chart for a system
   function cleanupTCPingChart(systemId) {
     // Cancel any ongoing loading for this system
+    // The flag lives on the state object, which the in-flight build keeps a
+    // reference to, so it still reads as cancelled after the map entry is
+    // dropped below.
     const loadingState = tcpingLoadingStates.get(systemId);
-    if (loadingState && loadingState.loading) {
+    if (loadingState) {
       loadingState.cancelled = true;
     }
     
@@ -2246,8 +2258,10 @@ const apiBase = apiBaseProp ?? '';
     // Response format: { results: [...], stats: { avg_latency, packet_loss_rate } }
     const apiResponse = await loadTCPingHistory(clientID); // No target parameter = fetch all
 
-    // Check if loading was cancelled after data fetch
-    if (tcpingLoadingStates.get(systemId)?.cancelled) {
+    // Check if loading was cancelled after data fetch (the state object
+    // captured above keeps its flag even after cleanupTCPingChart dropped
+    // the map entry), and never build into a row that has been removed.
+    if ((loadingState && loadingState.cancelled) || !container.isConnected) {
       return;
     }
 
@@ -3061,7 +3075,7 @@ const apiBase = apiBaseProp ?? '';
     });
 
     // Final check if loading was cancelled before storing chart
-    if (tcpingLoadingStates.get(systemId)?.cancelled) {
+    if ((loadingState && loadingState.cancelled) || !container.isConnected) {
       // Destroy the chart we just created since loading was cancelled
       try {
         chart.destroy();
@@ -3790,21 +3804,38 @@ const apiBase = apiBaseProp ?? '';
      a (re)connection can be slightly older than what is already on screen.
      Skip a payload strictly older than the current one while it describes
      the same set of systems (a changed set is always applied). */
+  // Only the first stream payload after a (re)connection is checked: later
+  // payloads come from the broadcast ticker in order, and judging them by
+  // updated_at would freeze the table whenever that stamp legitimately goes
+  // down (a system marked offline, a server clock step). REST results are
+  // never dropped; they only refresh the baseline.
   let paintedFreshness = 0;
   let paintedIdKey = '';
+  let primeGuardArmed = false;
+  const streamPayloads = new WeakSet();
+  function noteSnapshot(list) {
+    let max = 0;
+    for (const s of list) { const t = s && s.updated_at ? Date.parse(s.updated_at) : 0; if (t > max) max = t; }
+    paintedIdKey = list.map((s) => (s && s.id) || '').sort().join('\u0000');
+    paintedFreshness = max || paintedFreshness;
+  }
   function isStaleSnapshot(list) {
     let max = 0;
     for (const s of list) { const t = s && s.updated_at ? Date.parse(s.updated_at) : 0; if (t > max) max = t; }
     const idKey = list.map((s) => (s && s.id) || '').sort().join('\u0000');
     if (idKey === paintedIdKey && max && paintedFreshness && max < paintedFreshness) return true;
-    paintedIdKey = idKey;
-    paintedFreshness = max || paintedFreshness;
+    noteSnapshot(list);
     return false;
   }
 
   async function renderData(data) {
     if (!Array.isArray(data)) return;
-    if (isStaleSnapshot(data)) return;
+    if (streamPayloads.has(data) && primeGuardArmed) {
+      primeGuardArmed = false;
+      if (isStaleSnapshot(data)) return;
+    } else {
+      noteSnapshot(data);
+    }
 
     if (isRenderRunning) {
       // Latest-wins: drop any earlier pending payload in favour of this one.
@@ -4073,6 +4104,7 @@ const apiBase = apiBaseProp ?? '';
       sseUrl += `?admin_token=${encodeURIComponent(adminToken)}`;
     }
 
+    primeGuardArmed = true;
     eventSource = new EventSource(sseUrl);
     markSSEAlive();
 
@@ -4112,6 +4144,7 @@ const apiBase = apiBaseProp ?? '';
         if (update.type === 'metric_updated') {
           if (Array.isArray(update.systems)) {
             // Backend-pushed full state — render directly, no GET.
+            streamPayloads.add(update.systems);
             debouncedRenderData(update.systems);
           } else {
             // Legacy signal-only event from an older server — fall back.

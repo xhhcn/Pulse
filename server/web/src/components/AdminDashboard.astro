@@ -2453,6 +2453,10 @@ const customCodePlaceholder = [
       }
     } catch (error) {
       showMessage('Failed to save order: ' + error.message, 'error');
+      // The drop already moved the row; make the reload repaint the list
+      // from the server's order instead of taking the "nothing changed"
+      // shortcut (currentData still holds the pre-drag order).
+      currentData = new Map();
     } finally {
       orderSaveInFlight = false;
       pendingSystemsData = null;
@@ -4188,30 +4192,70 @@ const customCodePlaceholder = [
   //   * 45 s liveness watchdog: server emits either an update event (~3 s) or
   //     a keepalive comment (~15 s), so 45 s of silence means the TCP stream
   //     is half-open and we should reconnect proactively.
+  // Only the first payload after a (re)connection is checked: it is the
+  // one that can be a connect-time snapshot older than what is on screen.
+  // Later payloads come from the broadcast ticker in order, and judging
+  // them by updated_at would freeze the page whenever that stamp legitimately
+  // goes down (a system marked offline, a server clock step).
   let paintedAdminFreshness = 0;
   let paintedAdminIdKey = '';
+  let adminPrimePending = false;
+  function noteAdminSnapshot(list) {
+    let max = 0;
+    for (const s of list) { const t = s && s.updated_at ? Date.parse(s.updated_at) : 0; if (t > max) max = t; }
+    paintedAdminIdKey = list.map((s) => (s && s.id) || '').sort().join('\u0000');
+    paintedAdminFreshness = max || paintedAdminFreshness;
+    return max;
+  }
   function isStaleAdminSnapshot(list) {
     let max = 0;
     for (const s of list) { const t = s && s.updated_at ? Date.parse(s.updated_at) : 0; if (t > max) max = t; }
     const idKey = list.map((s) => (s && s.id) || '').sort().join('\u0000');
     if (idKey === paintedAdminIdKey && max && paintedAdminFreshness && max < paintedAdminFreshness) return true;
-    paintedAdminIdKey = idKey;
-    paintedAdminFreshness = max || paintedAdminFreshness;
+    noteAdminSnapshot(list);
     return false;
   }
+  function acceptAdminSnapshot(list) {
+    if (adminPrimePending) {
+      adminPrimePending = false;
+      return !isStaleAdminSnapshot(list);
+    }
+    noteAdminSnapshot(list);
+    return true;
+  }
 
+  // Verifies the admin session when the stream is downgraded to the public
+  // view or keeps failing. Only an explicit verdict ends the session: a 401
+  // or {valid:false}. A 429 (per-IP verify limit behind a shared proxy
+  // address), a 5xx or a dropped request keeps the token and reconnects
+  // after a growing pause, exactly like admin.astro at page load.
   let sessionLostHandled = false;
+  let sessionLostChecks = 0;
+  let sseErrorStreak = 0;
   async function handleSessionLost() {
     if (sessionLostHandled) return;
     sessionLostHandled = true;
+    let verdict = 'unknown';
     try {
       const token = localStorage.getItem('admin_auth_token') || '';
       const res = await fetch(`${apiBase}/api/auth/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
-      const data = res.ok ? await res.json() : { valid: false };
-      if (data && data.valid) { sessionLostHandled = false; connectSSE(); return; }
+      if (res.status === 401) {
+        verdict = 'invalid';
+      } else if (res.ok) {
+        const data = await res.json();
+        if (data && data.valid === false) verdict = 'invalid';
+        else if (data && data.valid) verdict = 'valid';
+      }
     } catch (_) {}
-    localStorage.removeItem('admin_auth_token');
-    window.location.href = '/login?redirect=/admin';
+    if (verdict === 'invalid') {
+      localStorage.removeItem('admin_auth_token');
+      window.location.href = '/login?redirect=/admin';
+      return;
+    }
+    const wait = Math.min(30_000, 2000 * Math.pow(2, sessionLostChecks));
+    sessionLostChecks++;
+    sseErrorStreak = 0;
+    setTimeout(() => { sessionLostHandled = false; connectSSE(); }, wait);
   }
 
   let sseReconnectAttempt = 0;
@@ -4265,6 +4309,7 @@ const customCodePlaceholder = [
     if (adminToken) {
       sseUrl += `?admin_token=${encodeURIComponent(adminToken)}`;
     }
+    adminPrimePending = true;
     eventSource = new EventSource(sseUrl);
     markSSEAlive();
 
@@ -4272,6 +4317,7 @@ const customCodePlaceholder = [
       // (Re)connected — reset backoff so a future independent disconnect
       // starts over at 1 s.
       sseReconnectAttempt = 0;
+      sseErrorStreak = 0;
       markSSEAlive();
     });
 
@@ -4305,11 +4351,12 @@ const customCodePlaceholder = [
            secret from install commands, so verify the session and go
            back through /login. */
         if (update.view === 'public') { handleSessionLost(); return; }
+        sessionLostChecks = 0;
         if (Array.isArray(update.systems)) {
           // Skip a (re)connection's first payload when it is older than the
           // list already on screen for the same systems; painting it would
           // step every value backwards for one tick.
-          if (!isStaleAdminSnapshot(update.systems)) debouncedRenderSystems(update.systems);
+          if (acceptAdminSnapshot(update.systems)) debouncedRenderSystems(update.systems);
         } else {
           debouncedLoadSystems();
         }
@@ -4326,6 +4373,15 @@ const customCodePlaceholder = [
       if (sseWatchdogTimer) {
         clearTimeout(sseWatchdogTimer);
         sseWatchdogTimer = null;
+      }
+      // With privacy mode on the server answers an expired admin token
+      // with 401 instead of downgrading the stream, so no frame ever tells
+      // us the session is gone. After three failed connections in a row,
+      // verify the token instead of reconnecting blindly forever.
+      sseErrorStreak++;
+      if (sseErrorStreak >= 3 && !sessionLostHandled) {
+        handleSessionLost();
+        return;
       }
       scheduleSSEReconnect();
     };

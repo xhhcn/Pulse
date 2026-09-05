@@ -277,7 +277,7 @@
     window.addEventListener('languagechange', updateTranslations);
     window.addEventListener('translate', updateTranslations);
 
-    const isPasswordSet = await checkPasswordStatus();
+    let isPasswordSet = await checkPasswordStatus();
     const form = document.getElementById('login-form');
     const passwordField = document.getElementById('password');
     const confirmPasswordField = document.getElementById('confirm-password-field');
@@ -286,15 +286,28 @@
     const title = document.querySelector('[data-translate-login="title"]');
     const subtitle = document.querySelector('[data-translate-login="subtitle"]');
 
-    if (!isPasswordSet) {
-      // First time setup
+    // Switch the form between first-time setup and login. Kept as a
+    // function because setup can complete while the follow-up login fails,
+    // and the form must then behave as a login form instead of re-posting
+    // /api/auth/setup (which the server rejects once a password exists).
+    function applyLoginMode(setup) {
       const lang = getCurrentLanguage();
-      title.textContent = translations[lang].setupPassword;
-      subtitle.textContent = translations[lang].setupSubtitle;
-      confirmPasswordField.classList.remove('hidden');
-      confirmPasswordInput.required = true;
-      submitButton.textContent = translations[lang].setupPassword;
+      if (setup) {
+        title.textContent = translations[lang].setupPassword;
+        subtitle.textContent = translations[lang].setupSubtitle;
+        confirmPasswordField.classList.remove('hidden');
+        confirmPasswordInput.required = true;
+        submitButton.textContent = translations[lang].setupPassword;
+      } else {
+        title.textContent = translations[lang].title;
+        subtitle.textContent = translations[lang].subtitle;
+        confirmPasswordField.classList.add('hidden');
+        confirmPasswordInput.required = false;
+        confirmPasswordInput.value = '';
+        submitButton.textContent = translations[lang].submit || translations[lang].login || 'Login';
+      }
     }
+    applyLoginMode(!isPasswordSet);
 
     // Guard against double-submission. On slow networks a fast double
     // click on the submit button would fire two /api/auth/login requests
@@ -340,15 +353,31 @@
               const redirect = validateRedirect(urlParams.get('redirect') || '/admin');
               window.location.href = redirect;
             } else {
-              // Password is stored; only the follow-up login failed (rate
-              // limit / network). Say so instead of bouncing off /admin.
+              // Password is stored; only the follow-up login failed (lockout
+              // / network). Become a login form so the retry does not re-post
+              // /api/auth/setup, and say so instead of bouncing off /admin.
+              isPasswordSet = true;
+              applyLoginMode(false);
               const lang = getCurrentLanguage();
               showError(translations[lang].invalidPassword);
             }
           } else {
             const lang = getCurrentLanguage();
             const errorMsg = (result && result.error) ? result.error : translations[lang].error;
-            showError(errorMsg);
+            if (/password already set/i.test(errorMsg)) {
+              // The status endpoint was stale (cache layer): a password
+              // exists, so fall back to login mode and try the password.
+              isPasswordSet = true;
+              applyLoginMode(false);
+              if (await login(password)) {
+                const urlParams = new URLSearchParams(window.location.search);
+                window.location.href = validateRedirect(urlParams.get('redirect') || '/admin');
+              } else {
+                showError(translations[lang].invalidPassword);
+              }
+            } else {
+              showError(errorMsg);
+            }
           }
         } else {
           // Login

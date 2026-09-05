@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.17"><img src="https://img.shields.io/badge/release-v1.3.17-blue?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.18"><img src="https://img.shields.io/badge/release-v1.3.18-blue?style=flat-square" alt="Release"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/pulls/xhh1128/pulse?style=flat-square&color=blue" alt="Docker Pulls"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/image-size/xhh1128/pulse/latest?style=flat-square&color=blue" alt="Docker Size"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>

@@ -134,42 +134,29 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} makes the server hold up under very large agent counts and adds per-system homepage visibility controls, while keeping existing clients and databases compatible.
+            v${{ steps.version.outputs.version }} is a correctness release driven by a full audit of v1.3.17 (static review of the backend and both pages, race-enabled tests, browser end-to-end runs and load tests). Existing clients and databases stay compatible.
 
             ### Highlights
 
-            - Geo-IP lookups no longer run on the push/poll request path. A cache miss queues a background job (fixed worker pool, bounded queue, one in-flight lookup per IP) and the persisted location is reused while the public IP is unchanged. Previously, with the lookup services slow or blocked, 100 agents could drive the server to thousands of goroutines and zero successful pushes for minutes after every restart.
-            - SSE hardening: per-write deadlines so half-open viewers cannot pin a goroutine forever; configurable stream caps (`SSE_MAX_STREAMS`, `SSE_MAX_STREAMS_PER_IP`) that never apply to admin sessions; snapshots are streamed without per-subscriber copies and new subscribers reuse the broadcaster's latest payload.
-            - TCPing batches keep the agent's real measurement timestamps (outages show as gaps instead of a burst of fake points), clock skew is corrected from the newest sample, re-sent batches are idempotent, and the per-target "latest" value can no longer be frozen by a future-dated record.
-            - Agent writes merge admin-owned fields (name, tags, order, secret, visibility toggles) inside the write transaction, so a concurrent admin edit is never reverted by a push or poll.
-            - Push-mode online threshold raised from 10 s to 15 s to avoid offline flicker on high-latency links.
-            - New per-system admin toggles in the edit dialog: "Show on homepage" and "Show TCPing" (both default on). Hidden systems remain in the API and the admin page.
-            - Static path hardening: traversal probes such as `/../admin` no longer resolve to a page.
-            - Admin actions stay fast on large databases: reordering is one transaction, deleting a system or a TCPing target removes its history in the background in bounded chunks (no more multi-second stalls of the admin page or of agent pushes).
-            - Proxy handling: `X-Forwarded-For` is now read from the trusted side of the chain, so a client behind a CDN listed in `TRUSTED_PROXIES` can no longer spoof its address to bypass the login rate limit or the per-IP SSE cap. The client lets the HTTP transport negotiate compression, so registration responses gzipped by a CDN are decoded correctly.
-            - Admin page: an expired session (server restart or 24 h token expiry) returns the admin to the login page instead of surfacing "unauthorized" alerts; the share-link token comes from the CSPRNG, saving the privacy dialog no longer revokes or restarts the existing link, long-lived links are no longer mislabelled as expired, Escape fully resets every modal, drag-and-drop moves rows instantly, and the login redirect check can no longer be bypassed with a backslash or whitespace.
-            - Privacy dialog: a plain save also keeps the previously chosen link duration.
-            - Server-driven TCPing reaches pull-mode (non-pushing, legacy) agents again; the re-registration guard no longer mistakes the server's own poll for a push.
-            - Page open/refresh no longer flickers: a new event stream is primed only with a snapshot younger than one second, and both pages ignore a stream payload older than the data already on screen. The admin page also detects a stream downgraded to the public view after a session loss and returns to the login page.
-            - Snapshots carry a `view` field so the admin page can detect a stream downgraded to the public view; change-password trims the confirmation field consistently; a drag-and-drop order save can no longer be interrupted by a snapshot already queued for rendering.
-            - `docker-compose.yaml` sets a 45 s stop grace period so the database always closes cleanly.
-            - Client: constant-time secret comparison.
-
-            Load-tested at 1000 push agents (each sending TCPing results every 3 s) on an emulated 1-core box: about 25% CPU, about 30 MB RSS, zero failed pushes.
+            - Pages no longer freeze after a pull-mode system goes offline. Marking a system offline now only sets the flag inside one write transaction instead of rewinding its `updated_at`, and the browser freshness guard checks only the first payload after a (re)connection, so a legitimately lower timestamp (offline marking, a server clock step) can no longer make every later snapshot look stale.
+            - Server-driven TCPing results for pull-mode agents are merged inside one transaction; the old read-modify-write could overwrite a poll result or an admin edit committed in between. Pull-mode agents are no longer skipped by the TCPing loop when an unreachable agent earlier in the same tick delayed it.
+            - TCPing batches: the clock-skew bound scales with the configured interval (a post-outage backlog with a 5 min interval is no longer shifted onto "now"), a batch re-sent after a timed-out push is stored once, a fresh sample always replaces a stored "latest" value whose stamp is in the future, and a target the admin removed can no longer be written back by an in-flight agent write.
+            - SSE: the per-IP stream cap applies to public addresses only, so viewers arriving through a docker bridge or an untrusted proxy address no longer share a single 200-stream budget (the global cap still applies); connect-time snapshot builds are serialised per view and never replace a newer broadcast; the bundled nginx forwards the upstream `X-Forwarded-For` chain instead of overwriting it.
+            - Admin page: only an explicit verdict (401 or `valid:false`) ends the session; a rate-limited or failed verify keeps the token and reconnects with a growing pause. With privacy mode on, an expired token made the stream fail with 401 forever without any notice; after three consecutive failures the page now verifies the session and returns to the login page when it is gone. A failed drag-and-drop save repaints the list from the server instead of leaving the row where it was dropped.
+            - First-run setup: if the automatic login after setting the password fails, the form switches to login mode instead of re-posting the setup request.
+            - Homepage chart housekeeping: a history fetch that completes after its row was collapsed, hidden or deleted no longer creates a chart on a detached canvas, and emptying the list tears down the per-system chart state like a normal row removal.
+            - Privacy dialog: saving with the existing link but without the echoed expiry keeps the stored absolute expiry (previously the link stopped validating). The TCPing history cache of a deleted system is invalidated again once its background cleanup finishes.
 
             ### Compatibility
 
-            - Existing clients continue to work; the new visibility fields are optional and ignored by older agents.
-            - Existing `metrics.db` files remain readable, including legacy TCPing key formats.
-            - Existing Docker named-volume and bind-mount deployments are supported.
-            - Behind a reverse proxy or CDN that is not listed in `TRUSTED_PROXIES`, all viewers share the proxy address for rate limits and SSE caps; set `TRUSTED_PROXIES` or raise `SSE_MAX_STREAMS_PER_IP`.
+            - Existing clients continue to work; no wire format changed.
+            - Existing `metrics.db` files remain readable.
+            - Behind a reverse proxy or CDN, set `TRUSTED_PROXIES` so login rate limits see real client addresses; the SSE per-IP cap no longer needs it.
 
             ### Verified
 
-            - Server vet, race-enabled tests (22 tests) and build.
-            - Client vet and build.
-            - Frontend Astro build.
-            - Load tests at 100, 300, 500 and 1000 simulated agents, including a mid-run server restart.
+            - Server vet, race-enabled tests and build; client vet and cross-compilation for all five targets.
+            - Browser end-to-end runs on both pages under a 120-agent load, offline transitions for push and pull agents, admin session loss with privacy mode on and off.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
