@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +21,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -107,9 +110,13 @@ type SystemMetric struct {
 	Order              int                         `json:"order"` // Display order for sorting
 	Alert              bool                        `json:"alert"`
 	UpdatedAt          time.Time                   `json:"updated_at"`
-	TCPingData         map[string]TCPingTargetData `json:"tcping_data,omitempty"` // Map of target -> latest tcping data
-	Tags               []string                    `json:"tags,omitempty"`        // User-defined tags for the service
-	Secret             string                      `json:"secret,omitempty"`      // Secret for client authentication
+	TCPingData         map[string]TCPingTargetData `json:"tcping_data,omitempty"`
+	// Targets this write carries a fresh sample for (agent push only); the
+	// store lets such entries win over a newer-looking stored copy. Never
+	// serialised.
+	TCPingFresh map[string]struct{} `json:"-"`                // Map of target -> latest tcping data
+	Tags        []string            `json:"tags,omitempty"`   // User-defined tags for the service
+	Secret      string              `json:"secret,omitempty"` // Secret for client authentication
 	// Admin-controlled visibility toggles. Both default to false (= shown).
 	// HideOnHome hides the row from the public homepage only; the REST API
 	// and the admin dashboard still return it. HideTCPing hides just the
@@ -447,6 +454,7 @@ type SSEBroker struct {
 	// database on every connection (see LatestSnapshot).
 	latest   map[SSEView]string
 	latestAt map[SSEView]time.Time
+	primeMu  [2]sync.Mutex
 }
 
 // sseSnapshotMaxAge bounds how old a remembered payload may be before a new
@@ -474,15 +482,36 @@ func (b *SSEBroker) LatestSnapshot(view SSEView) (string, bool) {
 // RememberSnapshot stores a payload built at connect time so that other
 // subscribers connecting within sseSnapshotMaxAge (a reconnect storm after a
 // restart or a CDN blip) reuse it instead of each scanning the database.
-func (b *SSEBroker) RememberSnapshot(view SSEView, payload string) {
+// builtAt is when the caller started building; when a broadcast has been
+// remembered since then, that broadcast is newer and is returned instead so
+// the caller never primes anyone, itself included, with older data.
+func (b *SSEBroker) RememberSnapshot(view SSEView, payload string, builtAt time.Time) string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.latest == nil {
 		b.latest = make(map[SSEView]string)
 		b.latestAt = make(map[SSEView]time.Time)
 	}
+	if at, ok := b.latestAt[view]; ok && at.After(builtAt) {
+		if cur, ok := b.latest[view]; ok {
+			return cur
+		}
+	}
 	b.latest[view] = payload
-	b.latestAt[view] = time.Now()
+	b.latestAt[view] = builtAt
+	return payload
+}
+
+// primeLock serialises connect-time snapshot builds per view, so a burst of
+// connections that all miss LatestSnapshot costs one database scan instead
+// of one per viewer. The returned function releases the lock.
+func (b *SSEBroker) primeLock(view SSEView) func() {
+	idx := 0
+	if view == SSEViewAdmin {
+		idx = 1
+	}
+	b.primeMu[idx].Lock()
+	return b.primeMu[idx].Unlock
 }
 
 func NewSSEBroker() *SSEBroker {
@@ -492,6 +521,17 @@ func NewSSEBroker() *SSEBroker {
 		maxTotal: intFromEnv("SSE_MAX_STREAMS", sseDefaultMaxSubscribers),
 		maxPerIP: intFromEnv("SSE_MAX_STREAMS_PER_IP", sseDefaultMaxSubscribersPerIP),
 	}
+}
+
+// perIPCapApplies reports whether the per-address stream cap counts this
+// client address. Behind a docker bridge, the bundled nginx or a reverse
+// proxy that is not listed in TRUSTED_PROXIES every viewer resolves to the
+// same private address, and capping that turned the per-IP limit into a
+// global 200-viewer limit. Only globally routable addresses are therefore
+// capped individually; the total cap still bounds everything else.
+func perIPCapApplies(ip string) bool {
+	p := net.ParseIP(ip)
+	return p != nil && p.IsGlobalUnicast() && !p.IsPrivate()
 }
 
 // intFromEnv reads a positive integer from the environment, falling back to
@@ -510,8 +550,13 @@ func (b *SSEBroker) Subscribe(view SSEView, ip string) (*sseSubscriber, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if view != SSEViewAdmin && (len(b.clients) >= b.maxTotal || b.perIP[ip] >= b.maxPerIP) {
-		return nil, errSSETooManySubscribers
+	if view != SSEViewAdmin {
+		if len(b.clients) >= b.maxTotal {
+			return nil, errSSETooManySubscribers
+		}
+		if perIPCapApplies(ip) && b.perIP[ip] >= b.maxPerIP {
+			return nil, errSSETooManySubscribers
+		}
 	}
 	sub := &sseSubscriber{
 		ch:   make(chan string, sseSubscriberBuffer),
@@ -1644,22 +1689,29 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 		// No payload younger than one second: build a fresh one and remember
 		// it, so a burst of connections (restart, CDN blip) costs one DB scan
 		// per second instead of one per viewer, while any single viewer still
-		// starts from data at most one second old.
-		if snapshot, err := buildMetricsSnapshot(store, globalClientRegistry, isAdmin); err == nil {
-			viewName := "public"
-			if isAdmin {
-				viewName = "admin"
-			}
-			if b, merr := json.Marshal(map[string]interface{}{
-				"type":    "metric_updated",
-				"view":    viewName,
-				"systems": snapshot,
-				"count":   len(snapshot),
-			}); merr == nil {
-				payload, havePayload = string(b), true
-				broker.RememberSnapshot(view, payload)
+		// starts from data at most one second old. Builds are serialised per
+		// view; a handler that waited for the lock usually finds the payload
+		// its predecessor just remembered.
+		unlock := broker.primeLock(view)
+		payload, havePayload = broker.LatestSnapshot(view)
+		if !havePayload {
+			builtAt := time.Now()
+			if snapshot, err := buildMetricsSnapshot(store, globalClientRegistry, isAdmin); err == nil {
+				viewName := "public"
+				if isAdmin {
+					viewName = "admin"
+				}
+				if b, merr := json.Marshal(map[string]interface{}{
+					"type":    "metric_updated",
+					"view":    viewName,
+					"systems": snapshot,
+					"count":   len(snapshot),
+				}); merr == nil {
+					payload, havePayload = broker.RememberSnapshot(view, string(b), builtAt), true
+				}
 			}
 		}
+		unlock()
 	}
 	if havePayload {
 	drain:
@@ -2198,6 +2250,9 @@ func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistr
 			log.Printf("⚠️  history cleanup for deleted system %s failed: %v", id, err)
 			return
 		}
+		// A history request served while the scan ran may have re-filled the
+		// cache with rows that are gone now.
+		invalidateTCPingCache(id)
 		log.Printf("🧹 Removed tcping history of deleted system %s in %v", id, time.Since(start).Round(time.Millisecond))
 	}(id)
 
@@ -2498,10 +2553,42 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 			newest = tr.MeasuredAt
 		}
 	}
+	// The "too old" bound scales with the configured interval: with a 5 min
+	// interval the newest queued sample of a post-outage backlog is
+	// legitimately up to 5 min old, and treating that as skew shifted the
+	// whole backlog onto "now" and disabled idempotent storage.
+	skewPast := 2 * time.Minute
+	if iv := 2 * time.Duration(tcpingConfig.IntervalSecs) * time.Second; iv > skewPast {
+		skewPast = iv
+	}
 	var skew time.Duration
 	if !newest.IsZero() {
-		if d := nowUTC.Sub(newest.UTC()); d > 2*time.Minute || d < -30*time.Second {
+		if d := nowUTC.Sub(newest.UTC()); d > skewPast || d < -30*time.Second {
 			skew = d
+		}
+	}
+	// An agent re-sends the identical batch when its previous push timed out
+	// after the server had already committed it. With skew != 0 the stored
+	// timestamps differ between the two deliveries, so the idempotent key
+	// cannot catch the retry; a per-client signature of the raw batch does.
+	if tcpingBatchSeen(clientID, payload.TCPingResults) {
+		payload.TCPingResults = nil
+	}
+	// Drop "latest" entries for targets the admin has removed: the copy of
+	// existing.TCPingData above would otherwise write them back after
+	// PruneTCPingTargets ran (mergeAdminOwned only ever adds keys).
+	for target := range tcpingData {
+		if !targetAllowed(target) {
+			delete(tcpingData, target)
+		}
+	}
+	// Targets with a sample in this batch: their "latest" entry is replaced
+	// unconditionally (see mergeAdminOwned), never kept from a stored copy
+	// whose stamp happens to be newer.
+	freshTCPing := make(map[string]struct{}, len(payload.TCPingResults))
+	for _, tr := range payload.TCPingResults {
+		if targetAllowed(tr.Target) {
+			freshTCPing[tr.Target] = struct{}{}
 		}
 	}
 	const maxPast = 24 * time.Hour
@@ -2587,6 +2674,7 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 		Alert:              false, // actively pushing = online
 		UpdatedAt:          nowUTC,
 		TCPingData:         tcpingData,
+		TCPingFresh:        freshTCPing,
 		Tags:               tags,
 		Secret:             dbSecret,
 		HideOnHome:         existing.HideOnHome,
@@ -2886,13 +2974,12 @@ func markSystemAsOffline(store *Store, broker *SSEBroker, systemID string) {
 	}
 
 	if !existing.Alert {
-		// Set UpdatedAt far enough in the past so handleListMetrics'
-		// pull-mode threshold (5 s) treats this system as offline.
-		// Using -13 s provides plenty of margin and also covers the
-		// not-in-registry fallback threshold (12 s).
-		existing.Alert = true
-		existing.UpdatedAt = time.Now().UTC().Add(-13 * time.Second)
-		store.Upsert(*existing) //nolint:errcheck
+		// Only the flag is persisted; UpdatedAt is deliberately left alone.
+		// buildMetricsSnapshot already reports the system offline from the
+		// age of UpdatedAt (the 5 s race guard above guarantees it is old
+		// enough), and rewinding the stamp made browsers drop every later
+		// snapshot as stale (see Store.MarkOffline).
+		store.MarkOffline(systemID) //nolint:errcheck
 	}
 }
 
@@ -3169,12 +3256,14 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 		// CRITICAL: Preserve tags and secret from database (client should never override these)
 		tags = existing.Tags
 		secret = existing.Secret
-		// Preserve existing tcping data map
+		// Preserve existing tcping data map (minus targets the admin removed,
+		// which the copy would otherwise resurrect after PruneTCPingTargets).
 		if existing.TCPingData != nil {
 			tcpingData = make(map[string]TCPingTargetData)
 			for k, v := range existing.TCPingData {
 				tcpingData[k] = v
 			}
+			pruneTCPingDataToConfig(store, tcpingData)
 		}
 	}
 
@@ -3222,13 +3311,16 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	// If system was offline and is now online, log the reconnection
 	_ = wasOffline // Can be used for notifications in the future
 
+	// Stamp the poll before the write lands: tcpingPullSuppressed compares
+	// LastPollAt with UpdatedAt, and the reverse order left a window where a
+	// fresh UpdatedAt paired with the previous poll's stamp looked like a push.
+	if globalClientRegistry != nil {
+		globalClientRegistry.UpdatePollState(client.ID, time.Now())
+	}
 	// Agent write: admin-owned fields are merged from the stored record
 	// inside the transaction so a concurrent admin edit is never reverted.
 	if err := store.UpsertFromAgent(metric); err != nil {
 		return false
-	}
-	if globalClientRegistry != nil {
-		globalClientRegistry.UpdatePollState(client.ID, time.Now())
 	}
 
 	// Keep the registry's cached secret in sync with the DB value so pollClient
@@ -3433,7 +3525,7 @@ func geoWorker() {
 // Get country from IP address using free IP geolocation API
 // Uses multiple services with fallback for better reliability, especially for China
 // Runs only from scheduleGeoLookup (background, bounded), so the per-service
-// budget is kept short: one attempt of at most 4 s each.
+// budget is kept short: one attempt of at most 6 s each.
 func getCountryFromIP(ip string) string {
 	if ip == "" {
 		return ""
@@ -4142,9 +4234,14 @@ func handleSetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request
 	// plus the stored token_expires (so the countdown is not restarted).
 	// Keep the previously chosen duration as well: the admin UI shows it as
 	// the default for the next link and must not fall back to 1 h.
-	if payload.ShareToken != "" && payload.ExpiresInSeconds <= 0 && payload.TokenExpires != "" {
-		if current, err := store.GetPrivacyConfig(); err == nil && current.ShareToken == payload.ShareToken {
+	// The server is authoritative for the absolute expiry as well: a caller
+	// that keeps the token but omits token_expires (scripts, an older UI)
+	// must not turn the link into one that never validates (every
+	// share-token check requires a non-zero expiry).
+	if payload.ShareToken != "" && payload.ExpiresInSeconds <= 0 {
+		if current, err := store.GetPrivacyConfig(); err == nil && current != nil && current.ShareToken == payload.ShareToken {
 			config.ExpiresInSeconds = current.ExpiresInSeconds
+			config.TokenExpires = current.TokenExpires
 		}
 	}
 
@@ -4162,7 +4259,7 @@ func handleSetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request
 			}
 			config.TokenExpires = expiresTime
 		}
-		// If both are empty, TokenExpires remains zero (no expiration)
+		// Otherwise the stored expiry (copied above) or zero is kept.
 	} else {
 		// ShareToken is empty, clear TokenExpires to revoke the share link
 		config.TokenExpires = time.Time{}
@@ -4428,6 +4525,74 @@ func tcpingPullSuppressed(client ClientInfo, m *SystemMetric, now time.Time) boo
 	return true
 }
 
+// pruneTCPingDataToConfig removes "latest tcping" entries for targets that
+// are no longer configured, so an agent write composed from a stale copy of
+// the record cannot bring a removed target back.
+func pruneTCPingDataToConfig(store *Store, data map[string]TCPingTargetData) {
+	if len(data) == 0 || store == nil {
+		return
+	}
+	cfg, err := store.GetTCPingConfig()
+	if err != nil || cfg == nil {
+		return
+	}
+	allowed := make(map[string]struct{}, len(cfg.Targets))
+	for _, t := range cfg.Targets {
+		allowed[t.Address] = struct{}{}
+	}
+	for target := range data {
+		if _, ok := allowed[target]; !ok {
+			delete(data, target)
+		}
+	}
+}
+
+// tcpingBatchSeen reports whether clientID has just delivered exactly this
+// batch before (same targets, stamps, outcomes and latencies) and remembers
+// the batch for the next call. Only batches whose samples all carry an
+// agent stamp are tracked, so legacy agents (no measured_at) are never
+// deduplicated by value. The map holds one entry per pushing client.
+var (
+	tcpingBatchMu   sync.Mutex
+	tcpingBatchLast = map[string]tcpingBatchMark{}
+)
+
+type tcpingBatchMark struct {
+	sig string
+	at  time.Time
+}
+
+const tcpingBatchDedupeWindow = 10 * time.Minute
+
+func tcpingBatchSignature(results []ClientTCPingResult) string {
+	if len(results) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(results))
+	for _, r := range results {
+		if r.MeasuredAt.IsZero() {
+			return ""
+		}
+		parts = append(parts, fmt.Sprintf("%s|%d|%t|%.3f", r.Target, r.MeasuredAt.UnixNano(), r.Success, r.Latency))
+	}
+	sort.Strings(parts)
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\n")))
+	return hex.EncodeToString(sum[:])
+}
+
+func tcpingBatchSeen(clientID string, results []ClientTCPingResult) bool {
+	sig := tcpingBatchSignature(results)
+	if sig == "" {
+		return false
+	}
+	now := time.Now()
+	tcpingBatchMu.Lock()
+	defer tcpingBatchMu.Unlock()
+	last, ok := tcpingBatchLast[clientID]
+	tcpingBatchLast[clientID] = tcpingBatchMark{sig: sig, at: now}
+	return ok && last.sig == sig && now.Sub(last.at) < tcpingBatchDedupeWindow
+}
+
 // Shared HTTP client for TCPing operations (connection pooling)
 var tcpingHTTPClient *http.Client
 var tcpingHTTPClientOnce sync.Once
@@ -4569,7 +4734,16 @@ func startTCPingPolling(ctx context.Context, registry *ClientRegistry, store *St
 			// the server first polling it, so this unambiguously marks "something is
 			// pushing to this ID right now".
 			if client.LastPushAt.IsZero() {
-				if m, err := store.Get(client.ID); err == nil && m != nil && tcpingPullSuppressed(client, m, time.Now()) {
+				// Re-read the registry entry: the copy taken by GetAll() at the
+				// start of the tick can be many seconds old by now (an
+				// unreachable client earlier in the loop costs two 5 s
+				// connection attempts), and comparing a stale LastPollAt with
+				// the live UpdatedAt mistook our own poll for a push.
+				fresh := registry.Get(client.ID)
+				if fresh == nil || !fresh.LastPushAt.IsZero() {
+					continue
+				}
+				if m, err := store.Get(client.ID); err == nil && m != nil && tcpingPullSuppressed(*fresh, m, time.Now()) {
 					continue
 				}
 			}
@@ -4753,23 +4927,14 @@ func startTCPingPolling(ctx context.Context, registry *ClientRegistry, store *St
 						invalidateTCPingCache(clientID)
 					}
 
-					// Update SystemMetric with latest tcping data for this target (only if successful)
+					// Update SystemMetric with latest tcping data for this target (only if successful).
+					// Merged inside one transaction so a concurrent poll result or admin edit
+					// is never overwritten (see Store.SetTCPingLatest).
 					if tcpingResp.Success {
-						existing, err := store.Get(clientID)
-						if err == nil && existing != nil {
-							// Initialize TCPingData map if nil
-							if existing.TCPingData == nil {
-								existing.TCPingData = make(map[string]TCPingTargetData)
-							}
-							// Update data for this target (use address as key)
-							existing.TCPingData[tgt.Address] = TCPingTargetData{
-								Latency:   tcpingResp.Latency,
-								Timestamp: time.Now().UTC(),
-							}
-							if err := store.Upsert(*existing); err != nil {
-								// Update failed silently
-							}
-						}
+						store.SetTCPingLatest(clientID, tgt.Address, TCPingTargetData{ //nolint:errcheck
+							Latency:   tcpingResp.Latency,
+							Timestamp: time.Now().UTC(),
+						})
 					}
 				}(client.ID, target)
 			}

@@ -528,55 +528,12 @@ func (s *Store) Upsert(metric SystemMetric) error {
 			return fmt.Errorf("bucket not found")
 		}
 
-		// Serialize metric to JSON
-		data, err := json.Marshal(metric)
-		if err != nil {
-			return fmt.Errorf("failed to marshal metric: %w", err)
-		}
-
-		// Store with ID as key
-		if err := bucket.Put([]byte(metric.ID), data); err != nil {
-			return fmt.Errorf("failed to put metric: %w", err)
-		}
-
-		return nil
+		return putMetric(bucket, metric)
 	})
 }
 
-// mergeAdminOwned copies the fields only the admin may change from the
-// record currently on disk into an agent-supplied metric. Agents compose
-// their record from a snapshot read moments earlier, so without this an
-// admin edit that lands between that read and the agent's write would be
-// silently reverted (name, tags, order, secret, visibility toggles). The
-// per-target "latest tcping" map is merged the same way so a concurrent
-// server-side tcping write is not lost either.
-func mergeAdminOwned(dst *SystemMetric, current *SystemMetric) {
-	dst.Name = current.Name
-	dst.Tags = current.Tags
-	dst.Order = current.Order
-	dst.Secret = current.Secret
-	dst.HideOnHome = current.HideOnHome
-	dst.HideTCPing = current.HideTCPing
-	for target, cur := range current.TCPingData {
-		if mine, ok := dst.TCPingData[target]; !ok || cur.Timestamp.After(mine.Timestamp) {
-			if dst.TCPingData == nil {
-				dst.TCPingData = make(map[string]TCPingTargetData, len(current.TCPingData))
-			}
-			dst.TCPingData[target] = cur
-		}
-	}
-}
-
-// putAgentMetric writes an agent-supplied record inside tx, taking the
-// admin-owned fields from the stored record in the same transaction (see
-// mergeAdminOwned). Unknown systems are stored as-is.
-func putAgentMetric(bucket *bolt.Bucket, metric SystemMetric) error {
-	if data := bucket.Get([]byte(metric.ID)); data != nil {
-		var current SystemMetric
-		if err := json.Unmarshal(data, &current); err == nil {
-			mergeAdminOwned(&metric, &current)
-		}
-	}
+// putMetric serialises metric and stores it under its ID inside bucket.
+func putMetric(bucket *bolt.Bucket, metric SystemMetric) error {
 	data, err := json.Marshal(metric)
 	if err != nil {
 		return fmt.Errorf("failed to marshal metric: %w", err)
@@ -585,6 +542,155 @@ func putAgentMetric(bucket *bolt.Bucket, metric SystemMetric) error {
 		return fmt.Errorf("failed to put metric: %w", err)
 	}
 	return nil
+}
+
+// MarkOffline persists Alert=true for a system inside one write transaction
+// and leaves every other field, UpdatedAt included, untouched. The previous
+// implementation rewound UpdatedAt by 13 s through a full-record Upsert:
+// the rewind made every later snapshot look older than what the browsers
+// had already painted, so their freshness guard dropped the frames and the
+// page froze until reload; and the Get + Upsert pair could overwrite a poll
+// result or admin edit committed in between. buildMetricsSnapshot derives
+// the offline state from the age of UpdatedAt anyway.
+func (s *Store) MarkOffline(id string) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(bucketName))
+		if bucket == nil {
+			return fmt.Errorf("bucket not found")
+		}
+		data := bucket.Get([]byte(id))
+		if data == nil {
+			return nil
+		}
+		var current SystemMetric
+		if err := json.Unmarshal(data, &current); err != nil {
+			return fmt.Errorf("failed to decode metric: %w", err)
+		}
+		if current.Alert {
+			return nil
+		}
+		current.Alert = true
+		return putMetric(bucket, current)
+	})
+}
+
+// SetTCPingLatest records the newest server-driven tcping sample for one
+// target, merging into the record as it is at commit time. It replaces a
+// Get + full-record Upsert outside any transaction, which could clobber a
+// poll result or an admin edit that landed in between. Unknown systems and
+// samples older than the stored one are ignored.
+func (s *Store) SetTCPingLatest(id, target string, sample TCPingTargetData) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(bucketName))
+		if bucket == nil {
+			return fmt.Errorf("bucket not found")
+		}
+		data := bucket.Get([]byte(id))
+		if data == nil {
+			return nil
+		}
+		var current SystemMetric
+		if err := json.Unmarshal(data, &current); err != nil {
+			return fmt.Errorf("failed to decode metric: %w", err)
+		}
+		if current.TCPingData == nil {
+			current.TCPingData = make(map[string]TCPingTargetData)
+		}
+		if cur, ok := current.TCPingData[target]; ok && cur.Timestamp.After(sample.Timestamp) {
+			return nil
+		}
+		current.TCPingData[target] = sample
+		return putMetric(bucket, current)
+	})
+}
+
+// mergeAdminOwned copies the fields only the admin may change from the
+// record currently on disk into an agent-supplied metric. Agents compose
+// their record from a snapshot read moments earlier, so without this an
+// admin edit that lands between that read and the agent's write would be
+// silently reverted (name, tags, order, secret, visibility toggles). The
+// per-target "latest tcping" map is merged as well: an entry the agent only
+// copied from an earlier read never overrides a newer stored one (a
+// concurrent server-side tcping write is not lost), whereas a target this
+// write carries a fresh sample for (dst.TCPingFresh) always wins, so a
+// stored stamp that ended up in the future cannot freeze the card. Entries
+// for targets that are no longer configured are dropped when the current
+// target set (allowed) is known, so a write composed from a stale copy
+// cannot resurrect a target the admin removed.
+func mergeAdminOwned(dst *SystemMetric, current *SystemMetric, allowed map[string]struct{}) {
+	dst.Name = current.Name
+	dst.Tags = current.Tags
+	dst.Order = current.Order
+	dst.Secret = current.Secret
+	dst.HideOnHome = current.HideOnHome
+	dst.HideTCPing = current.HideTCPing
+	for target, cur := range current.TCPingData {
+		if _, fresh := dst.TCPingFresh[target]; fresh {
+			continue
+		}
+		if mine, ok := dst.TCPingData[target]; !ok || cur.Timestamp.After(mine.Timestamp) {
+			if dst.TCPingData == nil {
+				dst.TCPingData = make(map[string]TCPingTargetData, len(current.TCPingData))
+			}
+			dst.TCPingData[target] = cur
+		}
+	}
+	pruneTCPingMap(dst.TCPingData, allowed)
+}
+
+// pruneTCPingMap drops entries for targets outside allowed. A nil allowed
+// set means the configured targets are unknown and nothing is dropped.
+func pruneTCPingMap(data map[string]TCPingTargetData, allowed map[string]struct{}) {
+	if allowed == nil {
+		return
+	}
+	for target := range data {
+		if _, ok := allowed[target]; !ok {
+			delete(data, target)
+		}
+	}
+}
+
+// allowedTCPingTargets reads the configured tcping targets inside tx. It
+// returns nil when no configuration is stored or it cannot be decoded, in
+// which case callers keep every entry.
+func allowedTCPingTargets(tx *bolt.Tx) map[string]struct{} {
+	bucket := tx.Bucket([]byte(configBucket))
+	if bucket == nil {
+		return nil
+	}
+	data := bucket.Get([]byte(configKey))
+	if data == nil {
+		return nil
+	}
+	var cfg TCPingConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(cfg.Targets))
+	for _, t := range cfg.Targets {
+		allowed[t.Address] = struct{}{}
+	}
+	return allowed
+}
+
+// putAgentMetric writes an agent-supplied record inside tx, taking the
+// admin-owned fields from the stored record in the same transaction (see
+// mergeAdminOwned). Unknown systems are stored as-is.
+func putAgentMetric(tx *bolt.Tx, bucket *bolt.Bucket, metric SystemMetric) error {
+	allowed := allowedTCPingTargets(tx)
+	merged := false
+	if data := bucket.Get([]byte(metric.ID)); data != nil {
+		var current SystemMetric
+		if err := json.Unmarshal(data, &current); err == nil {
+			mergeAdminOwned(&metric, &current, allowed)
+			merged = true
+		}
+	}
+	if !merged {
+		pruneTCPingMap(metric.TCPingData, allowed)
+	}
+	return putMetric(bucket, metric)
 }
 
 // UpdateOrders sets Order = index for every listed system inside one write
@@ -687,7 +793,7 @@ func (s *Store) UpsertFromAgent(metric SystemMetric) error {
 		if bucket == nil {
 			return fmt.Errorf("bucket not found")
 		}
-		return putAgentMetric(bucket, metric)
+		return putAgentMetric(tx, bucket, metric)
 	})
 }
 
@@ -862,7 +968,7 @@ func (s *Store) SaveClientPushBatch(metric SystemMetric, tcpingResults []TCPingR
 		if systems == nil {
 			return fmt.Errorf("systems bucket not found")
 		}
-		if err := putAgentMetric(systems, metric); err != nil {
+		if err := putAgentMetric(tx, systems, metric); err != nil {
 			return err
 		}
 

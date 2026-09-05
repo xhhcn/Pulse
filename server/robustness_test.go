@@ -96,20 +96,20 @@ func TestSSEBrokerEnforcesPerIPCap(t *testing.T) {
 	b := NewSSEBroker()
 	subs := make([]*sseSubscriber, 0, b.maxPerIP)
 	for i := 0; i < b.maxPerIP; i++ {
-		s, err := b.Subscribe(SSEViewPublic, "10.0.0.1")
+		s, err := b.Subscribe(SSEViewPublic, "203.0.113.10")
 		if err != nil {
 			t.Fatalf("Subscribe(%d) error = %v", i, err)
 		}
 		subs = append(subs, s)
 	}
-	if _, err := b.Subscribe(SSEViewPublic, "10.0.0.1"); err == nil {
+	if _, err := b.Subscribe(SSEViewPublic, "203.0.113.10"); err == nil {
 		t.Fatalf("Subscribe beyond per-IP cap must fail")
 	}
-	if _, err := b.Subscribe(SSEViewPublic, "10.0.0.2"); err != nil {
+	if _, err := b.Subscribe(SSEViewPublic, "203.0.113.11"); err != nil {
 		t.Fatalf("other IP must still be admitted: %v", err)
 	}
 	b.Unsubscribe(subs[0])
-	if _, err := b.Subscribe(SSEViewPublic, "10.0.0.1"); err != nil {
+	if _, err := b.Subscribe(SSEViewPublic, "203.0.113.10"); err != nil {
 		t.Fatalf("Unsubscribe must free a per-IP slot: %v", err)
 	}
 	if got := b.SubscriberCount(); got != b.maxPerIP+1 {
@@ -117,7 +117,7 @@ func TestSSEBrokerEnforcesPerIPCap(t *testing.T) {
 	}
 	// Admin streams are never refused by the anonymous caps.
 	for i := 0; i < 3; i++ {
-		if _, err := b.Subscribe(SSEViewAdmin, "10.0.0.1"); err != nil {
+		if _, err := b.Subscribe(SSEViewAdmin, "203.0.113.10"); err != nil {
 			t.Fatalf("admin Subscribe must bypass the per-IP cap: %v", err)
 		}
 	}
@@ -565,7 +565,7 @@ func TestSSEBrokerLatestSnapshotAgeAndPerView(t *testing.T) {
 	if _, ok := b.LatestSnapshot(SSEViewPublic); ok {
 		t.Fatalf("empty broker must not return a snapshot")
 	}
-	b.RememberSnapshot(SSEViewAdmin, "admin-1")
+	b.RememberSnapshot(SSEViewAdmin, "admin-1", time.Now())
 	if _, ok := b.LatestSnapshot(SSEViewPublic); ok {
 		t.Fatalf("a payload remembered for the admin view must not be served to the public view")
 	}
@@ -583,5 +583,304 @@ func TestSSEBrokerLatestSnapshotAgeAndPerView(t *testing.T) {
 	b.mu.Unlock()
 	if _, ok := b.LatestSnapshot(SSEViewPublic); ok {
 		t.Fatalf("a payload older than %v must not prime a new subscriber", sseSnapshotMaxAge)
+	}
+}
+
+// --- 2026-09 audit fixes -------------------------------------------------------
+
+func TestSSEBrokerPerIPCapSkipsPrivateAndLoopbackAddresses(t *testing.T) {
+	b := NewSSEBroker()
+	for _, ip := range []string{"172.17.0.1", "10.8.0.2", "127.0.0.1", "fd00::1"} {
+		for i := 0; i < b.maxPerIP+5; i++ {
+			if _, err := b.Subscribe(SSEViewPublic, ip); err != nil {
+				t.Fatalf("Subscribe(%s #%d) must not hit the per-IP cap: %v", ip, i, err)
+			}
+		}
+	}
+	if !perIPCapApplies("203.0.113.7") || !perIPCapApplies("2001:db8::1") {
+		t.Fatalf("public addresses must be capped individually")
+	}
+	if perIPCapApplies("192.168.1.9") || perIPCapApplies("") || perIPCapApplies("garbage") {
+		t.Fatalf("private, empty or unparsable addresses must not be capped individually")
+	}
+}
+
+func TestSSEBrokerTotalCapStillBoundsPrivateAddresses(t *testing.T) {
+	t.Setenv("SSE_MAX_STREAMS", "5")
+	b := NewSSEBroker()
+	for i := 0; i < 5; i++ {
+		if _, err := b.Subscribe(SSEViewPublic, "172.17.0.1"); err != nil {
+			t.Fatalf("Subscribe #%d: %v", i, err)
+		}
+	}
+	if _, err := b.Subscribe(SSEViewPublic, "172.17.0.1"); err == nil {
+		t.Fatalf("total cap must still apply to private addresses")
+	}
+}
+
+func TestRememberSnapshotKeepsNewerBroadcast(t *testing.T) {
+	b := NewSSEBroker()
+	builtAt := time.Now().Add(-50 * time.Millisecond)
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "broadcast"})
+	if got := b.RememberSnapshot(SSEViewPublic, "older-prime", builtAt); got != "broadcast" {
+		t.Fatalf("RememberSnapshot returned %q, want the newer broadcast", got)
+	}
+	if p, ok := b.LatestSnapshot(SSEViewPublic); !ok || p != "broadcast" {
+		t.Fatalf("latest = %q,%v; the older prime must not overwrite the broadcast", p, ok)
+	}
+	if got := b.RememberSnapshot(SSEViewPublic, "newer-prime", time.Now()); got != "newer-prime" {
+		t.Fatalf("a prime built after the broadcast must be stored, got %q", got)
+	}
+}
+
+func TestMarkOfflineKeepsUpdatedAtAndOtherFields(t *testing.T) {
+	store := newTestStore(t)
+	stamp := time.Now().UTC().Add(-8 * time.Second)
+	if err := store.Upsert(SystemMetric{ID: "pull1", Name: "Pull", CPU: 42, UpdatedAt: stamp, Tags: []string{"a"}}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if err := store.MarkOffline("pull1"); err != nil {
+		t.Fatalf("MarkOffline: %v", err)
+	}
+	m, _ := store.Get("pull1")
+	if !m.Alert || !m.UpdatedAt.Equal(stamp) || m.CPU != 42 || m.Name != "Pull" || len(m.Tags) != 1 {
+		t.Fatalf("MarkOffline must only set Alert: %+v", m)
+	}
+	if err := store.MarkOffline("missing"); err != nil {
+		t.Fatalf("MarkOffline on an unknown id must be a no-op: %v", err)
+	}
+}
+
+func TestSetTCPingLatestMergesWithoutClobbering(t *testing.T) {
+	store := newTestStore(t)
+	if err := store.Upsert(SystemMetric{ID: "pull2", Name: "Pull 2", CPU: 10}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	// A poll lands after the tcping goroutine would have read the record.
+	if err := store.UpsertFromAgent(SystemMetric{ID: "pull2", CPU: 90, UpdatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("UpsertFromAgent: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := store.SetTCPingLatest("pull2", "1.1.1.1:443", TCPingTargetData{Latency: 12, Timestamp: now}); err != nil {
+		t.Fatalf("SetTCPingLatest: %v", err)
+	}
+	m, _ := store.Get("pull2")
+	if m.CPU != 90 || m.Name != "Pull 2" {
+		t.Fatalf("SetTCPingLatest must not overwrite concurrent writes: %+v", m)
+	}
+	if got := m.TCPingData["1.1.1.1:443"]; got.Latency != 12 {
+		t.Fatalf("latest tcping not stored: %+v", m.TCPingData)
+	}
+	// An older sample never replaces a newer stored one.
+	if err := store.SetTCPingLatest("pull2", "1.1.1.1:443", TCPingTargetData{Latency: 99, Timestamp: now.Add(-time.Minute)}); err != nil {
+		t.Fatalf("SetTCPingLatest(old): %v", err)
+	}
+	m, _ = store.Get("pull2")
+	if got := m.TCPingData["1.1.1.1:443"]; got.Latency != 12 {
+		t.Fatalf("older sample replaced newer one: %+v", got)
+	}
+	if err := store.SetTCPingLatest("nope", "x", TCPingTargetData{}); err != nil {
+		t.Fatalf("unknown id must be a no-op: %v", err)
+	}
+}
+
+func pushTCPingBatch(t *testing.T, store *Store, registry *ClientRegistry, ipCache *IPCountryCache, id string, samples []map[string]interface{}) {
+	t.Helper()
+	body := map[string]interface{}{"id": id, "name": "x", "uptime": 5, "location": "US", "tcping_results": samples}
+	data, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/clients/push", bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	handleClientPush(store, registry, ipCache, rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("push: status %d body %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestClientPushLongIntervalBacklogKeepsStampsAndIgnoresRetry(t *testing.T) {
+	store := newTestStore(t)
+	registry := NewClientRegistry()
+	ipCache := NewIPCountryCache()
+	if err := store.SaveTCPingConfig(&TCPingConfig{Targets: []TCPingTargetEntry{{Name: "cf", Address: "1.1.1.1:443"}}, IntervalSecs: 300}); err != nil {
+		t.Fatalf("SaveTCPingConfig: %v", err)
+	}
+	if err := store.Upsert(SystemMetric{ID: "slow", Name: "Slow"}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	now := time.Now().UTC()
+	newest := now.Add(-4 * time.Minute) // healthy clock, 5 min interval, server was down
+	samples := []map[string]interface{}{
+		{"target": "1.1.1.1:443", "latency": 10, "success": true, "measured_at": newest.Add(-10 * time.Minute).Format(time.RFC3339Nano)},
+		{"target": "1.1.1.1:443", "latency": 11, "success": true, "measured_at": newest.Add(-5 * time.Minute).Format(time.RFC3339Nano)},
+		{"target": "1.1.1.1:443", "latency": 12, "success": true, "measured_at": newest.Format(time.RFC3339Nano)},
+	}
+	pushTCPingBatch(t, store, registry, ipCache, "slow", samples)
+	results, err := store.GetTCPingResults("slow", "1.1.1.1:443")
+	if err != nil || len(results) != 3 {
+		t.Fatalf("results = %d (%v), want 3", len(results), err)
+	}
+	if d := results[2].Timestamp.Sub(newest); d < -time.Second || d > time.Second {
+		t.Fatalf("a 4 min old newest sample with a 5 min interval is not skew; got %v want %v", results[2].Timestamp, newest)
+	}
+	// The agent's retry of the same batch (push timed out after commit).
+	pushTCPingBatch(t, store, registry, ipCache, "slow", samples)
+	results, _ = store.GetTCPingResults("slow", "1.1.1.1:443")
+	if len(results) != 3 {
+		t.Fatalf("retry stored duplicates: %d rows", len(results))
+	}
+}
+
+func TestClientPushRetryOfSkewedBatchIsNotStoredTwice(t *testing.T) {
+	store := newTestStore(t)
+	registry := NewClientRegistry()
+	ipCache := NewIPCountryCache()
+	if err := store.SaveTCPingConfig(&TCPingConfig{Targets: []TCPingTargetEntry{{Name: "cf", Address: "1.1.1.1:443"}}, IntervalSecs: 60}); err != nil {
+		t.Fatalf("SaveTCPingConfig: %v", err)
+	}
+	if err := store.Upsert(SystemMetric{ID: "skewed", Name: "Skewed"}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	newest := time.Now().UTC().Add(-10 * time.Minute) // clock 10 min behind
+	samples := []map[string]interface{}{
+		{"target": "1.1.1.1:443", "latency": 10, "success": true, "measured_at": newest.Add(-time.Minute).Format(time.RFC3339Nano)},
+		{"target": "1.1.1.1:443", "latency": 12, "success": true, "measured_at": newest.Format(time.RFC3339Nano)},
+	}
+	pushTCPingBatch(t, store, registry, ipCache, "skewed", samples)
+	pushTCPingBatch(t, store, registry, ipCache, "skewed", samples)
+	results, _ := store.GetTCPingResults("skewed", "1.1.1.1:443")
+	if len(results) != 2 {
+		t.Fatalf("skewed retry stored duplicates: %d rows", len(results))
+	}
+	// A genuinely new batch is still stored.
+	next := []map[string]interface{}{{"target": "1.1.1.1:443", "latency": 13, "success": true, "measured_at": newest.Add(time.Minute).Format(time.RFC3339Nano)}}
+	pushTCPingBatch(t, store, registry, ipCache, "skewed", next)
+	results, _ = store.GetTCPingResults("skewed", "1.1.1.1:443")
+	if len(results) != 3 {
+		t.Fatalf("new batch after a retry must be stored: %d rows", len(results))
+	}
+	// Legacy agents (no measured_at) are never deduplicated by value.
+	legacy := []map[string]interface{}{{"target": "1.1.1.1:443", "latency": 7, "success": true}}
+	pushTCPingBatch(t, store, registry, ipCache, "skewed", legacy)
+	pushTCPingBatch(t, store, registry, ipCache, "skewed", legacy)
+	results, _ = store.GetTCPingResults("skewed", "1.1.1.1:443")
+	if len(results) != 5 {
+		t.Fatalf("legacy batches must all be stored: %d rows", len(results))
+	}
+}
+
+func TestClientPushDropsRemovedTargetsFromLatestMap(t *testing.T) {
+	store := newTestStore(t)
+	registry := NewClientRegistry()
+	ipCache := NewIPCountryCache()
+	if err := store.SaveTCPingConfig(&TCPingConfig{Targets: []TCPingTargetEntry{{Name: "cf", Address: "1.1.1.1:443"}}, IntervalSecs: 60}); err != nil {
+		t.Fatalf("SaveTCPingConfig: %v", err)
+	}
+	stale := time.Now().UTC().Add(-time.Minute)
+	if err := store.Upsert(SystemMetric{ID: "pruned", Name: "Pruned", TCPingData: map[string]TCPingTargetData{
+		"1.1.1.1:443": {Latency: 5, Timestamp: stale},
+		"9.9.9.9:53":  {Latency: 7, Timestamp: stale}, // removed by the admin meanwhile
+	}}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	pushTCPingBatch(t, store, registry, ipCache, "pruned", nil)
+	m, _ := store.Get("pruned")
+	if _, ok := m.TCPingData["9.9.9.9:53"]; ok {
+		t.Fatalf("removed target resurrected: %+v", m.TCPingData)
+	}
+	if _, ok := m.TCPingData["1.1.1.1:443"]; !ok {
+		t.Fatalf("configured target must be kept: %+v", m.TCPingData)
+	}
+	copyMap := map[string]TCPingTargetData{"1.1.1.1:443": {}, "gone:1": {}}
+	pruneTCPingDataToConfig(store, copyMap)
+	if _, ok := copyMap["gone:1"]; ok || len(copyMap) != 1 {
+		t.Fatalf("pruneTCPingDataToConfig: %+v", copyMap)
+	}
+}
+
+func TestPrivacySaveWithTokenOnlyKeepsStoredExpiry(t *testing.T) {
+	store := newTestStore(t)
+	authTokensMu.Lock()
+	authTokens["test-admin-token"] = time.Now().Add(time.Hour)
+	authTokensMu.Unlock()
+	t.Cleanup(func() {
+		authTokensMu.Lock()
+		delete(authTokens, "test-admin-token")
+		authTokensMu.Unlock()
+	})
+	expires := time.Now().Add(2 * time.Hour).Truncate(time.Second)
+	if err := store.SavePrivacyConfig(&PrivacyConfig{Enabled: true, ShareToken: "tok123", TokenExpires: expires, ExpiresInSeconds: 7200}); err != nil {
+		t.Fatalf("SavePrivacyConfig: %v", err)
+	}
+	rr := httptest.NewRecorder()
+	handleSetPrivacyConfig(store, rr, adminRequest(t, http.MethodPost, "/api/privacy/config", map[string]interface{}{"enabled": true, "share_token": "tok123"}))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rr.Code, rr.Body.String())
+	}
+	cfg, _ := store.GetPrivacyConfig()
+	if !cfg.TokenExpires.Equal(expires) || cfg.ExpiresInSeconds != 7200 {
+		t.Fatalf("token-only save must keep the stored expiry: %+v", cfg)
+	}
+}
+
+func TestMergeAdminOwnedTCPingRules(t *testing.T) {
+	newer := time.Now().UTC()
+	older := newer.Add(-time.Minute)
+	stored := &SystemMetric{Name: "Stored", TCPingData: map[string]TCPingTargetData{
+		"a:1": {Latency: 1, Timestamp: newer}, // newer stored copy
+		"b:2": {Latency: 2, Timestamp: older}, // only stored
+		"z:9": {Latency: 9, Timestamp: newer}, // target removed by the admin
+	}}
+	incoming := SystemMetric{Name: "Agent", TCPingData: map[string]TCPingTargetData{
+		"a:1": {Latency: 10, Timestamp: older}, // fresh sample, older stamp (skewed clock)
+		"c:3": {Latency: 30, Timestamp: older}, // copied from an earlier read
+	}, TCPingFresh: map[string]struct{}{"a:1": {}}}
+	allowed := map[string]struct{}{"a:1": {}, "b:2": {}, "c:3": {}}
+	mergeAdminOwned(&incoming, stored, allowed)
+	if incoming.Name != "Stored" {
+		t.Fatalf("admin-owned name not merged: %+v", incoming)
+	}
+	if got := incoming.TCPingData["a:1"]; got.Latency != 10 {
+		t.Fatalf("fresh sample must win over a newer stored copy: %+v", got)
+	}
+	if got, ok := incoming.TCPingData["b:2"]; !ok || got.Latency != 2 {
+		t.Fatalf("stored-only entry must be kept: %+v", incoming.TCPingData)
+	}
+	if got := incoming.TCPingData["c:3"]; got.Latency != 30 {
+		t.Fatalf("incoming-only entry must be kept: %+v", got)
+	}
+	if _, ok := incoming.TCPingData["z:9"]; ok {
+		t.Fatalf("removed target must be dropped: %+v", incoming.TCPingData)
+	}
+	// Without a known target set nothing is dropped, and a copied entry
+	// (not fresh) never overrides a newer stored one.
+	copyOnly := SystemMetric{TCPingData: map[string]TCPingTargetData{"a:1": {Latency: 5, Timestamp: older}}}
+	mergeAdminOwned(&copyOnly, stored, nil)
+	if got := copyOnly.TCPingData["a:1"]; got.Latency != 1 {
+		t.Fatalf("copied entry must not override a newer stored one: %+v", got)
+	}
+	if _, ok := copyOnly.TCPingData["z:9"]; !ok {
+		t.Fatalf("nil allowed set must keep every entry: %+v", copyOnly.TCPingData)
+	}
+}
+
+func TestClientPushFreshSampleReplacesFutureStampedEntry(t *testing.T) {
+	store := newTestStore(t)
+	registry := NewClientRegistry()
+	ipCache := NewIPCountryCache()
+	if err := store.SaveTCPingConfig(&TCPingConfig{Targets: []TCPingTargetEntry{{Name: "cf", Address: "1.1.1.1:443"}}, IntervalSecs: 60}); err != nil {
+		t.Fatalf("SaveTCPingConfig: %v", err)
+	}
+	future := time.Now().UTC().Add(90 * time.Second)
+	if err := store.Upsert(SystemMetric{ID: "fz", Name: "Frozen", TCPingData: map[string]TCPingTargetData{
+		"1.1.1.1:443": {Latency: 77, Timestamp: future},
+	}}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	pushTCPingBatch(t, store, registry, ipCache, "fz", []map[string]interface{}{
+		{"target": "1.1.1.1:443", "latency": 12, "success": true, "measured_at": time.Now().UTC().Format(time.RFC3339Nano)},
+	})
+	m, _ := store.Get("fz")
+	if got := m.TCPingData["1.1.1.1:443"]; got.Latency != 12 {
+		t.Fatalf("the card would stay frozen on the future-stamped value: %+v", got)
 	}
 }
