@@ -111,7 +111,7 @@ jobs:
 
       - name: Upload to Release
         if: (github.event_name == 'workflow_call' && inputs.tag != '') || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: |

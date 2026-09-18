@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.19"><img src="https://img.shields.io/badge/release-v1.3.19-blue?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.20"><img src="https://img.shields.io/badge/release-v1.3.20-blue?style=flat-square" alt="Release"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/pulls/xhh1128/pulse?style=flat-square&color=blue" alt="Docker Pulls"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/image-size/xhh1128/pulse/latest?style=flat-square&color=blue" alt="Docker Size"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
@@ -37,7 +37,7 @@
 
 ---
 
-## ✨ What's New in v1.3.0
+## ✨ Key Features
 
 - 🔐 **Shared Secret Authentication** - All clients use a unified shared secret to connect to the server, simplifying deployment
 - 🏷️ **Special Tag Support** - New `traffic:in/out` and `speed:in/out` tags for real-time traffic statistics and network speed display
@@ -549,6 +549,15 @@ The same scripts make good cron fodder for zero-downtime backups (env var keeps 
 - One-Click Client Deployment
 
 ---
+
+## 🛠 Production Notes
+
+- **Resources**: the server is a single binary; a 1-core / 2 GB VPS is enough. With 1000 clients pushing every 3 s, each with TCPing results, it uses about 25% of one core and about 30 MB RSS.
+- **TCPing data volume**: history is kept for 24 hours; disk use is about `clients × targets × (86400 / interval seconds) × 0.4 KB`. With many clients keep the interval at 60 s or more and 3 to 5 targets.
+- **Reverse proxy / CDN**: the server trusts `X-Forwarded-For` only from loopback and from `TRUSTED_PROXIES` (comma-separated IPs or CIDRs). Set it when a proxy or CDN sits in front, otherwise login rate limits count per proxy address. The bundled nginx preserves the upstream `X-Forwarded-For` chain, so with Docker you can add the bridge gateway (for example `172.17.0.0/16`) to `TRUSTED_PROXIES`.
+- **SSE caps**: anonymous streams default to 2000 in total and 200 per IP, adjustable with `SSE_MAX_STREAMS` and `SSE_MAX_STREAMS_PER_IP`; admin sessions are exempt. The per-IP cap applies to public addresses only.
+- **Docker**: `docker-compose.yaml` sets a 45 s graceful stop; do not shorten it, a forced exit can damage the database.
+- **External resources**: the detail-row TCPing chart loads Chart.js from `cdn.jsdelivr.net` (fallback `unpkg.com`) on first open; visitors need to reach one of them.
 
 ## 📄 License
 

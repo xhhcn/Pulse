@@ -303,17 +303,6 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
       // Continue with privacy check
     }
     
-    // Check privacy mode
-    let privacyEnabled = false;
-    try {
-      const privacyRes = await fetch(`${apiBase}/api/privacy/config`);
-      if (privacyRes.ok) {
-        const privacyConfig = await privacyRes.json();
-        privacyEnabled = privacyConfig.enabled || false;
-      }
-    } catch (err) {
-      // Privacy check failed, assume normal mode
-    }
     
     // Get stored token
     const token = localStorage.getItem('admin_auth_token');
@@ -340,8 +329,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
       // is caught by the fetch wrapper below.
       const verifyData = res.ok ? await res.json().catch(() => null) : null;
       const tokenValid = res.status !== 401 && !(verifyData && verifyData.valid === false);
-      if (true) {
-        if (tokenValid) {
+      if (tokenValid) {
           // Token is valid — cross-fade the overlay out so the admin
           // dashboard appears smoothly beneath. `.animate-content` on
           // <main> has a 100 ms animation-delay, and the overlay's
@@ -380,13 +368,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
               return res;
             });
           };
-        } else {
-          // Token is invalid, redirect to login
-          localStorage.removeItem('admin_auth_token');
-          window.location.href = '/login?redirect=/admin';
-        }
       } else {
-        // Verification failed, redirect to login
+        // Token is invalid, redirect to login
         localStorage.removeItem('admin_auth_token');
         window.location.href = '/login?redirect=/admin';
       }

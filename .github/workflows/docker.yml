@@ -118,12 +118,13 @@ jobs:
           echo "Client binaries built successfully"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Release v${{ steps.version.outputs.version }}
+          make_latest: true
           files: |
             client/probe-client
             client/probe-client-arm64
@@ -134,13 +135,17 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} removes the "loaded twice" effect on page open and makes live updates visually calm. Existing clients and databases stay compatible.
+            v${{ steps.version.outputs.version }} is a follow-up to v1.3.19 from a final multi-angle review. Existing clients and databases stay compatible.
 
             ### Highlights
 
-            - Event stream: broadcasts are built and delivered under one lock and a snapshot built before the one already published is dropped, so a viewer can never receive an older state after a newer one. A new stream is primed with the last broadcast (at most one tick old) instead of a separately built snapshot; both pages paint a connect-time snapshot only when it is strictly newer than what is on screen.
-            - TCPing: a failed probe no longer lets a stale copy of the "latest" map win the merge; an unreadable target configuration keeps the batch instead of discarding it; the re-send signature map is bounded.
-            - Agent: a negative byte-counter delta (an interface disappeared or its counters were reset) reports a zero rate for that sample instead of a spike of the machine's lifetime byte count.
+            - Event stream: a connecting stream that finds no snapshot published within the last tick now refreshes it through the regular broadcast path, so a connect-time build can no longer make the next real tick look older and drop it for every viewer, and a slow build is still delivered. A stale prime check no longer discards what is already queued for the subscriber.
+            - Embedded static files carry a strong ETag, so the no-cache HTML and fonts revalidate with a 304 instead of a full transfer through a CDN.
+            - Forwarded-address parsing stops at an entry it cannot parse instead of falling through to client-supplied entries.
+            - `install-pulse-server.sh` upgrades a running install in place (download next to the binary, swap, restart); it used to fail with "Text file busy".
+            - Login page: an unreachable `/api/auth/status` no longer turns an initialised site into the first-run setup form.
+            - Agent reports version 1.3.20. Release workflows use `action-gh-release@v2`.
+            - README: production deployment notes (`TRUSTED_PROXIES`, `SSE_MAX_STREAMS`, `SSE_MAX_STREAMS_PER_IP`, resource sizing, chart CDN requirement).
 
             ### Compatibility
 
@@ -150,7 +155,7 @@ jobs:
             ### Verified
 
             - Server vet, race-enabled tests and build; client vet and cross-compilation.
-            - Browser end-to-end runs on both pages under a 120-agent load, offline transitions, admin session loss, and a per-tick layout-stability check.
+            - Browser end-to-end runs on both pages under load, offline transitions, admin session loss, first-paint and layout-stability checks, Docker image smoke tests.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`

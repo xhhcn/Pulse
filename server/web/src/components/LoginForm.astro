@@ -159,17 +159,20 @@
   }
 
   // Check if password is already set
+  // Returns true / false, or null when the status could not be read: an
+  // unreachable or failing endpoint must not turn an initialised site into
+  // the two-field first-run setup form.
   async function checkPasswordStatus() {
     try {
-      const res = await fetch(`${apiBase}/api/auth/status`);
+      const res = await fetch(`${apiBase}/api/auth/status`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        return data.set;
+        return data.set === true;
       }
     } catch (err) {
       // Status check failed silently
     }
-    return false;
+    return null;
   }
 
   // Setup password (first time)
@@ -307,7 +310,7 @@
         submitButton.textContent = translations[lang].submit || translations[lang].login || 'Login';
       }
     }
-    applyLoginMode(!isPasswordSet);
+    applyLoginMode(isPasswordSet === false);
 
     // Guard against double-submission. On slow networks a fast double
     // click on the submit button would fire two /api/auth/login requests
@@ -335,7 +338,7 @@
       submitButton.classList.add('opacity-60', 'cursor-not-allowed');
 
       try {
-        if (!isPasswordSet) {
+        if (isPasswordSet === false) {
           // Setup password
           if (password !== confirmPassword) {
             const lang = getCurrentLanguage();
