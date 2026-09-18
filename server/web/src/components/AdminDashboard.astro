@@ -4211,7 +4211,7 @@ const customCodePlaceholder = [
     let max = 0;
     for (const s of list) { const t = s && s.updated_at ? Date.parse(s.updated_at) : 0; if (t > max) max = t; }
     const idKey = list.map((s) => (s && s.id) || '').sort().join('\u0000');
-    if (idKey === paintedAdminIdKey && max && paintedAdminFreshness && max < paintedAdminFreshness) return true;
+    if (idKey === paintedAdminIdKey && max && paintedAdminFreshness && max <= paintedAdminFreshness) return true;
     noteAdminSnapshot(list);
     return false;
   }

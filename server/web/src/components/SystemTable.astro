@@ -3823,7 +3823,10 @@ const apiBase = apiBaseProp ?? '';
     let max = 0;
     for (const s of list) { const t = s && s.updated_at ? Date.parse(s.updated_at) : 0; if (t > max) max = t; }
     const idKey = list.map((s) => (s && s.id) || '').sort().join('\u0000');
-    if (idKey === paintedIdKey && max && paintedFreshness && max < paintedFreshness) return true;
+    // Not strictly newer than what is on screen (same systems): skip. An
+    // equal stamp is the same data built at another instant and could only
+    // flip derived state such as the offline flag.
+    if (idKey === paintedIdKey && max && paintedFreshness && max <= paintedFreshness) return true;
     noteSnapshot(list);
     return false;
   }
