@@ -86,12 +86,16 @@ func staticFilePathFromURL(urlPath string) (string, bool) {
 }
 
 type SystemMetric struct {
-	ID                 string                      `json:"id"`
-	Name               string                      `json:"name"`
-	IPv4               string                      `json:"ipv4,omitempty"`
-	IPv6               string                      `json:"ipv6,omitempty"`
-	Time               string                      `json:"time,omitempty"`
-	Location           string                      `json:"location,omitempty"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	IPv4     string `json:"ipv4,omitempty"`
+	IPv6     string `json:"ipv6,omitempty"`
+	Time     string `json:"time,omitempty"`
+	Location string `json:"location,omitempty"`
+	// Address the stored Location was resolved for (empty when the agent
+	// declared it). A stored country is only reused while the agent still
+	// has this address; otherwise it is looked up again.
+	LocationIP         string                      `json:"location_ip,omitempty"`
 	VirtualizationType string                      `json:"virtualization_type,omitempty"` // "VPS" or "DS"
 	OS                 string                      `json:"os,omitempty"`
 	OSIcon             string                      `json:"os_icon,omitempty"`
@@ -2210,6 +2214,7 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 			IPv6:               payload.IPv6,
 			Time:               timeDisplay,
 			Location:           payload.Location,
+			LocationIP:         existingLocationIP(existing, payload.Location),
 			VirtualizationType: payload.VirtualizationType,
 			OS:                 payload.OS,
 			OSIcon:             payload.OSIcon,
@@ -2410,7 +2415,11 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 	// getClientIP uses forwarded headers only when the immediate peer is trusted.
 	if isPrivateIPStr(ip) {
 		if srcIP := getClientIP(r); srcIP != "" {
-			if parsed := net.ParseIP(srcIP); parsed != nil && parsed.To4() != nil && !isPrivateIP(parsed) {
+			parsed := net.ParseIP(srcIP)
+			if parsed != nil && parsed.To4() == nil && ipv6 == "" && !isPrivateIP(parsed) && !isTrustedProxyIP(parsed) {
+				ipv6 = srcIP // the agent reached us over IPv6
+			}
+			if parsed != nil && parsed.To4() != nil && !isPrivateIP(parsed) && !isTrustedProxyIP(parsed) {
 				ip = srcIP
 			}
 		}
@@ -2536,7 +2545,14 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	// proxy when that proxy is trusted by getClientIP.
 	if payload.IPv4 == "" || isPrivateIPStr(payload.IPv4) {
 		if srcIP := getClientIP(r); srcIP != "" {
-			if parsed := net.ParseIP(srcIP); parsed != nil && parsed.To4() != nil && !isPrivateIP(parsed) {
+			// A trusted proxy's own address (forwarded header missing or
+			// unusable) is never the agent's address: storing it put the
+			// system in the CDN's country.
+			parsed := net.ParseIP(srcIP)
+			if parsed != nil && parsed.To4() == nil && payload.IPv6 == "" && !isPrivateIP(parsed) && !isTrustedProxyIP(parsed) {
+				payload.IPv6 = srcIP // the agent reached us over IPv6
+			}
+			if parsed != nil && parsed.To4() != nil && !isPrivateIP(parsed) && !isTrustedProxyIP(parsed) {
 				payload.IPv4 = srcIP
 			}
 		}
@@ -2558,7 +2574,8 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	registry.UpdatePushState(clientID, now)
 
 	// Resolve location without ever blocking the push (see resolveLocation).
-	payload.Location = resolveLocation(ipCache, existing, payload.Location, payload.IPv4, payload.IPv6)
+	var locationIP string
+	payload.Location, locationIP = resolveLocation(ipCache, existing, payload.Location, payload.IPv4, payload.IPv6)
 
 	timeDisplay := formatUptime(payload.Uptime)
 
@@ -2725,6 +2742,7 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 		IPv6:               payload.IPv6,
 		Time:               timeDisplay,
 		Location:           payload.Location,
+		LocationIP:         locationIP,
 		VirtualizationType: payload.VirtualizationType,
 		OS:                 payload.OS,
 		OSIcon:             payload.OSIcon,
@@ -3306,7 +3324,8 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	existing, _ = store.Get(client.ID)
 
 	// Resolve location without ever blocking the poll (see resolveLocation).
-	payload.Location = resolveLocation(ipCache, existing, payload.Location, payload.IPv4, payload.IPv6)
+	var locationIP string
+	payload.Location, locationIP = resolveLocation(ipCache, existing, payload.Location, payload.IPv4, payload.IPv6)
 
 	// Format uptime for display
 	timeDisplay := formatUptime(payload.Uptime)
@@ -3353,6 +3372,7 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 		IPv6:               payload.IPv6,
 		Time:               timeDisplay,
 		Location:           payload.Location,
+		LocationIP:         locationIP,
 		VirtualizationType: payload.VirtualizationType,
 		OS:                 payload.OS,
 		OSIcon:             payload.OSIcon,
@@ -3520,19 +3540,25 @@ var (
 // record (may be nil). The call never performs network I/O: a cache miss
 // only queues a background lookup, and the next push (<= 3 s later) picks
 // the cached answer up and persists it as part of its normal write.
-func resolveLocation(ipCache *IPCountryCache, existing *SystemMetric, reported, ipv4, ipv6 string) string {
+// resolveLocation returns the country to store and the address it was
+// resolved for ("" when the agent declared the location itself).
+//
+// A stored country is reused only while it was resolved for an address the
+// agent still has. The previous rule ("reuse while the addresses are
+// unchanged") kept a wrong country forever: the address changed once, the
+// lookup ran asynchronously, the fallback was persisted together with the
+// new address, and from then on the addresses matched and the stale value
+// was reused, restart after restart.
+func resolveLocation(ipCache *IPCountryCache, existing *SystemMetric, reported, ipv4, ipv6 string) (string, string) {
 	if reported != "" {
-		return extractCountry(reported)
+		return extractCountry(reported), ""
 	}
-	fallback := ""
+	fallback, fallbackIP := "", ""
 	if existing != nil {
 		// Records written by older versions may hold "City, CC"; normalise so a
 		// reused value is always the bare country code the frontend expects.
 		fallback = extractCountry(existing.Location)
-		// Reuse the persisted value as long as the public IPs are unchanged.
-		if fallback != "" && existing.IPv4 == ipv4 && existing.IPv6 == ipv6 {
-			return fallback
-		}
+		fallbackIP = existing.LocationIP
 	}
 	for _, ip := range []string{ipv4, ipv6} {
 		if ip == "" || isPrivateIPStr(ip) {
@@ -3540,16 +3566,19 @@ func resolveLocation(ipCache *IPCountryCache, existing *SystemMetric, reported, 
 		}
 		if country, found := ipCache.Get(ip); found {
 			if country != "" {
-				return country
+				return country, ip
 			}
 			continue // cached failure for this family; try the other one
+		}
+		if fallback != "" && fallbackIP == ip {
+			return fallback, ip // resolved for this very address earlier
 		}
 		scheduleGeoLookup(ipCache, ip)
 		// Do not queue the other family yet: if this one succeeds the
 		// answer covers the system, and the next push re-evaluates anyway.
-		return fallback
+		return fallback, fallbackIP
 	}
-	return fallback
+	return fallback, fallbackIP
 }
 
 // scheduleGeoLookup queues ip for resolution by the worker pool. One
@@ -5194,7 +5223,27 @@ var (
 	trustedProxyNets []*net.IPNet
 )
 
+// cloudflareProxyRanges are Cloudflare's published edge ranges. They are
+// always treated as trusted proxies: a TCP connection from one of them can
+// only come from Cloudflare, which appends the real client to
+// X-Forwarded-For, so honouring that header by default gives every
+// Cloudflare-fronted deployment correct client addresses without operator
+// configuration. TRUSTED_PROXIES extends the list.
+var cloudflareProxyRanges = []string{
+	"173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
+	"141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+	"197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+	"104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+	"2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32",
+	"2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
+}
+
 func loadTrustedProxyNets() {
+	for _, cidrStr := range cloudflareProxyRanges {
+		if _, cidr, err := net.ParseCIDR(cidrStr); err == nil {
+			trustedProxyNets = append(trustedProxyNets, cidr)
+		}
+	}
 	raw := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES"))
 	if raw == "" {
 		return
@@ -5613,4 +5662,14 @@ func isAuthenticated(r *http.Request) bool {
 	}
 
 	return false
+}
+
+// existingLocationIP keeps the address a stored location was resolved for
+// when an admin edit leaves the location untouched; a changed location is a
+// declared one and carries no address.
+func existingLocationIP(existing *SystemMetric, location string) string {
+	if existing == nil || existing.Location != location {
+		return ""
+	}
+	return existing.LocationIP
 }

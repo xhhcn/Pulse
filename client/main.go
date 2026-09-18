@@ -1513,8 +1513,15 @@ func getIPAddresses() (ipv4, ipv6 string) {
 	go func() {
 		newV4, newV6 := detectIPAddresses()
 		ipCacheMutex.Lock()
-		ipv4Cache = newV4
-		ipv6Cache = newV6
+		// A refresh that finds nothing (echo services unreachable for a
+		// while) keeps the last known addresses instead of reporting none,
+		// which would make the server fall back to the connection source.
+		if newV4 != "" {
+			ipv4Cache = newV4
+		}
+		if newV6 != "" {
+			ipv6Cache = newV6
+		}
 		ipCacheTime = time.Now()
 		ipCacheMutex.Unlock()
 	}()

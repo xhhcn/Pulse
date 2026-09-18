@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -15,7 +17,7 @@ import (
 
 func TestResolveLocationReportedValueWins(t *testing.T) {
 	cache := NewIPCountryCache()
-	got := resolveLocation(cache, nil, "Los Angeles, US", "8.8.8.8", "")
+	got, _ := resolveLocation(cache, nil, "Los Angeles, US", "8.8.8.8", "")
 	if got != "US" {
 		t.Fatalf("resolveLocation() = %q, want US", got)
 	}
@@ -23,8 +25,8 @@ func TestResolveLocationReportedValueWins(t *testing.T) {
 
 func TestResolveLocationReusesStoredLocationWhenIPUnchanged(t *testing.T) {
 	cache := NewIPCountryCache()
-	existing := &SystemMetric{ID: "sys", Location: "DE", IPv4: "203.0.113.10"}
-	got := resolveLocation(cache, existing, "", "203.0.113.10", "")
+	existing := &SystemMetric{ID: "sys", Location: "DE", IPv4: "203.0.113.10", LocationIP: "203.0.113.10"}
+	got, _ := resolveLocation(cache, existing, "", "203.0.113.10", "")
 	if got != "DE" {
 		t.Fatalf("resolveLocation() = %q, want DE (persisted value reused)", got)
 	}
@@ -37,7 +39,7 @@ func TestResolveLocationUsesCacheAndFallsBackAcrossFamilies(t *testing.T) {
 	cache := NewIPCountryCache()
 	cache.SetFailed("203.0.113.10")
 	cache.Set("2001:db8::1", "JP")
-	got := resolveLocation(cache, nil, "", "203.0.113.10", "2001:db8::1")
+	got, _ := resolveLocation(cache, nil, "", "203.0.113.10", "2001:db8::1")
 	if got != "JP" {
 		t.Fatalf("resolveLocation() = %q, want JP (v4 cached failure, v6 cache hit)", got)
 	}
@@ -48,8 +50,8 @@ func TestResolveLocationKeepsOldLocationWhileIPChanges(t *testing.T) {
 	// Old IP resolved earlier; new IP has a cached answer, so the change is
 	// picked up immediately without any network call.
 	cache.Set("198.51.100.7", "FR")
-	existing := &SystemMetric{ID: "sys", Location: "DE", IPv4: "203.0.113.10"}
-	got := resolveLocation(cache, existing, "", "198.51.100.7", "")
+	existing := &SystemMetric{ID: "sys", Location: "DE", IPv4: "203.0.113.10", LocationIP: "203.0.113.10"}
+	got, _ := resolveLocation(cache, existing, "", "198.51.100.7", "")
 	if got != "FR" {
 		t.Fatalf("resolveLocation() = %q, want FR", got)
 	}
@@ -58,7 +60,7 @@ func TestResolveLocationKeepsOldLocationWhileIPChanges(t *testing.T) {
 func TestResolveLocationSkipsPrivateAddresses(t *testing.T) {
 	cache := NewIPCountryCache()
 	start := time.Now()
-	got := resolveLocation(cache, nil, "", "192.168.1.5", "fd00::1")
+	got, _ := resolveLocation(cache, nil, "", "192.168.1.5", "fd00::1")
 	if got != "" {
 		t.Fatalf("resolveLocation() = %q, want empty for private IPs", got)
 	}
@@ -1082,4 +1084,98 @@ func TestStaticETagRevalidation(t *testing.T) {
 	if !matched {
 		t.Fatalf("If-None-Match comparison failed")
 	}
+}
+
+func TestResolveLocationReusesOnlyForTheResolvedAddress(t *testing.T) {
+	cache := NewIPCountryCache()
+	// Legacy record: a country persisted for an address that is no longer
+	// known to have produced it (LocationIP empty) is not trusted blindly.
+	existing := &SystemMetric{Location: "US", IPv4: "111.253.32.117"}
+	loc, ip := resolveLocation(cache, existing, "", "111.253.32.117", "")
+	if loc != "US" || ip != "" {
+		t.Fatalf("first pass keeps the fallback while the lookup runs: %q %q", loc, ip)
+	}
+	// The lookup answered: the cached country wins over the stale value.
+	cache.Set("111.253.32.117", "TW")
+	loc, ip = resolveLocation(cache, existing, "", "111.253.32.117", "")
+	if loc != "TW" || ip != "111.253.32.117" {
+		t.Fatalf("cached answer must replace the stale country: %q %q", loc, ip)
+	}
+	// Persisted with the address it was resolved for: reused on a cache miss.
+	existing = &SystemMetric{Location: "TW", LocationIP: "111.253.32.117", IPv4: "111.253.32.117"}
+	cache2 := NewIPCountryCache()
+	loc, ip = resolveLocation(cache2, existing, "", "111.253.32.117", "")
+	if loc != "TW" || ip != "111.253.32.117" {
+		t.Fatalf("resolved-for address must be reused without a lookup: %q %q", loc, ip)
+	}
+	// The address changed: the old country is only a fallback, and it is
+	// not re-attributed to the new address.
+	loc, ip = resolveLocation(cache2, existing, "", "1.2.3.4", "")
+	if loc != "TW" || ip != "111.253.32.117" {
+		t.Fatalf("changed address keeps the fallback attribution: %q %q", loc, ip)
+	}
+	// A declared location carries no address.
+	loc, ip = resolveLocation(cache2, existing, "Tokyo, JP", "1.2.3.4", "")
+	if loc != "JP" || ip != "" {
+		t.Fatalf("declared location: %q %q", loc, ip)
+	}
+}
+
+func TestCloudflareRangesAreTrustedByDefault(t *testing.T) {
+	trustedProxyOnce = sync.Once{}
+	trustedProxyNets = nil
+	t.Setenv("TRUSTED_PROXIES", "")
+	if !isTrustedProxyIP(net.ParseIP("172.69.186.5")) || !isTrustedProxyIP(net.ParseIP("2606:4700::1")) {
+		t.Fatalf("Cloudflare edges must be trusted without configuration")
+	}
+	if isTrustedProxyIP(net.ParseIP("23.136.252.20")) {
+		t.Fatalf("an unrelated address must not be trusted")
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "172.69.186.5:443"
+	req.Header.Set("X-Forwarded-For", "111.253.32.117")
+	if got := getClientIP(req); got != "111.253.32.117" {
+		t.Fatalf("client behind Cloudflare: got %q", got)
+	}
+	trustedProxyOnce = sync.Once{}
+	trustedProxyNets = nil
+}
+
+func TestClientPushNeverStoresAProxyAddressAsTheAgent(t *testing.T) {
+	trustedProxyOnce = sync.Once{}
+	trustedProxyNets = nil
+	t.Setenv("TRUSTED_PROXIES", "")
+	store := newTestStore(t)
+	registry := NewClientRegistry()
+	ipCache := NewIPCountryCache()
+	if err := store.Upsert(SystemMetric{ID: "px", Name: "Proxied"}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	// Forwarded header missing: the resolved source is the Cloudflare edge.
+	body, _ := json.Marshal(map[string]interface{}{"id": "px", "name": "x", "uptime": 5})
+	req := httptest.NewRequest(http.MethodPost, "/api/clients/push", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "172.69.186.5:443"
+	rr := httptest.NewRecorder()
+	handleClientPush(store, registry, ipCache, rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("push: %d %s", rr.Code, rr.Body.String())
+	}
+	m, _ := store.Get("px")
+	if m.IPv4 != "" {
+		t.Fatalf("the proxy's address must not become the agent's: %q", m.IPv4)
+	}
+	// With the header present the real address is stored, over IPv6 as well.
+	req = httptest.NewRequest(http.MethodPost, "/api/clients/push", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "172.69.186.5:443"
+	req.Header.Set("X-Forwarded-For", "2001:b011:b000:408a::1")
+	rr = httptest.NewRecorder()
+	handleClientPush(store, registry, ipCache, rr, req)
+	m, _ = store.Get("px")
+	if m.IPv6 != "2001:b011:b000:408a::1" || m.IPv4 != "" {
+		t.Fatalf("agent over IPv6: got v4=%q v6=%q", m.IPv4, m.IPv6)
+	}
+	trustedProxyOnce = sync.Once{}
+	trustedProxyNets = nil
 }
