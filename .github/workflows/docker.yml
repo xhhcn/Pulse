@@ -135,27 +135,23 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} is a follow-up to v1.3.19 from a final multi-angle review. Existing clients and databases stay compatible.
+            v${{ steps.version.outputs.version }} fixes wrong country flags. Existing clients and databases stay compatible.
 
             ### Highlights
 
-            - Event stream: a connecting stream that finds no snapshot published within the last tick now refreshes it through the regular broadcast path, so a connect-time build can no longer make the next real tick look older and drop it for every viewer, and a slow build is still delivered. A stale prime check no longer discards what is already queued for the subscriber.
-            - Embedded static files carry a strong ETag, so the no-cache HTML and fonts revalidate with a 304 instead of a full transfer through a CDN.
-            - Forwarded-address parsing stops at an entry it cannot parse instead of falling through to client-supplied entries.
-            - `install-pulse-server.sh` upgrades a running install in place (download next to the binary, swap, restart); it used to fail with "Text file busy".
-            - Login page: an unreachable `/api/auth/status` no longer turns an initialised site into the first-run setup form.
-            - Agent reports version 1.3.20. Release workflows use `action-gh-release@v2`.
-            - README: production deployment notes (`TRUSTED_PROXIES`, `SSE_MAX_STREAMS`, `SSE_MAX_STREAMS_PER_IP`, resource sizing, chart CDN requirement).
+            - A stored country is reused only while it was resolved for an address the agent still has (new `location_ip` field). Previously, after one address change the fallback country was persisted together with the new address and then reused forever, restart after restart; a cached lookup answer now always wins.
+            - Cloudflare's published ranges are trusted proxies by default, so deployments behind Cloudflare get real client addresses without setting `TRUSTED_PROXIES`.
+            - When an agent reports no address, the server never records a trusted proxy's own address as the agent's (that put systems in the CDN's country); an agent reaching the server over IPv6 gets its IPv6 recorded.
+            - Agent: a public-address refresh that finds nothing keeps the last known addresses. Reports version 1.3.21.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format changed.
-            - Existing `metrics.db` files remain readable.
+            - Existing `metrics.db` files remain readable; countries stored by older versions are re-checked once and corrected where needed.
 
             ### Verified
 
-            - Server vet, race-enabled tests and build; client vet and cross-compilation.
-            - Browser end-to-end runs on both pages under load, offline transitions, admin session loss, first-paint and layout-stability checks, Docker image smoke tests.
+            - Server vet, race-enabled tests and build; client vet and cross-compilation; browser end-to-end runs; Docker image smoke tests.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
