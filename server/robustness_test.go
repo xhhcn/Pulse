@@ -572,7 +572,7 @@ func TestSSEBrokerLatestSnapshotAgeAndPerView(t *testing.T) {
 	if p, ok := b.LatestSnapshot(SSEViewAdmin); !ok || p != "admin-1" {
 		t.Fatalf("fresh admin payload not returned: %q %v", p, ok)
 	}
-	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "pub-2", SSEViewAdmin: "admin-2"})
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "pub-2", SSEViewAdmin: "admin-2"}, time.Now())
 	if p, _ := b.LatestSnapshot(SSEViewPublic); p != "pub-2" {
 		t.Fatalf("broadcast payload not remembered: %q", p)
 	}
@@ -621,7 +621,7 @@ func TestSSEBrokerTotalCapStillBoundsPrivateAddresses(t *testing.T) {
 func TestRememberSnapshotKeepsNewerBroadcast(t *testing.T) {
 	b := NewSSEBroker()
 	builtAt := time.Now().Add(-50 * time.Millisecond)
-	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "broadcast"})
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "broadcast"}, time.Now())
 	if got := b.RememberSnapshot(SSEViewPublic, "older-prime", builtAt); got != "broadcast" {
 		t.Fatalf("RememberSnapshot returned %q, want the newer broadcast", got)
 	}
@@ -882,5 +882,92 @@ func TestClientPushFreshSampleReplacesFutureStampedEntry(t *testing.T) {
 	m, _ := store.Get("fz")
 	if got := m.TCPingData["1.1.1.1:443"]; got.Latency != 12 {
 		t.Fatalf("the card would stay frozen on the future-stamped value: %+v", got)
+	}
+}
+
+func TestBroadcastByViewIsMonotonicAndAtomic(t *testing.T) {
+	b := NewSSEBroker()
+	sub, err := b.Subscribe(SSEViewPublic, "203.0.113.1")
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	newer := time.Now()
+	older := newer.Add(-50 * time.Millisecond)
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "B2"}, newer)
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "B1"}, older) // built before B2, published after
+	if p, _ := b.LatestSnapshot(SSEViewPublic); p != "B2" {
+		t.Fatalf("older build must not replace the published snapshot: %q", p)
+	}
+	var got []string
+	for {
+		select {
+		case p := <-sub.ch:
+			got = append(got, p)
+			continue
+		default:
+		}
+		break
+	}
+	if len(got) != 1 || got[0] != "B2" {
+		t.Fatalf("subscriber must only receive the newer build, got %v", got)
+	}
+}
+
+func TestPrimeSnapshotDrainsQueueAndServesLatest(t *testing.T) {
+	b := NewSSEBroker()
+	sub, err := b.Subscribe(SSEViewPublic, "203.0.113.2")
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	if _, ok := b.PrimeSnapshot(sub); ok {
+		t.Fatalf("nothing published yet: no prime")
+	}
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "T1"}, time.Now())
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "T2"}, time.Now())
+	p, ok := b.PrimeSnapshot(sub)
+	if !ok || p != "T2" {
+		t.Fatalf("prime must be the latest broadcast, got %q %v", p, ok)
+	}
+	select {
+	case q := <-sub.ch:
+		t.Fatalf("queue must be drained by PrimeSnapshot, still had %q", q)
+	default:
+	}
+	// Anything published afterwards is delivered normally and is newer.
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "T3"}, time.Now())
+	select {
+	case q := <-sub.ch:
+		if q != "T3" {
+			t.Fatalf("expected T3, got %q", q)
+		}
+	default:
+		t.Fatalf("T3 not delivered")
+	}
+	// A stale publication is not used as a prime.
+	b.mu.Lock()
+	b.latestAt[SSEViewPublic] = time.Now().Add(-2 * sseSnapshotMaxAge)
+	b.mu.Unlock()
+	if _, ok := b.PrimeSnapshot(sub); ok {
+		t.Fatalf("a snapshot older than %v must not prime a subscriber", sseSnapshotMaxAge)
+	}
+}
+
+func TestClientPushFailedProbeDoesNotMarkTargetFresh(t *testing.T) {
+	store := newTestStore(t)
+	registry := NewClientRegistry()
+	ipCache := NewIPCountryCache()
+	if err := store.SaveTCPingConfig(&TCPingConfig{Targets: []TCPingTargetEntry{{Name: "cf", Address: "1.1.1.1:443"}}, IntervalSecs: 60}); err != nil {
+		t.Fatalf("SaveTCPingConfig: %v", err)
+	}
+	stored := time.Now().UTC().Add(-5 * time.Second)
+	if err := store.Upsert(SystemMetric{ID: "fail", Name: "Fail", TCPingData: map[string]TCPingTargetData{"1.1.1.1:443": {Latency: 30, Timestamp: stored}}}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	pushTCPingBatch(t, store, registry, ipCache, "fail", []map[string]interface{}{
+		{"target": "1.1.1.1:443", "latency": 0, "success": false, "measured_at": time.Now().UTC().Format(time.RFC3339Nano)},
+	})
+	m, _ := store.Get("fail")
+	if got := m.TCPingData["1.1.1.1:443"]; got.Latency != 30 || !got.Timestamp.Equal(stored) {
+		t.Fatalf("a failed probe must keep the stored latest entry: %+v", got)
 	}
 }

@@ -2288,12 +2288,15 @@ func getNetworkStats() (inMBps, outMBps float64, totalRxBytes, totalTxBytes uint
 				rxDiff := float64(totalRxBytes) - float64(prevRxBytes)
 				txDiff := float64(totalTxBytes) - float64(prevTxBytes)
 
-				// Handle counter wrap-around
+				// A negative delta means an interface disappeared or its
+				// counters were reset (uint64 never wraps in practice);
+				// report a zero rate for this sample instead of dividing the
+				// machine's lifetime byte count by three seconds.
 				if rxDiff < 0 {
-					rxDiff = float64(totalRxBytes)
+					rxDiff = 0
 				}
 				if txDiff < 0 {
-					txDiff = float64(totalTxBytes)
+					txDiff = 0
 				}
 
 				inMBps = (rxDiff / elapsed) / (1024 * 1024)
@@ -2383,12 +2386,14 @@ func getNetworkStats() (inMBps, outMBps float64, totalRxBytes, totalTxBytes uint
 			rxDiff := float64(totalRxBytes) - float64(prevRxBytes)
 			txDiff := float64(totalTxBytes) - float64(prevTxBytes)
 
-			// Handle counter wrap-around (uint64 can wrap)
+			// A negative delta means an interface disappeared or its counters
+			// were reset (uint64 never wraps in practice); report a zero rate
+			// for this sample instead of a spike of the lifetime byte count.
 			if rxDiff < 0 {
-				rxDiff = float64(totalRxBytes) // Assume wrap-around, use current value
+				rxDiff = 0
 			}
 			if txDiff < 0 {
-				txDiff = float64(totalTxBytes) // Assume wrap-around, use current value
+				txDiff = 0
 			}
 
 			inMBps = (rxDiff / elapsed) / (1024 * 1024)  // Convert bytes/s to MB/s

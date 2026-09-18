@@ -462,7 +462,7 @@ type SSEBroker struct {
 // broadcast tick: the homepage fetches /api/metrics right before it opens
 // the stream, and priming it with a payload older than that fetch makes
 // every value visibly jump backwards for one tick on each page load.
-const sseSnapshotMaxAge = time.Second
+const sseSnapshotMaxAge = 3500 * time.Millisecond
 
 // LatestSnapshot returns the most recent payload for view when it is younger
 // than sseSnapshotMaxAge.
@@ -606,27 +606,66 @@ func (b *SSEBroker) Broadcast(event string) {
 // BroadcastByView delivers a different pre-marshaled payload to each view
 // level. The caller is responsible for ensuring each payload is correctly
 // masked for its audience.
-func (b *SSEBroker) BroadcastByView(byView map[SSEView]string) {
+// BroadcastByView publishes one payload per view and enqueues it for every
+// subscriber of that view. builtAt is when the caller started building the
+// payloads. Publish and delivery happen under one lock, and a payload built
+// before the one already published for its view is dropped, so subscribers
+// never receive an older snapshot after a newer one and a connect-time
+// prime (PrimeSnapshot) can never race a broadcast into a duplicate.
+func (b *SSEBroker) BroadcastByView(byView map[SSEView]string, builtAt time.Time) {
 	b.mu.Lock()
-	now := time.Now()
-	b.latest = make(map[SSEView]string, len(byView))
-	b.latestAt = make(map[SSEView]time.Time, len(byView))
-	for view, payload := range byView {
-		b.latest[view] = payload
-		b.latestAt[view] = now
+	defer b.mu.Unlock()
+	if b.latest == nil {
+		b.latest = make(map[SSEView]string, len(byView))
+		b.latestAt = make(map[SSEView]time.Time, len(byView))
 	}
-	b.mu.Unlock()
-
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
+	send := make(map[SSEView]string, len(byView))
+	for view, payload := range byView {
+		if at, ok := b.latestAt[view]; ok && at.After(builtAt) {
+			continue // a newer snapshot was already published for this view
+		}
+		b.latest[view] = payload
+		b.latestAt[view] = builtAt
+		send[view] = payload
+	}
+	if len(send) == 0 {
+		return
+	}
 	for sub := range b.clients {
-		payload, ok := byView[sub.view]
+		payload, ok := send[sub.view]
 		if !ok {
 			continue
 		}
 		sendWithDropOldest(sub.ch, payload)
 	}
+}
+
+// PrimeSnapshot returns the payload a new subscriber should be primed with:
+// the latest published snapshot for its view, if it is younger than
+// sseSnapshotMaxAge. Anything already queued on the subscriber's channel is
+// discarded in the same critical section, so every event delivered after
+// the prime is strictly newer than it (BroadcastByView holds the write
+// lock for publish and delivery together).
+func (b *SSEBroker) PrimeSnapshot(sub *sseSubscriber) (string, bool) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+drain:
+	for {
+		select {
+		case <-sub.ch:
+		default:
+			break drain
+		}
+	}
+	if b.latest == nil {
+		return "", false
+	}
+	at, ok := b.latestAt[sub.view]
+	if !ok || time.Since(at) > sseSnapshotMaxAge {
+		return "", false
+	}
+	payload, ok := b.latest[sub.view]
+	return payload, ok
 }
 
 // sendWithDropOldest delivers event into ch without ever blocking the caller.
@@ -1684,16 +1723,16 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 	// snapshot. Genuinely new broadcasts arriving after we enter the select
 	// loop below are always fresher than the initial snapshot and get
 	// delivered in order.
-	payload, havePayload := broker.LatestSnapshot(view)
+	// The prime is the last broadcast (at most one tick old). The browser
+	// decides whether to paint it: the public page has just fetched
+	// /api/metrics and drops it, the admin page paints it as its first
+	// state. Only when the broadcaster has not run yet (cold start) is a
+	// snapshot built here, serialised per view so a burst of connections
+	// costs one DB scan.
+	payload, havePayload := broker.PrimeSnapshot(sub)
 	if !havePayload {
-		// No payload younger than one second: build a fresh one and remember
-		// it, so a burst of connections (restart, CDN blip) costs one DB scan
-		// per second instead of one per viewer, while any single viewer still
-		// starts from data at most one second old. Builds are serialised per
-		// view; a handler that waited for the lock usually finds the payload
-		// its predecessor just remembered.
 		unlock := broker.primeLock(view)
-		payload, havePayload = broker.LatestSnapshot(view)
+		payload, havePayload = broker.PrimeSnapshot(sub)
 		if !havePayload {
 			builtAt := time.Now()
 			if snapshot, err := buildMetricsSnapshot(store, globalClientRegistry, isAdmin); err == nil {
@@ -1707,22 +1746,16 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 					"systems": snapshot,
 					"count":   len(snapshot),
 				}); merr == nil {
-					payload, havePayload = broker.RememberSnapshot(view, string(b), builtAt), true
+					broker.RememberSnapshot(view, string(b), builtAt)
+					// Re-read under the lock: drains anything queued meanwhile
+					// and returns the newest of our build and any broadcast.
+					payload, havePayload = broker.PrimeSnapshot(sub)
 				}
 			}
 		}
 		unlock()
 	}
 	if havePayload {
-	drain:
-		for {
-			select {
-			case <-sub.ch:
-				// Discard: no fresher than our snapshot.
-			default:
-				break drain
-			}
-		}
 		if !writeEvent("event: update\ndata: ", payload, "\n\n") {
 			return
 		}
@@ -1779,7 +1812,7 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 // Online/offline determination strategy (preserved from the original handler):
 //
 //	Push-mode clients   → use registry LastPushAt (updated the instant a push
-//	  arrives, before any DB write, so zero lag). Threshold = 10 s:
+//	  arrives, before any DB write, so zero lag). Threshold = 15 s:
 //	  push interval (3 s) × 3 + 1 s buffer. Handles the worst-case where one
 //	  push times out (8 s) and the next succeeds immediately afterwards.
 //
@@ -1852,10 +1885,19 @@ func buildMetricsSnapshot(store *Store, registry *ClientRegistry, authenticated 
 // buffer drops an older event still converges to the correct view on the
 // next broadcast — we never rely on the frontend reconstructing state from a
 // stream of diffs. This keeps the push path idempotent and self-healing.
+// broadcastMu serialises snapshot builds: the 3 s ticker and the admin
+// mutation paths (add / edit / delete / reorder / tcping config) call this
+// concurrently, and two builds interleaving could publish the older one
+// last. With the lock, builtAt is monotonic across calls.
+var broadcastMu sync.Mutex
+
 func broadcastMetricsSnapshot(store *Store, registry *ClientRegistry, broker *SSEBroker) {
 	if broker == nil || store == nil {
 		return
 	}
+	broadcastMu.Lock()
+	defer broadcastMu.Unlock()
+	builtAt := time.Now()
 
 	// Build the authoritative (admin-view) snapshot exactly once. The
 	// public-view payload is derived from it by shallow-cloning the slice and
@@ -1908,7 +1950,7 @@ func broadcastMetricsSnapshot(store *Store, registry *ClientRegistry, broker *SS
 	broker.BroadcastByView(map[SSEView]string{
 		SSEViewPublic: string(publicJSON),
 		SSEViewAdmin:  string(adminJSON),
-	})
+	}, builtAt)
 }
 
 func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
@@ -2523,7 +2565,11 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	// memory, sanitise tcping results, and persist everything in one bbolt
 	// write transaction. The response contract stays unchanged.
 	tcpingConfig, configErr := store.GetTCPingConfig()
-	if configErr != nil || tcpingConfig == nil {
+	configUnknown := configErr != nil || tcpingConfig == nil
+	if configUnknown {
+		// The configured targets are unknown, not empty: keep every sample
+		// (the store prunes nothing either in that case) instead of
+		// silently discarding the whole batch.
 		tcpingConfig = &TCPingConfig{Targets: []TCPingTargetEntry{}, IntervalSecs: 60}
 	}
 
@@ -2534,6 +2580,9 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 		}
 	}
 	targetAllowed := func(name string) bool {
+		if configUnknown {
+			return true
+		}
 		_, ok := allowedTargets[name]
 		return ok
 	}
@@ -2587,7 +2636,9 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	// whose stamp happens to be newer.
 	freshTCPing := make(map[string]struct{}, len(payload.TCPingResults))
 	for _, tr := range payload.TCPingResults {
-		if targetAllowed(tr.Target) {
+		// Only a successful probe writes a new "latest" entry below; a
+		// failed one must not let a stale copy of the map win the merge.
+		if tr.Success && targetAllowed(tr.Target) {
 			freshTCPing[tr.Target] = struct{}{}
 		}
 	}
@@ -4590,6 +4641,15 @@ func tcpingBatchSeen(clientID string, results []ClientTCPingResult) bool {
 	defer tcpingBatchMu.Unlock()
 	last, ok := tcpingBatchLast[clientID]
 	tcpingBatchLast[clientID] = tcpingBatchMark{sig: sig, at: now}
+	// Bound the map: entries older than the window are useless, and a
+	// deleted or renamed client would otherwise stay forever.
+	if len(tcpingBatchLast) > 1024 {
+		for id, m := range tcpingBatchLast {
+			if now.Sub(m.at) >= tcpingBatchDedupeWindow {
+				delete(tcpingBatchLast, id)
+			}
+		}
+	}
 	return ok && last.sig == sig && now.Sub(last.at) < tcpingBatchDedupeWindow
 }
 
