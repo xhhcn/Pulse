@@ -64,13 +64,21 @@ else
     DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$VERSION/$BINARY_NAME"
 fi
 
-if ! wget -q --show-progress "$DOWNLOAD_URL" -O "$INSTALL_DIR/pulse-server"; then
+# Download next to the installed binary and swap it in: writing over a
+# running executable fails with "Text file busy", so an in-place upgrade
+# used to abort here.
+if ! wget -q --show-progress "$DOWNLOAD_URL" -O "$INSTALL_DIR/pulse-server.new"; then
+    rm -f "$INSTALL_DIR/pulse-server.new"
     print_message "$RED" "❌ Failed to download binary"
     print_message "$YELLOW" "   URL: $DOWNLOAD_URL"
     exit 1
 fi
 
-chmod +x "$INSTALL_DIR/pulse-server"
+chmod +x "$INSTALL_DIR/pulse-server.new"
+if [ -f "$INSTALL_DIR/pulse-server" ]; then
+    cp -f "$INSTALL_DIR/pulse-server" "$INSTALL_DIR/pulse-server.bak"
+fi
+mv -f "$INSTALL_DIR/pulse-server.new" "$INSTALL_DIR/pulse-server"
 print_message "$GREEN" "✅ Binary downloaded and made executable"
 
 # Drop the migration helper scripts (backup / restore / migrate) into
@@ -134,9 +142,9 @@ EOF
 systemctl daemon-reload
 print_message "$GREEN" "✅ Systemd service created"
 
-# Start service
+# Start (or restart, when upgrading a running install) the service
 print_message "$YELLOW" "🚀 Starting Pulse Server..."
-systemctl start $SERVICE_NAME
+systemctl restart $SERVICE_NAME
 systemctl enable $SERVICE_NAME
 
 # Wait a moment for service to start

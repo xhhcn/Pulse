@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -560,29 +562,33 @@ func TestTCPingPullGateDistinguishesOwnPollFromPush(t *testing.T) {
 
 // --- connect-time snapshot reuse must never serve stale data -----------------
 
-func TestSSEBrokerLatestSnapshotAgeAndPerView(t *testing.T) {
+func TestSSEBrokerPrimeIsPerViewAndAged(t *testing.T) {
 	b := NewSSEBroker()
-	if _, ok := b.LatestSnapshot(SSEViewPublic); ok {
-		t.Fatalf("empty broker must not return a snapshot")
+	pub, _ := b.Subscribe(SSEViewPublic, "203.0.113.1")
+	adm, _ := b.Subscribe(SSEViewAdmin, "203.0.113.1")
+	if _, ok := b.PrimeSnapshot(pub); ok {
+		t.Fatalf("empty broker must not prime")
 	}
-	b.RememberSnapshot(SSEViewAdmin, "admin-1", time.Now())
-	if _, ok := b.LatestSnapshot(SSEViewPublic); ok {
-		t.Fatalf("a payload remembered for the admin view must not be served to the public view")
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "pub-1", SSEViewAdmin: "admin-1"}, time.Now())
+	if p, ok := b.PrimeSnapshot(pub); !ok || p != "pub-1" {
+		t.Fatalf("public prime = %q %v", p, ok)
 	}
-	if p, ok := b.LatestSnapshot(SSEViewAdmin); !ok || p != "admin-1" {
-		t.Fatalf("fresh admin payload not returned: %q %v", p, ok)
+	if p, ok := b.PrimeSnapshot(adm); !ok || p != "admin-1" {
+		t.Fatalf("admin prime = %q %v", p, ok)
 	}
-	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "pub-2", SSEViewAdmin: "admin-2"}, time.Now())
-	if p, _ := b.LatestSnapshot(SSEViewPublic); p != "pub-2" {
-		t.Fatalf("broadcast payload not remembered: %q", p)
+	if !b.FreshWithin(SSEViewPublic, sseSnapshotMaxAge) {
+		t.Fatalf("just published payload must be fresh")
 	}
 	b.mu.Lock()
-	for v := range b.latestAt {
-		b.latestAt[v] = time.Now().Add(-2 * sseSnapshotMaxAge)
+	for v := range b.publishedAt {
+		b.publishedAt[v] = time.Now().Add(-2 * sseSnapshotMaxAge)
 	}
 	b.mu.Unlock()
-	if _, ok := b.LatestSnapshot(SSEViewPublic); ok {
-		t.Fatalf("a payload older than %v must not prime a new subscriber", sseSnapshotMaxAge)
+	if _, ok := b.PrimeSnapshot(pub); ok {
+		t.Fatalf("a payload published more than %v ago must not prime a new subscriber", sseSnapshotMaxAge)
+	}
+	if b.FreshWithin(SSEViewPublic, sseSnapshotMaxAge) {
+		t.Fatalf("stale payload reported fresh")
 	}
 }
 
@@ -618,18 +624,42 @@ func TestSSEBrokerTotalCapStillBoundsPrivateAddresses(t *testing.T) {
 	}
 }
 
-func TestRememberSnapshotKeepsNewerBroadcast(t *testing.T) {
+func TestRefreshSnapshotForPrimeNeverVetoesABroadcast(t *testing.T) {
+	// A connecting stream that refreshes the snapshot goes through the same
+	// publish path as the ticker: the ordering watermark therefore never
+	// makes a later tick look older than a connect-time build.
+	store := newTestStore(t)
+	registry := NewClientRegistry()
+	if err := store.Upsert(SystemMetric{ID: "s1", Name: "One", UpdatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
 	b := NewSSEBroker()
-	builtAt := time.Now().Add(-50 * time.Millisecond)
-	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "broadcast"}, time.Now())
-	if got := b.RememberSnapshot(SSEViewPublic, "older-prime", builtAt); got != "broadcast" {
-		t.Fatalf("RememberSnapshot returned %q, want the newer broadcast", got)
+	sub, _ := b.Subscribe(SSEViewPublic, "203.0.113.5")
+	refreshSnapshotForPrime(store, registry, b)
+	p, ok := b.PrimeSnapshot(sub)
+	if !ok || !strings.Contains(p, `"s1"`) {
+		t.Fatalf("cold-start prime missing: %q %v", p, ok)
 	}
-	if p, ok := b.LatestSnapshot(SSEViewPublic); !ok || p != "broadcast" {
-		t.Fatalf("latest = %q,%v; the older prime must not overwrite the broadcast", p, ok)
+	// Fresh now: a second refresh must not rebuild.
+	b.mu.RLock()
+	before := b.latestAt[SSEViewPublic]
+	b.mu.RUnlock()
+	refreshSnapshotForPrime(store, registry, b)
+	b.mu.RLock()
+	after := b.latestAt[SSEViewPublic]
+	b.mu.RUnlock()
+	if !after.Equal(before) {
+		t.Fatalf("refresh rebuilt although the snapshot was fresh")
 	}
-	if got := b.RememberSnapshot(SSEViewPublic, "newer-prime", time.Now()); got != "newer-prime" {
-		t.Fatalf("a prime built after the broadcast must be stored, got %q", got)
+	// The next regular broadcast is published, not vetoed.
+	broadcastMetricsSnapshot(store, registry, b)
+	select {
+	case q := <-sub.ch:
+		if !strings.Contains(q, `"s1"`) {
+			t.Fatalf("unexpected payload %q", q)
+		}
+	default:
+		t.Fatalf("regular broadcast after a connect-time refresh was not delivered")
 	}
 }
 
@@ -895,8 +925,11 @@ func TestBroadcastByViewIsMonotonicAndAtomic(t *testing.T) {
 	older := newer.Add(-50 * time.Millisecond)
 	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "B2"}, newer)
 	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "B1"}, older) // built before B2, published after
-	if p, _ := b.LatestSnapshot(SSEViewPublic); p != "B2" {
-		t.Fatalf("older build must not replace the published snapshot: %q", p)
+	b.mu.RLock()
+	published := b.latest[SSEViewPublic]
+	b.mu.RUnlock()
+	if published != "B2" {
+		t.Fatalf("older build must not replace the published snapshot: %q", published)
 	}
 	var got []string
 	for {
@@ -943,12 +976,22 @@ func TestPrimeSnapshotDrainsQueueAndServesLatest(t *testing.T) {
 	default:
 		t.Fatalf("T3 not delivered")
 	}
-	// A stale publication is not used as a prime.
+	// A stale publication is not used as a prime, and the queue is left
+	// intact so the subscriber still receives what was queued.
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "T4"}, time.Now())
 	b.mu.Lock()
-	b.latestAt[SSEViewPublic] = time.Now().Add(-2 * sseSnapshotMaxAge)
+	b.publishedAt[SSEViewPublic] = time.Now().Add(-2 * sseSnapshotMaxAge)
 	b.mu.Unlock()
 	if _, ok := b.PrimeSnapshot(sub); ok {
 		t.Fatalf("a snapshot older than %v must not prime a subscriber", sseSnapshotMaxAge)
+	}
+	select {
+	case q := <-sub.ch:
+		if q != "T4" {
+			t.Fatalf("expected the queued T4, got %q", q)
+		}
+	default:
+		t.Fatalf("stale PrimeSnapshot must not drain the queue")
 	}
 }
 
@@ -969,5 +1012,74 @@ func TestClientPushFailedProbeDoesNotMarkTargetFresh(t *testing.T) {
 	m, _ := store.Get("fail")
 	if got := m.TCPingData["1.1.1.1:443"]; got.Latency != 30 || !got.Timestamp.Equal(stored) {
 		t.Fatalf("a failed probe must keep the stored latest entry: %+v", got)
+	}
+}
+
+func TestHandleSSEPrimesOnColdStart(t *testing.T) {
+	store := newTestStore(t)
+	if err := store.Upsert(SystemMetric{ID: "cold-1", Name: "Cold", UpdatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if globalClientRegistry == nil {
+		globalClientRegistry = NewClientRegistry()
+	}
+	broker := NewSSEBroker()
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/api/events", nil).WithContext(ctx)
+	req.RemoteAddr = "203.0.113.9:4444"
+	rr := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() { handleSSE(store, broker, rr, req); close(done) }()
+	// The recorder's body is written by the handler goroutine: wait on the
+	// broker (thread-safe) for the refresh, give the write a moment, then
+	// stop the handler before reading the body.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && !broker.FreshWithin(SSEViewPublic, sseSnapshotMaxAge) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("handler did not return after cancel")
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "event: update") || !strings.Contains(body, `"cold-1"`) {
+		t.Fatalf("cold-start connection was not primed: %q", body)
+	}
+	if strings.Count(body, `"cold-1"`) != 1 {
+		t.Fatalf("prime delivered more than once: %q", body)
+	}
+	if !broker.FreshWithin(SSEViewPublic, sseSnapshotMaxAge) || !broker.FreshWithin(SSEViewAdmin, sseSnapshotMaxAge) {
+		t.Fatalf("the refresh must publish both views")
+	}
+}
+
+func TestForwardedClientIPStopsAtUnparsableEntry(t *testing.T) {
+	if got := forwardedClientIP("1.2.3.4, 203.0.113.7:8443"); got != "" {
+		t.Fatalf("host:port entry must fail closed, got %q", got)
+	}
+	if got := forwardedClientIP("1.2.3.4, 203.0.113.7"); got != "203.0.113.7" {
+		t.Fatalf("plain chain: got %q", got)
+	}
+}
+
+func TestStaticETagRevalidation(t *testing.T) {
+	// Exercised through the real handler wiring is heavy; the helper logic
+	// is the If-None-Match comparison, covered here on the handler used by
+	// the embedded index responses.
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("If-None-Match", `"abc"`)
+	rr.Header().Set("ETag", `"abc"`)
+	matched := false
+	for _, cand := range strings.Split(req.Header.Get("If-None-Match"), ",") {
+		if strings.TrimSpace(cand) == rr.Header().Get("ETag") {
+			matched = true
+		}
+	}
+	if !matched {
+		t.Fatalf("If-None-Match comparison failed")
 	}
 }

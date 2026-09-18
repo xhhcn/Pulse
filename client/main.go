@@ -1210,7 +1210,7 @@ func collectSystemMetrics() metricPayload {
 		NetOutMBps:         netOut,
 		TotalNetInBytes:    totalNetInBytes,
 		TotalNetOutBytes:   totalNetOutBytes,
-		AgentVersion:       "1.3.5",
+		AgentVersion:       "1.3.20",
 		Alert:              false, // Can be enhanced with actual alert logic
 	}
 }
@@ -2288,8 +2288,8 @@ func getNetworkStats() (inMBps, outMBps float64, totalRxBytes, totalTxBytes uint
 				rxDiff := float64(totalRxBytes) - float64(prevRxBytes)
 				txDiff := float64(totalTxBytes) - float64(prevTxBytes)
 
-				// A negative delta means an interface disappeared or its
-				// counters were reset (uint64 never wraps in practice);
+				// A negative delta means an interface disappeared, its
+				// counters were reset, or a 32-bit kernel counter wrapped;
 				// report a zero rate for this sample instead of dividing the
 				// machine's lifetime byte count by three seconds.
 				if rxDiff < 0 {
@@ -2386,9 +2386,9 @@ func getNetworkStats() (inMBps, outMBps float64, totalRxBytes, totalTxBytes uint
 			rxDiff := float64(totalRxBytes) - float64(prevRxBytes)
 			txDiff := float64(totalTxBytes) - float64(prevTxBytes)
 
-			// A negative delta means an interface disappeared or its counters
-			// were reset (uint64 never wraps in practice); report a zero rate
-			// for this sample instead of a spike of the lifetime byte count.
+			// A negative delta means an interface disappeared, its counters
+			// were reset, or a 32-bit kernel counter wrapped; report a zero
+			// rate for this sample instead of a spike of the lifetime count.
 			if rxDiff < 0 {
 				rxDiff = 0
 			}
