@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.24"><img src="https://img.shields.io/badge/release-v1.3.24-blue?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.25"><img src="https://img.shields.io/badge/release-v1.3.25-blue?style=flat-square" alt="Release"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/pulls/xhh1128/pulse?style=flat-square&color=blue" alt="Docker Pulls"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/image-size/xhh1128/pulse/latest?style=flat-square&color=blue" alt="Docker Size"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
@@ -556,6 +556,7 @@ The same scripts make good cron fodder for zero-downtime backups (env var keeps 
 - **TCPing data volume**: history is kept for 24 hours; disk use is about `clients × targets × (86400 / interval seconds) × 0.4 KB`. With many clients keep the interval at 60 s or more and 3 to 5 targets.
 - **Reverse proxy / CDN**: the server trusts `X-Forwarded-For` from loopback, from Cloudflare's published edge ranges (built in, no configuration needed) and from `TRUSTED_PROXIES` (comma-separated IPs or CIDRs). Set `TRUSTED_PROXIES` when a non-Cloudflare proxy or CDN sits in front, otherwise login rate limits count per proxy address and agents may be located at the proxy. The bundled nginx preserves the upstream `X-Forwarded-For` chain, so with Docker you can add the bridge gateway (for example `172.17.0.0/16`) to `TRUSTED_PROXIES`. Set `TRUSTED_PROXIES=none` (optionally next to other ranges) to disable the built-in Cloudflare trust.
 - **Sessions and tokens**: admin tokens are accepted only in the `Authorization: Bearer` header (the event stream uses `admin_token`); logging out revokes the session server-side and a password change revokes every other session; an open page loses a revoked or expired share link within 30 s. Agent-reported strings are length-capped and stripped of markup characters, and `os_icon` must be an iconify `set:name`.
+- **Latency tests and packet loss**: when a node cannot even attempt a connection to a target (for example a node without IPv6 given an IPv6 target, where the kernel reports no route), agent 1.3.25 and later report the probe as skipped rather than failed: such samples are kept out of the history and the loss rate, and the page shows "This node cannot reach this target" for that target. Timeouts, refused connections and DNS failures still count as loss. Older agents pick this up once updated.
 - **SSE caps**: anonymous streams default to 2000 in total and 200 per IP, adjustable with `SSE_MAX_STREAMS` and `SSE_MAX_STREAMS_PER_IP`; admin sessions are exempt. The per-IP cap applies to public addresses only.
 - **Docker**: `docker-compose.yaml` sets a 45 s graceful stop; do not shorten it, a forced exit can damage the database.
 - **External resources**: the detail-row TCPing chart loads Chart.js from `cdn.jsdelivr.net` (fallback `unpkg.com`) on first open; visitors need to reach one of them.
