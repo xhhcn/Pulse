@@ -1348,7 +1348,28 @@ func (s *Store) GetTCPingConfig() (*TCPingConfig, error) {
 		config.Targets = []TCPingTargetEntry{}
 	}
 
+	normalizeTCPingTargets(&config)
 	return &config, nil
+}
+
+// normalizeTCPingTargets trims names and addresses and drops entries
+// without an address. Addresses are compared byte-for-byte against what
+// agents report (agents trim), so a config written with padding by an
+// older UI or a script must not keep it.
+func normalizeTCPingTargets(config *TCPingConfig) {
+	if config == nil {
+		return
+	}
+	kept := config.Targets[:0]
+	for _, t := range config.Targets {
+		t.Name = strings.TrimSpace(t.Name)
+		t.Address = strings.TrimSpace(t.Address)
+		if t.Address == "" {
+			continue
+		}
+		kept = append(kept, t)
+	}
+	config.Targets = kept
 }
 
 // SaveTCPingConfig saves the tcping configuration

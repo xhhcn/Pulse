@@ -387,6 +387,10 @@ const (
 	// 500 samples while the server is unreachable; anything beyond that is a
 	// rogue client, and the newest samples are the ones worth keeping.
 	maxTCPingResultsPerPush = 600
+	// maxTCPingTargets mirrors the agent's cap (client/main.go): a longer
+	// list would be silently cut on every push-mode agent, so the admin is
+	// told at save time instead.
+	maxTCPingTargets = 64
 )
 
 // iconNameRe is the iconify "set:name" form the agent emits (e.g.
@@ -4412,14 +4416,6 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Unknown ids are answered before touching the history bucket. It is
-	// keyed by time, so a lookup for a non-existent client would otherwise
-	// scan the whole 24 h window on every anonymous request.
-	if sys, getErr := store.Get(clientID); getErr != nil || sys == nil {
-		http.Error(w, "client not found", http.StatusNotFound)
-		return
-	}
-
 	var results []TCPingResult
 
 	// Try to get the exact client+target history response from cache first.
@@ -4427,6 +4423,15 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 	// without re-running json.Marshal — measurably reduces CPU under load.
 	if body, found := getCachedTCPingResultsJSON(clientID, target); found {
 		writeCachedJSON(w, http.StatusOK, body)
+		return
+	}
+
+	// Unknown ids are answered before touching the history bucket. It is
+	// keyed by time, so a lookup for a non-existent client would otherwise
+	// scan the whole 24 h window on every anonymous request. (Cache hits
+	// above are for ids that existed when the entry was built.)
+	if sys, getErr := store.Get(clientID); getErr != nil || sys == nil {
+		http.Error(w, "client not found", http.StatusNotFound)
 		return
 	}
 
@@ -4757,7 +4762,12 @@ func handleSetTCPingConfig(store *Store, broker *SSEBroker, registry *ClientRegi
 	// - Validate format (host:port)
 	// - Validate port range (1-65535)
 	// - Validate hostname format
-	for _, target := range config.Targets {
+	if len(config.Targets) > maxTCPingTargets {
+		http.Error(w, fmt.Sprintf("too many targets (max %d)", maxTCPingTargets), http.StatusBadRequest)
+		return
+	}
+
+	for i, target := range config.Targets {
 		if target.Name == "" {
 			http.Error(w, "target name is required", http.StatusBadRequest)
 			return
@@ -4776,6 +4786,10 @@ func handleSetTCPingConfig(store *Store, broker *SSEBroker, registry *ClientRegi
 
 		// Validate address length (RFC 1035: Domain names limited to 255 characters)
 		address := strings.TrimSpace(target.Address)
+		// Store the trimmed form: agents report targets trimmed and the
+		// server matches samples against the stored string.
+		config.Targets[i].Address = address
+		config.Targets[i].Name = strings.TrimSpace(target.Name)
 		if len(address) > 255 {
 			http.Error(w, fmt.Sprintf("target address too long for target: %s", target.Name), http.StatusBadRequest)
 			return
@@ -5399,7 +5413,7 @@ type verifyAttempt struct {
 	lastAttempt time.Time
 }
 
-var verifyAttempts = make(map[string]*verifyAttempt) // key: IP address
+var verifyAttempts = make(map[string]*verifyAttempt) // key: "<kind>|<IP address>", see verifyRateLimited
 var verifyAttemptsMu sync.RWMutex
 
 // Cleanup expired tokens and login attempts every 5 minutes
@@ -5897,7 +5911,7 @@ func handleAuthChangePassword(store *Store, w http.ResponseWriter, r *http.Reque
 // admin-token gate:
 //
 //  1. Bearer-only — we refuse ?token=xxx query-string auth here, even
-//     though the shared isAuthenticated() helper accepts it. Query
+//     (isAuthenticated() no longer accepts it anywhere either). Query
 //     tokens get logged in nginx access logs, shell history, and
 //     referer headers, which is the last place the key to the kingdom
 //     should land. curl/cron/manual operators all have no reason to

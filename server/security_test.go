@@ -402,3 +402,50 @@ func TestReadDeadlineMiddlewarePassesRequestsThrough(t *testing.T) {
 		}
 	}
 }
+
+func TestTCPingConfigTrimsAddressesAndCapsTargets(t *testing.T) {
+	store := newTestStore(t)
+	withAdminToken(t, "cfg-admin")
+	broker := NewSSEBroker()
+	registry := NewClientRegistry()
+
+	// Padded addresses are stored trimmed, so agent samples (trimmed) match.
+	req := adminRequest(t, http.MethodPost, "/api/tcping/config", map[string]interface{}{
+		"targets": []map[string]string{{"name": " cf ", "address": "  1.1.1.1:443  "}}, "interval_secs": 60,
+	})
+	req.Header.Set("Authorization", "Bearer cfg-admin")
+	rr := httptest.NewRecorder()
+	handleSetTCPingConfig(store, broker, registry, rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", rr.Code, rr.Body.String())
+	}
+	cfg, err := store.GetTCPingConfig()
+	if err != nil || len(cfg.Targets) != 1 || cfg.Targets[0].Address != "1.1.1.1:443" || cfg.Targets[0].Name != "cf" {
+		t.Fatalf("stored config not trimmed: %+v (%v)", cfg, err)
+	}
+
+	// A config written with padding by older code is normalised on read.
+	if err := store.SaveTCPingConfig(&TCPingConfig{Targets: []TCPingTargetEntry{{Name: "x", Address: " 8.8.8.8:53 "}, {Name: "empty", Address: "   "}}, IntervalSecs: 60}); err != nil {
+		t.Fatalf("SaveTCPingConfig: %v", err)
+	}
+	cfg, _ = store.GetTCPingConfig()
+	if len(cfg.Targets) != 1 || cfg.Targets[0].Address != "8.8.8.8:53" {
+		t.Fatalf("legacy padding not normalised on read: %+v", cfg.Targets)
+	}
+	if !tcpingTargetConfigured(store, "8.8.8.8:53") {
+		t.Fatal("trimmed target must match the padded legacy config")
+	}
+
+	// More targets than an agent will probe are refused at save time.
+	many := make([]map[string]string, 0, maxTCPingTargets+1)
+	for i := 0; i <= maxTCPingTargets; i++ {
+		many = append(many, map[string]string{"name": fmt.Sprintf("t%d", i), "address": fmt.Sprintf("10.0.%d.%d:80", i/256, i%256)})
+	}
+	req = adminRequest(t, http.MethodPost, "/api/tcping/config", map[string]interface{}{"targets": many, "interval_secs": 60})
+	req.Header.Set("Authorization", "Bearer cfg-admin")
+	rr = httptest.NewRecorder()
+	handleSetTCPingConfig(store, broker, registry, rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("%d targets must be refused, got %d", maxTCPingTargets+1, rr.Code)
+	}
+}
