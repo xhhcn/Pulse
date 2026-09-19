@@ -1,7 +1,7 @@
 # Multi-stage build for minimal image size
 
 # Stage 1: Build Go backend
-FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS backend-builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /build
@@ -30,7 +30,7 @@ COPY server/web/ ./
 RUN npm run build
 
 # Stage 3: Final minimal image with nginx
-FROM alpine:3.19
+FROM alpine:3.22
 
 # Install nginx and supervisor
 RUN apk add --no-cache nginx supervisor && \

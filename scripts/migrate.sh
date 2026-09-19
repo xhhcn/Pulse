@@ -145,12 +145,18 @@ trap cleanup_on_exit EXIT
 # user, and the downloaded copies are cleaned up on exit.
 if [[ ! -x "$SCRIPT_DIR/backup.sh" || ! -x "$SCRIPT_DIR/restore.sh" ]]; then
   base="${PULSE_SCRIPT_BASE:-https://raw.githubusercontent.com/xhhcn/Pulse/main/scripts}"
+  # The fetched scripts run as root: only accept an https:// source so a
+  # mirror override cannot be a plaintext URL that an on-path party rewrites.
+  case "$base" in
+    https://*) ;;
+    *) echo "error: PULSE_SCRIPT_BASE must be an https:// URL (got: $base)" >&2; exit 10 ;;
+  esac
   echo "→ helper scripts not found next to $0 — fetching from $base" >&2
   boot="$(mktemp -d "${TMPDIR:-/tmp}/pulse-migrate-boot.XXXXXX")"
   chmod 700 "$boot"
   CLEANUP_DIRS+=( "$boot" )
   for s in backup.sh restore.sh; do
-    if ! curl -fsSL --retry 2 --retry-delay 1 -o "$boot/$s" "$base/$s"; then
+    if ! curl -fsSL --proto '=https' --retry 2 --retry-delay 1 -o "$boot/$s" "$base/$s"; then
       echo "error: failed to download $s from $base" >&2
       echo "       (set PULSE_SCRIPT_BASE to a mirror, or pre-install the scripts)" >&2
       exit 10

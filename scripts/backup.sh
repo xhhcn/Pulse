@@ -182,9 +182,11 @@ case "$MODE" in
     # -f: fail on 4xx/5xx
     # --retry / --retry-connrefused: survive a transient 502 during a
     # container restart on the source host.
-    http_code="$(curl -4 -fsS \
+    # The admin token is a live credential: feed the header through stdin
+    # (-H @-) rather than argv, which every local user can read in ps.
+    http_code="$(printf 'Authorization: Bearer %s\n' "$TOKEN" | curl -4 -fsS \
       --retry 3 --retry-delay 2 --retry-connrefused \
-      -H "Authorization: Bearer ${TOKEN}" \
+      -H @- \
       -o "$OUTPUT" \
       -w '%{http_code}' \
       "${SERVER_URL}/api/admin/backup")"

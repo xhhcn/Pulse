@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g., v1.3.3)'
+        description: 'Tag to build (e.g., v1.3.23)'
         required: true
         type: string
 
@@ -53,9 +53,10 @@ jobs:
         if: steps.check_server_files.outputs.server_files_exist == 'true'
         uses: actions/setup-go@v5
         with:
-          # server/go.mod requires Go 1.22+ (uses range-over-int and stdlib
-          # features). The Docker build itself uses golang:1.23-alpine.
-          go-version: '1.22'
+          # server/go.mod states the minimum (1.22); the release binary is
+          # built with a current, supported toolchain so it carries the
+          # net/http and crypto fixes. Keep in step with the Dockerfile.
+          go-version: '1.27'
 
       - name: Set up Node.js
         if: steps.check_server_files.outputs.server_files_exist == 'true'

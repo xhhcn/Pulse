@@ -67,7 +67,7 @@ fi
 # Download next to the installed binary and swap it in: writing over a
 # running executable fails with "Text file busy", so an in-place upgrade
 # used to abort here.
-if ! wget -q --show-progress "$DOWNLOAD_URL" -O "$INSTALL_DIR/pulse-server.new"; then
+if ! wget -q --show-progress --https-only "$DOWNLOAD_URL" -O "$INSTALL_DIR/pulse-server.new"; then
     rm -f "$INSTALL_DIR/pulse-server.new"
     print_message "$RED" "❌ Failed to download binary"
     print_message "$YELLOW" "   URL: $DOWNLOAD_URL"
@@ -97,7 +97,7 @@ else
 fi
 SCRIPTS_OK=true
 for s in backup.sh restore.sh migrate.sh; do
-    if ! wget -q "$SCRIPT_BASE/$s" -O "$INSTALL_DIR/scripts/$s"; then
+    if ! wget -q --https-only "$SCRIPT_BASE/$s" -O "$INSTALL_DIR/scripts/$s"; then
         SCRIPTS_OK=false
         break
     fi
@@ -129,6 +129,20 @@ ExecStart=$INSTALL_DIR/pulse-server
 Restart=always
 RestartSec=5
 Environment="PORT=8008"
+# Sandboxing: the server only needs the network and its own data directory.
+# Everything else is read-only or hidden, so a flaw in the server cannot be
+# turned into a full-system foothold.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=$INSTALL_DIR
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 # Log to systemd journal (auto-managed)
 StandardOutput=journal
 StandardError=journal
