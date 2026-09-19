@@ -116,32 +116,38 @@ func TestClientPushSuccessReplacesSkippedMarker(t *testing.T) {
 	}
 }
 
-func TestClientPushOlderSkippedSampleDoesNotOverwrite(t *testing.T) {
+func TestClientPushLatestEntryRuleForSkippedMarkers(t *testing.T) {
 	store, registry, ipCache := tcpingSkippedFixture(t, "backlog")
 	now := time.Now().UTC()
 
-	// A marker, then a backfilled older marker: the stamp must not go back.
-	pushTCPingBatch(t, store, registry, ipCache, "backlog", []map[string]interface{}{
-		{"target": skipV6Target, "success": false, "skipped": true, "measured_at": now.Add(-20 * time.Second).Format(time.RFC3339Nano)},
-	})
-	pushTCPingBatch(t, store, registry, ipCache, "backlog", []map[string]interface{}{
-		{"target": skipV6Target, "success": false, "skipped": true, "measured_at": now.Add(-90 * time.Second).Format(time.RFC3339Nano)},
-	})
-	m, _ := store.Get("backlog")
-	if got := m.TCPingData[skipV6Target]; !got.Skipped || got.Timestamp.Before(now.Add(-30*time.Second)) {
-		t.Fatalf("older marker moved the entry back: %+v", got)
-	}
-
-	// A measurement, then a backfilled older marker: the latency stays.
+	// Within one batch the newest sample wins whatever the order: a marker
+	// after a newer measurement does not replace it, and a measurement after
+	// an older marker does.
 	pushTCPingBatch(t, store, registry, ipCache, "backlog", []map[string]interface{}{
 		{"target": skipV4Target, "latency": 12, "success": true, "measured_at": now.Add(-20 * time.Second).Format(time.RFC3339Nano)},
-	})
-	pushTCPingBatch(t, store, registry, ipCache, "backlog", []map[string]interface{}{
 		{"target": skipV4Target, "success": false, "skipped": true, "measured_at": now.Add(-90 * time.Second).Format(time.RFC3339Nano)},
 	})
-	m, _ = store.Get("backlog")
+	m, _ := store.Get("backlog")
 	if got := m.TCPingData[skipV4Target]; got.Skipped || got.Latency != 12 {
-		t.Fatalf("a stale marker hid a newer measurement: %+v", got)
+		t.Fatalf("an older marker in the same batch hid a newer measurement: %+v", got)
+	}
+	pushTCPingBatch(t, store, registry, ipCache, "backlog", []map[string]interface{}{
+		{"target": skipV6Target, "success": false, "skipped": true, "measured_at": now.Add(-90 * time.Second).Format(time.RFC3339Nano)},
+		{"target": skipV6Target, "latency": 7, "success": true, "measured_at": now.Add(-20 * time.Second).Format(time.RFC3339Nano)},
+	})
+	m, _ = store.Get("backlog")
+	if got := m.TCPingData[skipV6Target]; got.Skipped || got.Latency != 7 {
+		t.Fatalf("a newer measurement after a marker must win: %+v", got)
+	}
+
+	// Across batches the first sample of a batch replaces the stored entry
+	// (like a measurement does), so a stored value can never freeze the card.
+	pushTCPingBatch(t, store, registry, ipCache, "backlog", []map[string]interface{}{
+		{"target": skipV6Target, "success": false, "skipped": true, "measured_at": now.Add(-10 * time.Second).Format(time.RFC3339Nano)},
+	})
+	m, _ = store.Get("backlog")
+	if got := m.TCPingData[skipV6Target]; !got.Skipped {
+		t.Fatalf("a marker in a new batch must replace the stored measurement: %+v", got)
 	}
 }
 

@@ -686,18 +686,55 @@ func allowedTCPingTargets(tx *bolt.Tx) map[string]struct{} {
 // mergeAdminOwned). Unknown systems are stored as-is.
 func putAgentMetric(tx *bolt.Tx, bucket *bolt.Bucket, metric SystemMetric) error {
 	allowed := allowedTCPingTargets(tx)
-	merged := false
-	if data := bucket.Get([]byte(metric.ID)); data != nil {
-		var current SystemMetric
-		if err := json.Unmarshal(data, &current); err == nil {
-			mergeAdminOwned(&metric, &current, allowed)
-			merged = true
-		}
+	data := bucket.Get([]byte(metric.ID))
+	if data == nil {
+		// No agent path may create a system: the handlers check existence
+		// first, so a missing record here means the admin deleted it while
+		// this write was in flight. Dropping the write keeps the deletion
+		// (and keeps an agent-supplied name out of the store).
+		return nil
 	}
-	if !merged {
+	var current SystemMetric
+	if err := json.Unmarshal(data, &current); err == nil {
+		mergeAdminOwned(&metric, &current, allowed)
+	} else {
 		pruneTCPingMap(metric.TCPingData, allowed)
 	}
 	return putMetric(bucket, metric)
+}
+
+// UpdateAdminOwned writes only the admin-owned labels of metric (name, tags,
+// visibility) onto the stored record inside one transaction and prunes the
+// tcping snapshot to the configured targets. Everything the agent owns stays
+// as it is now, not as it was when the admin page read the record. The
+// stored result is returned; a missing record yields (nil, nil).
+func (s *Store) UpdateAdminOwned(metric SystemMetric) (*SystemMetric, error) {
+	var saved *SystemMetric
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(bucketName))
+		if bucket == nil {
+			return fmt.Errorf("bucket not found")
+		}
+		data := bucket.Get([]byte(metric.ID))
+		if data == nil {
+			return nil
+		}
+		var current SystemMetric
+		if err := json.Unmarshal(data, &current); err != nil {
+			return fmt.Errorf("decode %s: %w", metric.ID, err)
+		}
+		current.Name = metric.Name
+		current.Tags = metric.Tags
+		current.HideOnHome = metric.HideOnHome
+		current.HideTCPing = metric.HideTCPing
+		pruneTCPingMap(current.TCPingData, allowedTCPingTargets(tx))
+		if err := putMetric(bucket, current); err != nil {
+			return err
+		}
+		saved = &current
+		return nil
+	})
+	return saved, err
 }
 
 // UpdateOrders sets Order = index for every listed system inside one write
@@ -908,6 +945,10 @@ type TCPingResult struct {
 	// go through the sequence-number path and are never dropped.
 	ExactTimestamp bool `json:"-"`
 }
+
+// maxTCPingFuture is how far ahead of the server clock a sample stamp may
+// be after skew correction. Beyond it the stamp is not a measurement time.
+const maxTCPingFuture = 2 * time.Minute
 
 func tcpingResultKeyPrefix(result TCPingResult) string {
 	return fmt.Sprintf("%d_%s_%09d_", result.Timestamp.Unix(), result.ClientID, result.Timestamp.Nanosecond())
@@ -1366,6 +1407,12 @@ func (s *Store) GetTCPingConfig() (*TCPingConfig, error) {
 func normalizeTCPingTargets(config *TCPingConfig) {
 	if config == nil {
 		return
+	}
+	// A non-positive interval would panic time.NewTicker in the pollers; the
+	// handler refuses it, but a hand-edited or legacy record must not crash
+	// the process.
+	if config.IntervalSecs < 1 {
+		config.IntervalSecs = 60
 	}
 	kept := config.Targets[:0]
 	for _, t := range config.Targets {

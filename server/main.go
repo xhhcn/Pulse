@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -182,7 +183,7 @@ var (
 	tcpingCache           = make(map[tcpingCacheKey]*tcpingCacheEntry)
 	tcpingCacheMu         sync.RWMutex
 	tcpingCacheTTL        = 2 * time.Minute // Cache results for 2 minutes
-	tcpingCacheMaxEntries = 512
+	tcpingCacheMaxEntries = 4096 // 64 targets × many systems; bytes are capped separately
 	tcpingCacheMaxBytes   = 32 << 20 // 32 MiB hard cap for cached response bodies
 	tcpingCacheBytes      int
 )
@@ -551,6 +552,9 @@ type sseSubscriber struct {
 	ch   chan string
 	view SSEView
 	ip   string
+	// counted is set when this subscriber was added to perIP; admin streams
+	// are exempt from the cap and must not eat a public viewer's budget.
+	counted bool
 }
 
 type SSEBroker struct {
@@ -632,12 +636,15 @@ func (b *SSEBroker) Subscribe(view SSEView, ip string) (*sseSubscriber, error) {
 		}
 	}
 	sub := &sseSubscriber{
-		ch:   make(chan string, sseSubscriberBuffer),
-		view: view,
-		ip:   ip,
+		ch:      make(chan string, sseSubscriberBuffer),
+		view:    view,
+		ip:      ip,
+		counted: view != SSEViewAdmin,
 	}
 	b.clients[sub] = struct{}{}
-	b.perIP[ip]++
+	if sub.counted {
+		b.perIP[ip]++
+	}
 	return sub, nil
 }
 
@@ -649,10 +656,12 @@ func (b *SSEBroker) Unsubscribe(sub *sseSubscriber) {
 		return
 	}
 	delete(b.clients, sub)
-	if b.perIP[sub.ip] <= 1 {
-		delete(b.perIP, sub.ip)
-	} else {
-		b.perIP[sub.ip]--
+	if sub.counted {
+		if b.perIP[sub.ip] <= 1 {
+			delete(b.perIP, sub.ip)
+		} else {
+			b.perIP[sub.ip]--
+		}
 	}
 	close(sub.ch)
 }
@@ -755,9 +764,19 @@ func (b *SSEBroker) PrimeSnapshot(sub *sseSubscriber) (string, bool) {
 		break
 	}
 	for _, ev := range kept {
-		select {
-		case sub.ch <- ev:
-		default:
+		for attempt := 0; attempt < 2; attempt++ {
+			select {
+			case sub.ch <- ev:
+				attempt = 2
+			default:
+				// Full again (a broadcast landed concurrently): discard the
+				// oldest queued event, a snapshot the prime supersedes, and
+				// retry so the signal is not lost.
+				select {
+				case <-sub.ch:
+				default:
+				}
+			}
 		}
 	}
 	return payload, true
@@ -1121,23 +1140,6 @@ func (r *ClientRegistry) Register(id, name, port, ip, ipv6 string) {
 			log.Printf("⚠️  Client %s registered but no valid URL (IPv4=%s, IPv6=%s) - client may be behind NAT (push mode expected; logged once)", id, ip, ipv6)
 		}
 	}
-}
-
-// getServerIP gets the server's own IP address (non-loopback)
-func getServerIP() string {
-	conn, err := net.Dial("udp", "8.8.8.8:53")
-	if err != nil {
-		return ""
-	}
-	defer conn.Close()
-
-	// Safe type assertion to prevent panic
-	localAddr := conn.LocalAddr()
-	udpAddr, ok := localAddr.(*net.UDPAddr)
-	if !ok {
-		return ""
-	}
-	return udpAddr.IP.String()
 }
 
 // Get returns a DEFENSIVE VALUE COPY of the ClientInfo registered under id
@@ -1531,13 +1533,13 @@ func main() {
 	})
 
 	addr := ":" + portFromEnv()
-	// All background loops observe rootCtx and exit promptly when the process
-	// is asked to shut down. This matters because the shutdown path is:
+	// The polling loops observe rootCtx and stop starting new work when the
+	// process is asked to shut down; the shutdown path is
 	//     cancelRoot() -> srv.Shutdown() -> store.Close()
-	// If these loops keep running past srv.Shutdown, they will race with
-	// store.Close by issuing db.Update/db.View calls on a closing DB, which
-	// can cause half-written transactions (one of the failure modes that
-	// contributed to the previous bbolt "invalid freelist page" corruption).
+	// Short-lived helpers they spawn (a tick's broadcast, offline marking,
+	// background history deletes) may still be running when store.Close is
+	// reached: bbolt then returns ErrDatabaseNotOpen to them and Close waits
+	// for in-flight write transactions, so nothing is half-written.
 	go startClientPolling(rootCtx, store, broker, clientRegistry, ipCache)
 	go startTCPingPolling(rootCtx, clientRegistry, store)
 	go startTCPingCleanup(rootCtx, store)
@@ -2383,7 +2385,6 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 		if existing != nil {
 			cpuModel = existing.CPUModel
 			memoryInfo = existing.MemoryInfo
-			swapInfo = existing.SwapInfo
 			diskInfo = existing.DiskInfo
 			secret = existing.Secret
 			tags = existing.Tags
@@ -2472,12 +2473,24 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 	}
 
 	// Agent writes merge the admin-owned fields from the stored record inside
-	// the transaction; admin writes are authoritative for those fields.
+	// the transaction; admin writes are authoritative for those fields but
+	// touch only them: an edit of an existing system must not write back the
+	// copy of the record the admin page read (a pruned tcping target or a
+	// push that landed in between would be resurrected or reverted).
 	var saveErr error
 	if isFromClient {
 		saveErr = store.UpsertFromAgent(metric)
 	} else {
-		saveErr = store.Upsert(metric)
+		metric.Name, metric.Tags = boundAdminNameTags(metric.Name, metric.Tags)
+		if existing != nil {
+			var saved *SystemMetric
+			saved, saveErr = store.UpdateAdminOwned(metric)
+			if saveErr == nil && saved != nil {
+				metric = *saved
+			}
+		} else {
+			saveErr = store.Upsert(metric)
+		}
 	}
 	if saveErr != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -2573,6 +2586,73 @@ func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistr
 	writeJSON(w, http.StatusOK, map[string]string{"message": "deleted", "id": id})
 }
 
+// logThrottled logs at most one line per key per minute. Used on the
+// unauthenticated agent endpoints, where a flood of bad requests must not
+// grow the log without bound; %q keeps attacker-chosen ids on one line.
+var (
+	logThrottleMu   sync.Mutex
+	logThrottleLast = map[string]time.Time{}
+)
+
+func logThrottled(key, format string, args ...interface{}) {
+	logThrottleMu.Lock()
+	defer logThrottleMu.Unlock()
+	now := time.Now()
+	if last, ok := logThrottleLast[key]; ok && now.Sub(last) < time.Minute {
+		return
+	}
+	if len(logThrottleLast) > 256 {
+		for k, t := range logThrottleLast {
+			if now.Sub(t) > 2*time.Minute {
+				delete(logThrottleLast, k)
+			}
+		}
+	}
+	logThrottleLast[key] = now
+	log.Printf(format, args...)
+}
+
+// maxTCPingLatencyMs bounds a reported latency: anything above ten minutes,
+// negative or non-finite is not a measurement and is recorded as a failure.
+const maxTCPingLatencyMs = 600000.0
+
+func validLatency(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= maxTCPingLatencyMs
+}
+
+const (
+	adminNameMaxRunes = 200
+	adminTagMaxRunes  = 64
+	adminTagsMax      = 32
+)
+
+// boundAdminNameTags trims and length-caps the admin-owned labels so a
+// pasted blob cannot become a multi-kilobyte name re-broadcast every 3 s.
+func boundAdminNameTags(name string, tags []string) (string, []string) {
+	name = strings.TrimSpace(name)
+	if r := []rune(name); len(r) > adminNameMaxRunes {
+		name = string(r[:adminNameMaxRunes])
+	}
+	if tags == nil {
+		return name, nil
+	}
+	kept := make([]string, 0, len(tags))
+	for _, t := range tags {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		if r := []rune(t); len(r) > adminTagMaxRunes {
+			t = string(r[:adminTagMaxRunes])
+		}
+		kept = append(kept, t)
+		if len(kept) == adminTagsMax {
+			break
+		}
+	}
+	return name, kept
+}
+
 func handleClientRegister(store *Store, registry *ClientRegistry, w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	// Registration payloads contain only a handful of short string fields;
@@ -2589,13 +2669,13 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		log.Printf("❌ Client registration failed: invalid JSON payload from %s", r.RemoteAddr)
+		logThrottled("register:json", "❌ Client registration failed: invalid JSON payload from %q", r.RemoteAddr)
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 		return
 	}
 
 	if strings.TrimSpace(payload.ID) == "" {
-		log.Printf("❌ Client registration failed: missing ID")
+		logThrottled("register:id", "❌ Client registration failed: missing ID (from %q)", r.RemoteAddr)
 		http.Error(w, "id is required", http.StatusBadRequest)
 		return
 	}
@@ -2606,7 +2686,7 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 	payload.Port = strings.TrimSpace(payload.Port)
 	if payload.Port != "" {
 		if p, convErr := strconv.Atoi(payload.Port); convErr != nil || p < 1 || p > 65535 {
-			log.Printf("❌ Client registration failed: invalid port %q for ID '%s'", payload.Port, payload.ID)
+			logThrottled("register:port", "❌ Client registration failed: invalid port %q for ID %q", payload.Port, payload.ID)
 			http.Error(w, "port must be a number between 1 and 65535", http.StatusBadRequest)
 			return
 		}
@@ -2619,7 +2699,7 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 	// BoltDB reads are very fast (in-memory B-tree index), so this is acceptable
 	existing, err := store.Get(payload.ID)
 	if err != nil || existing == nil {
-		log.Printf("❌ Client registration failed: server ID '%s' not found in database", payload.ID)
+		logThrottled("register:unknown", "❌ Client registration failed: server ID %q not found in database", payload.ID)
 		http.Error(w, fmt.Sprintf("server id '%s' not found in database. Please add the server in admin page first", payload.ID), http.StatusNotFound)
 		return
 	}
@@ -2627,12 +2707,12 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 	// Verify secret if it's set in the database
 	if existing.Secret != "" {
 		if payload.Secret == "" {
-			log.Printf("❌ Client registration failed: secret required for ID '%s'", payload.ID)
+			logThrottled("register:nosecret", "❌ Client registration failed: secret required for ID %q", payload.ID)
 			http.Error(w, "secret is required for authentication", http.StatusUnauthorized)
 			return
 		}
 		if !secretEqual(payload.Secret, existing.Secret) {
-			log.Printf("❌ Client registration failed: invalid secret for ID '%s'", payload.ID)
+			logThrottled("register:badsecret", "❌ Client registration failed: invalid secret for ID %q", payload.ID)
 			http.Error(w, "invalid secret", http.StatusUnauthorized)
 			return
 		}
@@ -2935,13 +3015,16 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	const maxPast = 24 * time.Hour
 	// sanitize returns the timestamp to store, whether it is the agent's own
 	// unmodified stamp (only then is it safe to use as an idempotency key), and
-	// whether the sample is worth keeping at all.
+	// whether the sample is worth keeping at all. Bounded on both sides: a
+	// stamp far in the future (a broken or hostile clock the skew correction
+	// cannot rescue) would otherwise become an unreplaceable "latest" entry
+	// and a history row outside the key layout's fixed-width range.
 	sanitize := func(t time.Time) (ts time.Time, exact bool, keep bool) {
 		if t.IsZero() {
 			return nowUTC, false, true // pre-1.3.6 agents: server clock
 		}
 		ts = t.UTC().Add(skew)
-		if nowUTC.Sub(ts) > maxPast {
+		if nowUTC.Sub(ts) > maxPast || ts.After(nowUTC.Add(maxTCPingFuture)) {
 			return time.Time{}, false, false
 		}
 		return ts, skew == 0, true
@@ -2964,6 +3047,17 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 		// as new as the entry already there, so a backfilled marker cannot
 		// hide a newer real latency.
 		latestWritten := make(map[string]struct{})
+		// replaceLatest decides whether a sample may become the target's
+		// "latest" entry: the first sample of a batch always replaces the
+		// stored copy (a stale or future-stamped stored value must never
+		// freeze the card); later samples of the batch only if not older.
+		// Successes and skipped markers follow the same rule.
+		replaceLatest := func(target string, ts time.Time) bool {
+			if _, written := latestWritten[target]; !written {
+				return true
+			}
+			return !ts.Before(tcpingData[target].Timestamp)
+		}
 		for _, tr := range payload.TCPingResults {
 			if tr.Target == "" || !targetAllowed(tr.Target) {
 				continue
@@ -2972,13 +3066,16 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 			if !keep {
 				continue
 			}
+			if tr.Success && !validLatency(tr.Latency) {
+				tr.Success = false // not a measurement: recorded as a failure
+			}
+			if tcpingData == nil {
+				tcpingData = make(map[string]TCPingTargetData)
+			}
 			// Success wins over a contradictory Skipped: a probe that
 			// produced a latency was evidently attempted.
 			if tr.Skipped && !tr.Success {
-				if tcpingData == nil {
-					tcpingData = make(map[string]TCPingTargetData)
-				}
-				if cur, ok := tcpingData[tr.Target]; !ok || !ts.Before(cur.Timestamp) {
+				if replaceLatest(tr.Target, ts) {
 					tcpingData[tr.Target] = TCPingTargetData{Timestamp: ts, Skipped: true}
 					latestWritten[tr.Target] = struct{}{}
 					freshTCPing[tr.Target] = struct{}{}
@@ -2989,10 +3086,7 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 			if tr.Success {
 				l := tr.Latency
 				latencyPtr = &l
-				if tcpingData == nil {
-					tcpingData = make(map[string]TCPingTargetData)
-				}
-				if _, written := latestWritten[tr.Target]; !written || !ts.Before(tcpingData[tr.Target].Timestamp) {
+				if replaceLatest(tr.Target, ts) {
 					tcpingData[tr.Target] = TCPingTargetData{
 						Latency:   tr.Latency,
 						Timestamp: ts,
@@ -4392,10 +4486,10 @@ func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 
 	// Save result regardless of success/failure (nil latency for failures)
 	var latency *float64
-	if payload.Success {
+	if payload.Success && validLatency(payload.Latency) {
 		latency = &payload.Latency
 	} else {
-		latency = nil // nil indicates timeout/failure
+		latency = nil // nil indicates timeout/failure (or a bogus latency)
 	}
 
 	result := TCPingResult{
@@ -4481,6 +4575,13 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 
 	if clientID == "" {
 		http.Error(w, "client_id is required", http.StatusBadRequest)
+		return
+	}
+	// The target is a cache key and a bucket scan: only configured targets
+	// are answered, so an anonymous caller cannot evict the cache or force a
+	// full 24 h walk with made-up names.
+	if target != "" && !tcpingTargetConfigured(store, target) {
+		http.Error(w, "target is not configured", http.StatusBadRequest)
 		return
 	}
 
@@ -4931,13 +5032,9 @@ func handleSetTCPingConfig(store *Store, broker *SSEBroker, registry *ClientRegi
 		return
 	}
 
-	// Only clear the in-memory tcping cache *after* the new config has
-	// been persisted successfully. If SaveTCPingConfig returned an error
-	// above we would otherwise have wiped every chart's history for no
-	// reason while leaving the old config still in force.
-	if oldConfig != nil {
-		clearAllTCPingCache()
-	}
+	// The new config is persisted at this point (errors returned above), so
+	// every cached history body is stale: clear unconditionally.
+	clearAllTCPingCache()
 
 	// Removed targets: prune the "latest per target" snapshot of every system
 	// in one transaction (so the frontend stops showing the target at once)
@@ -5407,10 +5504,11 @@ func startTCPingPolling(ctx context.Context, registry *ClientRegistry, store *St
 
 					// Save result directly to database and update SystemMetric (save even if failed)
 					var latency *float64
-					if tcpingResp.Success {
+					if tcpingResp.Success && validLatency(tcpingResp.Latency) {
 						latency = &tcpingResp.Latency
 					} else {
-						latency = nil // nil indicates timeout/failure
+						tcpingResp.Success = false
+						latency = nil // nil indicates timeout/failure (or a bogus latency)
 					}
 
 					result := TCPingResult{

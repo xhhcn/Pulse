@@ -42,6 +42,10 @@ func TestSaveClientPushBatchWritesMetricAndTCPingHistory(t *testing.T) {
 		},
 	}
 
+	// Agent writes never create a system; the admin-created record exists first.
+	if err := store.Upsert(SystemMetric{ID: "push-client", Name: "Push Client"}); err != nil {
+		t.Fatalf("Upsert() error = %v", err)
+	}
 	if err := store.SaveClientPushBatch(metric, []TCPingResult{{
 		ClientID:  "push-client",
 		Target:    "example.com",
