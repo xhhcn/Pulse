@@ -99,6 +99,10 @@ var (
 	ipCacheTime  time.Time
 	ipCacheMutex sync.RWMutex
 	ipCacheTTL   = 60 * time.Second // Refresh IP every 60 seconds (IP rarely changes)
+	// How long a previously detected address is still reported while every
+	// refresh fails (see getIPAddresses).
+	ipKeepStaleFor = 10 * time.Minute
+	ipDetectedAt   time.Time
 
 	// Shared HTTP client for connection reuse (important for cross-continent networks)
 	sharedHTTPClient     *http.Client
@@ -1503,6 +1507,9 @@ func getIPAddresses() (ipv4, ipv6 string) {
 		ipv4Cache = v4
 		ipv6Cache = v6
 		ipCacheTime = time.Now()
+		if v4 != "" || v6 != "" {
+			ipDetectedAt = ipCacheTime
+		}
 		ipCacheMutex.Unlock()
 		return v4, v6
 	}
@@ -1516,11 +1523,23 @@ func getIPAddresses() (ipv4, ipv6 string) {
 		// A refresh that finds nothing (echo services unreachable for a
 		// while) keeps the last known addresses instead of reporting none,
 		// which would make the server fall back to the connection source.
+		// Not forever, though: after ten minutes without a successful
+		// detection the addresses are dropped, so a machine whose address
+		// really changed while detection stays broken lets the server take
+		// over rather than reporting the old address indefinitely.
+		if newV4 != "" || newV6 != "" {
+			ipDetectedAt = time.Now()
+		}
+		stale := !ipDetectedAt.IsZero() && time.Since(ipDetectedAt) > ipKeepStaleFor
 		if newV4 != "" {
 			ipv4Cache = newV4
+		} else if stale {
+			ipv4Cache = ""
 		}
 		if newV6 != "" {
 			ipv6Cache = newV6
+		} else if stale {
+			ipv6Cache = ""
 		}
 		ipCacheTime = time.Now()
 		ipCacheMutex.Unlock()

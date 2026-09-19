@@ -1867,6 +1867,7 @@ func buildMetricsSnapshot(store *Store, registry *ClientRegistry, authenticated 
 		if !authenticated {
 			metrics[i].IPv4 = ""
 			metrics[i].IPv6 = ""
+			metrics[i].LocationIP = "" // server-side bookkeeping, it is one of the masked addresses
 			metrics[i].Secret = ""
 		}
 	}
@@ -1942,6 +1943,7 @@ func broadcastMetricsSnapshotLocked(store *Store, registry *ClientRegistry, brok
 	for i := range publicMetrics {
 		publicMetrics[i].IPv4 = ""
 		publicMetrics[i].IPv6 = ""
+		publicMetrics[i].LocationIP = ""
 		publicMetrics[i].Secret = ""
 	}
 
@@ -2413,16 +2415,16 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 	// Apply NAT IP fixup: if the reported IPv4 is absent or private, derive it
 	// from the connection source IP (same logic as handleClientPush).
 	// getClientIP uses forwarded headers only when the immediate peer is trusted.
+	srcIP := net.ParseIP(getClientIP(r))
+	srcUsable := srcIP != nil && !isPrivateIP(srcIP) && !isTrustedProxyIP(srcIP)
 	if isPrivateIPStr(ip) {
-		if srcIP := getClientIP(r); srcIP != "" {
-			parsed := net.ParseIP(srcIP)
-			if parsed != nil && parsed.To4() == nil && ipv6 == "" && !isPrivateIP(parsed) && !isTrustedProxyIP(parsed) {
-				ipv6 = srcIP // the agent reached us over IPv6
-			}
-			if parsed != nil && parsed.To4() != nil && !isPrivateIP(parsed) && !isTrustedProxyIP(parsed) {
-				ip = srcIP
-			}
+		ip = ""
+		if srcUsable && srcIP.To4() != nil {
+			ip = srcIP.String()
 		}
+	}
+	if ipv6 == "" && srcUsable && srcIP.To4() == nil {
+		ipv6 = srcIP.String() // the agent reached us over IPv6
 	}
 
 	// Validate IPv4: if it's not a valid IPv4, clear it
@@ -2543,19 +2545,19 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	// (via getClientIP) as a reliable fallback when the client-reported IPv4 is empty
 	// or still private.  This also works correctly when the server is behind a reverse
 	// proxy when that proxy is trusted by getClientIP.
+	// A trusted proxy's own address (forwarded header missing or unusable)
+	// is never the agent's address: storing it put the system in the CDN's
+	// country. A private reported address is never persisted either.
+	srcIP := net.ParseIP(getClientIP(r))
+	srcUsable := srcIP != nil && !isPrivateIP(srcIP) && !isTrustedProxyIP(srcIP)
 	if payload.IPv4 == "" || isPrivateIPStr(payload.IPv4) {
-		if srcIP := getClientIP(r); srcIP != "" {
-			// A trusted proxy's own address (forwarded header missing or
-			// unusable) is never the agent's address: storing it put the
-			// system in the CDN's country.
-			parsed := net.ParseIP(srcIP)
-			if parsed != nil && parsed.To4() == nil && payload.IPv6 == "" && !isPrivateIP(parsed) && !isTrustedProxyIP(parsed) {
-				payload.IPv6 = srcIP // the agent reached us over IPv6
-			}
-			if parsed != nil && parsed.To4() != nil && !isPrivateIP(parsed) && !isTrustedProxyIP(parsed) {
-				payload.IPv4 = srcIP
-			}
+		payload.IPv4 = ""
+		if srcUsable && srcIP.To4() != nil {
+			payload.IPv4 = srcIP.String()
 		}
+	}
+	if payload.IPv6 == "" && srcUsable && srcIP.To4() == nil {
+		payload.IPv6 = srcIP.String() // the agent reached us over IPv6
 	}
 
 	// Mark client as push-mode in registry (creates entry if not yet registered)
@@ -5239,18 +5241,28 @@ var cloudflareProxyRanges = []string{
 }
 
 func loadTrustedProxyNets() {
-	for _, cidrStr := range cloudflareProxyRanges {
-		if _, cidr, err := net.ParseCIDR(cidrStr); err == nil {
-			trustedProxyNets = append(trustedProxyNets, cidr)
+	raw := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES"))
+	// TRUSTED_PROXIES=none (alone or as one entry) disables the built-in
+	// Cloudflare ranges for deployments that are not behind Cloudflare.
+	useBuiltin := true
+	for _, part := range strings.Split(raw, ",") {
+		if strings.EqualFold(strings.TrimSpace(part), "none") {
+			useBuiltin = false
 		}
 	}
-	raw := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES"))
+	if useBuiltin {
+		for _, cidrStr := range cloudflareProxyRanges {
+			if _, cidr, err := net.ParseCIDR(cidrStr); err == nil {
+				trustedProxyNets = append(trustedProxyNets, cidr)
+			}
+		}
+	}
 	if raw == "" {
 		return
 	}
 	for _, part := range strings.Split(raw, ",") {
 		part = strings.TrimSpace(part)
-		if part == "" {
+		if part == "" || strings.EqualFold(part, "none") {
 			continue
 		}
 		if _, cidr, err := net.ParseCIDR(part); err == nil {
@@ -5664,9 +5676,11 @@ func isAuthenticated(r *http.Request) bool {
 	return false
 }
 
-// existingLocationIP keeps the address a stored location was resolved for
-// when an admin edit leaves the location untouched; a changed location is a
-// declared one and carries no address.
+// existingLocationIP returns the address a stored location was resolved
+// for when the incoming location string is unchanged, and "" when it
+// differs (a declared location carries no address). Admin edits of an
+// existing system copy the whole record and never reach this; it covers
+// the legacy ingest path that writes a full record for an existing id.
 func existingLocationIP(existing *SystemMetric, location string) string {
 	if existing == nil || existing.Location != location {
 		return ""

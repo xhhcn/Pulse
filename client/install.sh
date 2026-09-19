@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Pulse Client Installation Script for Linux and macOS
-# Usage: curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id YOUR_ID --server http://YOUR_SERVER:8080
+# Usage: curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id YOUR_ID --server http://YOUR_SERVER:8008
 #
 
 set -e
@@ -148,7 +148,7 @@ show_help() {
     echo "Options:"
     echo "  --id ID              Agent ID (required, must match server config)"
     echo "  --name NAME          Agent display name (optional, defaults to ID)"
-    echo "  --server URL         Server base URL (required, e.g., http://your-server:8080)"
+    echo "  --server URL         Server base URL (required, e.g., http://your-server:8008)"
     echo "  --port PORT          Client port (optional, default: 9090)"
     echo "  --secret SECRET      Secret for authentication (optional)"
     echo "  --auto-update        Enable auto-update (default: enabled)"
@@ -159,11 +159,11 @@ show_help() {
     echo "  --help, -h           Show this help message"
     echo ""
     echo "Example:"
-    echo "  $0 --id my-server-1 --server http://monitor.example.com:8080 --secret my-secret"
-    echo "  $0 --id my-server-1 --server http://monitor.example.com:8080 --no-auto-update"
+    echo "  $0 --id my-server-1 --server http://monitor.example.com:8008 --secret my-secret"
+    echo "  $0 --id my-server-1 --server http://monitor.example.com:8008 --no-auto-update"
     echo ""
     echo "Or using curl:"
-    echo "  curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id my-server-1 --server http://monitor.example.com:8080 --secret my-secret"
+    echo "  curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id my-server-1 --server http://monitor.example.com:8008 --secret my-secret"
 }
 
 # Prompt for required values if not provided
@@ -174,7 +174,7 @@ prompt_values() {
     fi
 
     if [ -z "$SERVER_BASE" ]; then
-        read -r -p "Enter Server URL (e.g., http://your-server:8080): " SERVER_BASE
+        read -r -p "Enter Server URL (e.g., http://your-server:8008): " SERVER_BASE
         [ -z "$SERVER_BASE" ] && error "Server URL is required"
     fi
 

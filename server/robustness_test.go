@@ -1088,6 +1088,8 @@ func TestStaticETagRevalidation(t *testing.T) {
 
 func TestResolveLocationReusesOnlyForTheResolvedAddress(t *testing.T) {
 	cache := NewIPCountryCache()
+	// Pre-seed a failed lookup so the test never reaches a live geo service.
+	cache.SetFailed("111.253.32.117")
 	// Legacy record: a country persisted for an address that is no longer
 	// known to have produced it (LocationIP empty) is not trusted blindly.
 	existing := &SystemMetric{Location: "US", IPv4: "111.253.32.117"}
@@ -1110,6 +1112,7 @@ func TestResolveLocationReusesOnlyForTheResolvedAddress(t *testing.T) {
 	}
 	// The address changed: the old country is only a fallback, and it is
 	// not re-attributed to the new address.
+	cache2.SetFailed("1.2.3.4")
 	loc, ip = resolveLocation(cache2, existing, "", "1.2.3.4", "")
 	if loc != "TW" || ip != "111.253.32.117" {
 		t.Fatalf("changed address keeps the fallback attribution: %q %q", loc, ip)
@@ -1151,6 +1154,7 @@ func TestClientPushNeverStoresAProxyAddressAsTheAgent(t *testing.T) {
 	if err := store.Upsert(SystemMetric{ID: "px", Name: "Proxied"}); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
+	ipCache.SetFailed("2001:b011:b000:408a::1") // keep the test offline
 	// Forwarded header missing: the resolved source is the Cloudflare edge.
 	body, _ := json.Marshal(map[string]interface{}{"id": "px", "name": "x", "uptime": 5})
 	req := httptest.NewRequest(http.MethodPost, "/api/clients/push", bytes.NewReader(body))
@@ -1175,6 +1179,55 @@ func TestClientPushNeverStoresAProxyAddressAsTheAgent(t *testing.T) {
 	m, _ = store.Get("px")
 	if m.IPv6 != "2001:b011:b000:408a::1" || m.IPv4 != "" {
 		t.Fatalf("agent over IPv6: got v4=%q v6=%q", m.IPv4, m.IPv6)
+	}
+	// A private reported address is never persisted, even when the source
+	// cannot replace it; the IPv6 source is still recorded next to a public
+	// reported IPv4.
+	body, _ = json.Marshal(map[string]interface{}{"id": "px", "name": "x", "uptime": 5, "ipv4": "192.168.1.5"})
+	req = httptest.NewRequest(http.MethodPost, "/api/clients/push", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "172.69.186.5:443"
+	rr = httptest.NewRecorder()
+	handleClientPush(store, registry, ipCache, rr, req)
+	m, _ = store.Get("px")
+	if m.IPv4 != "" {
+		t.Fatalf("private reported address persisted: %q", m.IPv4)
+	}
+	ipCache.SetFailed("203.0.113.9")
+	body, _ = json.Marshal(map[string]interface{}{"id": "px", "name": "x", "uptime": 5, "ipv4": "203.0.113.9"})
+	req = httptest.NewRequest(http.MethodPost, "/api/clients/push", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "172.69.186.5:443"
+	req.Header.Set("X-Forwarded-For", "2001:b011:b000:408a::1")
+	rr = httptest.NewRecorder()
+	handleClientPush(store, registry, ipCache, rr, req)
+	m, _ = store.Get("px")
+	if m.IPv4 != "203.0.113.9" || m.IPv6 != "2001:b011:b000:408a::1" {
+		t.Fatalf("public IPv4 kept and IPv6 source recorded: got v4=%q v6=%q", m.IPv4, m.IPv6)
+	}
+	// The public view never carries the resolved-for address.
+	pub, err := buildMetricsSnapshot(store, registry, false)
+	if err != nil {
+		t.Fatalf("buildMetricsSnapshot: %v", err)
+	}
+	for _, s := range pub {
+		if s.ID == "px" && (s.LocationIP != "" || s.IPv4 != "" || s.IPv6 != "") {
+			t.Fatalf("public view leaks addresses: %+v", s)
+		}
+	}
+	trustedProxyOnce = sync.Once{}
+	trustedProxyNets = nil
+}
+
+func TestTrustedProxiesNoneDisablesBuiltinRanges(t *testing.T) {
+	trustedProxyOnce = sync.Once{}
+	trustedProxyNets = nil
+	t.Setenv("TRUSTED_PROXIES", "none, 203.0.113.0/24")
+	if isTrustedProxyIP(net.ParseIP("172.69.186.5")) {
+		t.Fatalf("none must disable the built-in Cloudflare ranges")
+	}
+	if !isTrustedProxyIP(net.ParseIP("203.0.113.7")) {
+		t.Fatalf("explicit ranges still apply next to none")
 	}
 	trustedProxyOnce = sync.Once{}
 	trustedProxyNets = nil
