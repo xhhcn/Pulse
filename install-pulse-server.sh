@@ -71,7 +71,20 @@ case "$DOWNLOAD_URL" in
     https://*) ;;
     *) print_message "$RED" "❌ Refusing to download over a non-HTTPS URL: $DOWNLOAD_URL"; exit 1 ;;
 esac
-if ! wget -q --show-progress "$DOWNLOAD_URL" -O "$INSTALL_DIR/pulse-server.new"; then
+# fetch_https URL DEST: curl when present (minimal RHEL/Rocky images have no
+# wget), wget otherwise; both refuse plain HTTP, including on redirects.
+fetch_https() {
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 600 "$1" -o "$2"
+    elif command -v wget >/dev/null 2>&1; then
+        case "$1" in https://*) ;; *) return 1 ;; esac
+        wget -q --tries=3 --timeout=120 "$1" -O "$2"
+    else
+        print_message "$RED" "❌ Neither curl nor wget found. Please install one of them."
+        return 1
+    fi
+}
+if ! fetch_https "$DOWNLOAD_URL" "$INSTALL_DIR/pulse-server.new"; then
     rm -f "$INSTALL_DIR/pulse-server.new"
     print_message "$RED" "❌ Failed to download binary"
     print_message "$YELLOW" "   URL: $DOWNLOAD_URL"
@@ -99,25 +112,30 @@ if [ "$VERSION" = "latest" ]; then
 else
     SCRIPT_BASE="https://raw.githubusercontent.com/$GITHUB_REPO/$VERSION/scripts"
 fi
+# The helpers are staged in a private temp dir and moved into place only
+# when all three downloaded, so a transient failure during an upgrade keeps
+# the previous working copies (and the CLI symlinks) intact.
 SCRIPTS_OK=true
+SCRIPTS_TMP="$(mktemp -d "${TMPDIR:-/tmp}/pulse-scripts.XXXXXX")"
+chmod 700 "$SCRIPTS_TMP"
 for s in backup.sh restore.sh migrate.sh; do
-    case "$SCRIPT_BASE" in https://*) ;; *) SCRIPTS_OK=false; break ;; esac
-    if ! wget -q "$SCRIPT_BASE/$s" -O "$INSTALL_DIR/scripts/$s"; then
+    if ! fetch_https "$SCRIPT_BASE/$s" "$SCRIPTS_TMP/$s"; then
         SCRIPTS_OK=false
         break
     fi
-    chmod +x "$INSTALL_DIR/scripts/$s"
+    chmod +x "$SCRIPTS_TMP/$s"
 done
 if $SCRIPTS_OK; then
+    mv -f "$SCRIPTS_TMP/backup.sh" "$SCRIPTS_TMP/restore.sh" "$SCRIPTS_TMP/migrate.sh" "$INSTALL_DIR/scripts/"
     ln -sf "$INSTALL_DIR/scripts/migrate.sh" /usr/local/bin/pulse-migrate
     ln -sf "$INSTALL_DIR/scripts/backup.sh"  /usr/local/bin/pulse-backup
     ln -sf "$INSTALL_DIR/scripts/restore.sh" /usr/local/bin/pulse-restore
     print_message "$GREEN" "✅ Migration helpers installed to $INSTALL_DIR/scripts"
     print_message "$GREEN" "   CLI shortcuts: pulse-migrate / pulse-backup / pulse-restore"
 else
-    rm -f "$INSTALL_DIR/scripts/backup.sh" "$INSTALL_DIR/scripts/restore.sh" "$INSTALL_DIR/scripts/migrate.sh"
-    print_message "$YELLOW" "⚠️  Could not fetch migration helpers (non-fatal) — rerun installer later."
+    print_message "$YELLOW" "⚠️  Could not fetch migration helpers (non-fatal) — existing copies, if any, were kept; rerun installer later."
 fi
+rm -rf "$SCRIPTS_TMP"
 
 # Create systemd service
 print_message "$YELLOW" "⚙️  Creating systemd service..."
