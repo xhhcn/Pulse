@@ -353,6 +353,15 @@ const apiBase = apiBaseProp ?? '';
   // a different path (slashes, "..", "?", "#" are all rejected here).
   const ICONIFY_NAME_RE = /^[a-z0-9-]+:[a-z0-9-]+$/i;
 
+  // SECURITY: escape an id before it is interpolated into a CSS selector.
+  // Ids come from agent-reported data and may contain quotes or other
+  // characters that would make querySelector throw a SyntaxError and abort
+  // the whole render. The fallback covers browsers without CSS.escape.
+  function cssEscape(s) {
+    if (window.CSS && window.CSS.escape) return window.CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => '\\' + c);
+  }
+
   /* The icon CDN response is third-party markup that lands in innerHTML.
      Accept only a plain <svg> tree: drop scripts, foreignObject, event
      handler attributes and non-image hrefs. Returns '' when anything
@@ -1469,7 +1478,7 @@ const apiBase = apiBaseProp ?? '';
       // Find all traffic and speed tags in the details section
       // Update them regardless of whether the section is expanded or collapsed
       // This ensures tags show latest data when user expands the section
-      const detailsSection = document.querySelector(`[data-details-id="${item.id}"]`);
+      const detailsSection = document.querySelector(`[data-details-id="${cssEscape(String(item.id))}"]`);
       if (detailsSection) {
         // Update traffic:in tags (total cumulative)
         if (trafficTagTotalInChanged || shouldUpdateAll) {
@@ -1974,18 +1983,18 @@ const apiBase = apiBaseProp ?? '';
     tcpingDataSignatures.delete(systemId);
     
     // Reset canvas to ensure clean state for next initialization
-    const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
+    const container = document.querySelector(`[data-tcping-chart-container="${cssEscape(String(systemId))}"]`);
     if (container) {
       // Hide the "unreachable target" notice so a later expand starts from
       // the loading overlay rather than a stale message. The skipped-target
       // set itself is NOT cleared here: it is derived from the metrics feed,
       // not from the chart, and stays valid while the row is collapsed.
-      const noticeElement = container.querySelector(`[data-tcping-unreachable="${systemId}"]`);
+      const noticeElement = container.querySelector(`[data-tcping-unreachable="${cssEscape(String(systemId))}"]`);
       if (noticeElement) {
         noticeElement.classList.add('hidden');
         noticeElement.style.display = 'none';
       }
-      const canvas = container.querySelector(`[data-tcping-chart="${systemId}"]`);
+      const canvas = container.querySelector(`[data-tcping-chart="${cssEscape(String(systemId))}"]`);
       if (canvas) {
         // Clear the canvas context
         const ctx = canvas.getContext('2d');
@@ -2079,7 +2088,7 @@ const apiBase = apiBaseProp ?? '';
         // the old target set can survive the redraw.
         cleanupTCPingChart(systemId);
 
-        const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
+        const container = document.querySelector(`[data-tcping-chart-container="${cssEscape(String(systemId))}"]`);
         if (!container) return;
 
         if (!fresh || !Array.isArray(fresh.targets) || fresh.targets.length === 0) {
@@ -2191,7 +2200,7 @@ const apiBase = apiBaseProp ?? '';
   //
   // A skipped tab is muted and carries the translated "cannot reach" string
   // as its tooltip, so the state is legible from the tab strip without having
-  // to open the tab. The mute is opacity ONLY — no added glyphs, no italics,
+  // to open the tab. The mute is COLOUR ONLY — no added glyphs, no italics,
   // no border — because the strip is `flex-wrap` directly above the chart: any
   // change to a tab's measured width could push it onto a second line and
   // shift every row below. A target flipping between skipped and measured
@@ -2199,10 +2208,28 @@ const apiBase = apiBaseProp ?? '';
   const TCPING_TAB_BASE = 'px-3 py-1 text-xs font-medium rounded transition-colors';
   const TCPING_TAB_ACTIVE = 'bg-[#404040]/50 dark:bg-[#404040]/50 text-[#151515] dark:text-[#f5f5f5]';
   const TCPING_TAB_INACTIVE = 'bg-transparent text-[#525252] dark:text-[#a3a3a3] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
-  const TCPING_TAB_SKIPPED = 'opacity-50';
+  // A skipped target is de-emphasised with an explicit muted grey rather than
+  // `opacity-50`. Blending the normal colours to 50% measures 2.38:1 in light
+  // mode (#525252 over the card's #ffffff) and 2.73:1 in dark (#a3a3a3 over
+  // #151515) by the WCAG formula — far below the 4.5:1 AA floor, and this is
+  // 12 px text. The greys below measure 5.33:1 / 5.29:1 on the card
+  // background and 4.83:1 / 5.10:1 on the selected tab's tinted background.
+  // Only the colour changes: padding, font-size and weight are untouched, so
+  // the tab keeps exactly the same box and a target flipping between skipped
+  // and measured still repaints in place without moving the row.
+  //
+  // The skipped variants REPLACE the normal colour classes instead of being
+  // appended after them — two competing `text-*` utilities in one class list
+  // resolve by stylesheet order, not by the order they appear in the
+  // attribute, so layering would be a coin flip.
+  const TCPING_TAB_SKIPPED_ACTIVE = 'bg-[#404040]/50 dark:bg-[#404040]/50 text-[#333333] dark:text-[#9a9a9a]';
+  const TCPING_TAB_SKIPPED_INACTIVE = 'bg-transparent text-[#6b6b6b] dark:text-[#8a8a8a] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
 
   function applyTCPingTabAppearance(tab, isActive, isSkipped) {
-    tab.className = `${TCPING_TAB_BASE} ${isActive ? TCPING_TAB_ACTIVE : TCPING_TAB_INACTIVE}${isSkipped ? ' ' + TCPING_TAB_SKIPPED : ''}`;
+    const variant = isSkipped
+      ? (isActive ? TCPING_TAB_SKIPPED_ACTIVE : TCPING_TAB_SKIPPED_INACTIVE)
+      : (isActive ? TCPING_TAB_ACTIVE : TCPING_TAB_INACTIVE);
+    tab.className = `${TCPING_TAB_BASE} ${variant}`;
     if (isSkipped) {
       tab.setAttribute('data-translate-title', 'tcpingUnreachable');
       tab.setAttribute('title', translations.tcpingUnreachable[getCurrentLanguage()] || translations.tcpingUnreachable.en);
@@ -2220,9 +2247,9 @@ const apiBase = apiBaseProp ?? '';
   // ones whose skipped state actually changed — so the common tick, where
   // nothing is skipped and nothing changed, touches no DOM at all.
   function refreshTCPingTabStates(systemId) {
-    const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
+    const container = document.querySelector(`[data-tcping-chart-container="${cssEscape(String(systemId))}"]`);
     if (!container) return;
-    const tabsContainer = container.querySelector(`[data-tcping-tabs="${systemId}"]`);
+    const tabsContainer = container.querySelector(`[data-tcping-tabs="${cssEscape(String(systemId))}"]`);
     if (!tabsContainer) return;
 
     const activeTargetInfo = tcpingActiveTargets.get(systemId);
@@ -2254,6 +2281,9 @@ const apiBase = apiBaseProp ?? '';
     // Create tabs for each target
     config.targets.forEach((target, index) => {
       const tab = document.createElement('button');
+      // Without an explicit type a <button> inside a form defaults to
+      // "submit"; these tabs only switch the chart, never submit anything.
+      tab.type = 'button';
 
       // Check if this tab should be active (restore previous selection)
       const isActive = previouslySelectedTarget === target.address;
@@ -2314,12 +2344,12 @@ const apiBase = apiBaseProp ?? '';
 
   // Initialize TCPing tabs immediately when details section expands
   async function initializeTCPingTabs(systemId) {
-    const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
+    const container = document.querySelector(`[data-tcping-chart-container="${cssEscape(String(systemId))}"]`);
     if (!container) {
       return;
     }
 
-    const tabsContainer = container.querySelector(`[data-tcping-tabs="${systemId}"]`);
+    const tabsContainer = container.querySelector(`[data-tcping-tabs="${cssEscape(String(systemId))}"]`);
     if (!tabsContainer) {
       return;
     }
@@ -2347,12 +2377,12 @@ const apiBase = apiBaseProp ?? '';
 
   // Initialize tcping chart for a system
   async function initializeTCPingChart(systemId) {
-    const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
+    const container = document.querySelector(`[data-tcping-chart-container="${cssEscape(String(systemId))}"]`);
     if (!container) {
       return;
     }
 
-    const canvas = container.querySelector(`[data-tcping-chart="${systemId}"]`);
+    const canvas = container.querySelector(`[data-tcping-chart="${cssEscape(String(systemId))}"]`);
     if (!canvas) {
       return;
     }
@@ -2361,7 +2391,7 @@ const apiBase = apiBaseProp ?? '';
     tcpingLoadingStates.set(systemId, { loading: true, cancelled: false });
 
     // Show loading state for chart only (not tabs) - do this immediately without waiting
-    const loadingElement = container.querySelector(`[data-tcping-loading="${systemId}"]`);
+    const loadingElement = container.querySelector(`[data-tcping-loading="${cssEscape(String(systemId))}"]`);
     if (loadingElement) {
       loadingElement.style.display = 'flex';
     }
@@ -2444,10 +2474,10 @@ const apiBase = apiBaseProp ?? '';
   }
 
   async function _updateTCPingChartImpl(systemId, target, targetName, incremental) {
-    const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
+    const container = document.querySelector(`[data-tcping-chart-container="${cssEscape(String(systemId))}"]`);
     if (!container) return;
 
-    const canvas = container.querySelector(`[data-tcping-chart="${systemId}"]`);
+    const canvas = container.querySelector(`[data-tcping-chart="${cssEscape(String(systemId))}"]`);
     if (!canvas) return;
     
     // Check if loading was cancelled early
@@ -2464,7 +2494,7 @@ const apiBase = apiBaseProp ?? '';
     
     // Show loading state if this is not an incremental update
     if (!incremental) {
-      const loadingElement = container.querySelector(`[data-tcping-loading="${systemId}"]`);
+      const loadingElement = container.querySelector(`[data-tcping-loading="${cssEscape(String(systemId))}"]`);
       if (loadingElement) {
         loadingElement.style.display = 'flex';
       }
@@ -2472,7 +2502,7 @@ const apiBase = apiBaseProp ?? '';
     }
 
     // Get system data to find client ID
-    const systemRow = document.querySelector(`[data-system-id="${systemId}"]`);
+    const systemRow = document.querySelector(`[data-system-id="${cssEscape(String(systemId))}"]`);
     if (!systemRow) return;
 
     // Get client ID from system data (assuming it's the same as system ID)
@@ -2678,7 +2708,7 @@ const apiBase = apiBaseProp ?? '';
         return;
       }
 
-      const loadingElement = container.querySelector(`[data-tcping-loading="${systemId}"]`);
+      const loadingElement = container.querySelector(`[data-tcping-loading="${cssEscape(String(systemId))}"]`);
       if (loadingElement) {
         loadingElement.style.display = 'none';
       }
@@ -2689,7 +2719,7 @@ const apiBase = apiBaseProp ?? '';
       // finally block) is the honest message — showing "No data" first would
       // invite the reader to wait for samples that will never arrive.
       const unreachable = shouldShowTCPingUnreachable(systemId, selectedTarget, config);
-      const noDataElement = container.querySelector(`[data-tcping-no-data="${systemId}"]`);
+      const noDataElement = container.querySelector(`[data-tcping-no-data="${cssEscape(String(systemId))}"]`);
       if (noDataElement && !unreachable) {
         noDataElement.classList.remove('hidden');
         noDataElement.style.display = 'flex';
@@ -2714,7 +2744,7 @@ const apiBase = apiBaseProp ?? '';
     }
     
     // Hide "No data" state if we have data
-    const noDataElement = container.querySelector(`[data-tcping-no-data="${systemId}"]`);
+    const noDataElement = container.querySelector(`[data-tcping-no-data="${cssEscape(String(systemId))}"]`);
     if (noDataElement) {
       noDataElement.classList.add('hidden');
       noDataElement.style.display = 'none';
@@ -3326,7 +3356,7 @@ const apiBase = apiBaseProp ?? '';
     // Hide loading state and show chart (for full reload or new chart creation)
     // If incremental update created a new chart (no-data to has-data transition), also show it
     if (!incremental || isNewChartCreation) {
-      const loadingElement = container.querySelector(`[data-tcping-loading="${systemId}"]`);
+      const loadingElement = container.querySelector(`[data-tcping-loading="${cssEscape(String(systemId))}"]`);
       if (loadingElement) {
         loadingElement.style.display = 'none';
       }
@@ -3334,7 +3364,7 @@ const apiBase = apiBaseProp ?? '';
         canvas.classList.remove('opacity-0');
         
         // Hide "No data" state when chart is created
-        const noDataElement = container.querySelector(`[data-tcping-no-data="${systemId}"]`);
+        const noDataElement = container.querySelector(`[data-tcping-no-data="${cssEscape(String(systemId))}"]`);
         if (noDataElement) {
           noDataElement.classList.add('hidden');
           noDataElement.style.display = 'none';
@@ -3345,11 +3375,11 @@ const apiBase = apiBaseProp ?? '';
   
   // Update TCPing statistics display
   function updateTCPingStats(systemId, avgLatency, packetLossRate) {
-    const statsContainer = document.querySelector(`[data-tcping-stats="${systemId}"]`);
+    const statsContainer = document.querySelector(`[data-tcping-stats="${cssEscape(String(systemId))}"]`);
     if (!statsContainer) return;
     
-    const avgElement = statsContainer.querySelector(`[data-tcping-avg="${systemId}"]`);
-    const lossElement = statsContainer.querySelector(`[data-tcping-loss="${systemId}"]`);
+    const avgElement = statsContainer.querySelector(`[data-tcping-avg="${cssEscape(String(systemId))}"]`);
+    const lossElement = statsContainer.querySelector(`[data-tcping-loss="${cssEscape(String(systemId))}"]`);
     
     if (avgElement) {
       avgElement.removeAttribute('data-translate-detail');
@@ -3383,12 +3413,12 @@ const apiBase = apiBaseProp ?? '';
   // strips the attribute again when real numbers come back, so a recovered
   // target cannot get its value overwritten by the next translation pass.
   function setTCPingStatsNotApplicable(systemId) {
-    const statsContainer = document.querySelector(`[data-tcping-stats="${systemId}"]`);
+    const statsContainer = document.querySelector(`[data-tcping-stats="${cssEscape(String(systemId))}"]`);
     if (!statsContainer) return;
 
     const label = translations.notApplicable[getCurrentLanguage()] || translations.notApplicable.en;
-    const avgElement = statsContainer.querySelector(`[data-tcping-avg="${systemId}"]`);
-    const lossElement = statsContainer.querySelector(`[data-tcping-loss="${systemId}"]`);
+    const avgElement = statsContainer.querySelector(`[data-tcping-avg="${cssEscape(String(systemId))}"]`);
+    const lossElement = statsContainer.querySelector(`[data-tcping-loss="${cssEscape(String(systemId))}"]`);
 
     if (avgElement) {
       avgElement.setAttribute('data-translate-detail', 'notApplicable');
@@ -3412,22 +3442,22 @@ const apiBase = apiBaseProp ?? '';
   //
   // Returns true when the notice is showing.
   function applyTCPingUnreachableState(systemId) {
-    const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
+    const container = document.querySelector(`[data-tcping-chart-container="${cssEscape(String(systemId))}"]`);
     if (!container || !container.isConnected) return false;
 
-    const noticeElement = container.querySelector(`[data-tcping-unreachable="${systemId}"]`);
-    const canvas = container.querySelector(`[data-tcping-chart="${systemId}"]`);
+    const noticeElement = container.querySelector(`[data-tcping-unreachable="${cssEscape(String(systemId))}"]`);
+    const canvas = container.querySelector(`[data-tcping-chart="${cssEscape(String(systemId))}"]`);
     const config = tcpingConfigs.get(systemId);
     const activeTargetInfo = tcpingActiveTargets.get(systemId);
     const selectedTarget = activeTargetInfo ? activeTargetInfo.target : null;
     const unreachable = shouldShowTCPingUnreachable(systemId, selectedTarget, config);
 
     if (unreachable) {
-      const loadingElement = container.querySelector(`[data-tcping-loading="${systemId}"]`);
+      const loadingElement = container.querySelector(`[data-tcping-loading="${cssEscape(String(systemId))}"]`);
       if (loadingElement) loadingElement.style.display = 'none';
 
       // "No data" and "unreachable" are mutually exclusive — never stack them.
-      const noDataElement = container.querySelector(`[data-tcping-no-data="${systemId}"]`);
+      const noDataElement = container.querySelector(`[data-tcping-no-data="${cssEscape(String(systemId))}"]`);
       if (noDataElement) {
         noDataElement.classList.add('hidden');
         noDataElement.style.display = 'none';
@@ -4049,7 +4079,7 @@ const apiBase = apiBaseProp ?? '';
         let insertBefore = null;
         for (let i = index + 1; i < items.length; i++) {
           const nextId = items[i].id;
-          const nextRow = body.querySelector(`[data-system-id="${nextId}"]`);
+          const nextRow = body.querySelector(`[data-system-id="${cssEscape(String(nextId))}"]`);
           if (nextRow) {
             insertBefore = nextRow;
             break;
@@ -4218,6 +4248,13 @@ const apiBase = apiBaseProp ?? '';
         }
         current = pendingRenderData;
         pendingRenderData = null;
+        // A payload taken from the pending slot is painted here without
+        // having gone through the freshness bookkeeping at the top of
+        // renderData, so paintedFreshness would lag what is actually on
+        // screen and a later, older frame could be treated as new. Record
+        // it before painting; noteSnapshot only ever moves the watermark
+        // forward, so this is safe for REST payloads too.
+        if (current) noteSnapshot(current);
       }
     } finally {
       isRenderRunning = false;
@@ -4406,6 +4443,9 @@ const apiBase = apiBaseProp ?? '';
   //     EventSource alone can take several minutes to notice.
   let sseReconnectAttempt = 0;
   let sseWatchdogTimer = null;
+  // Handle for the queued reconnect, tracked in the same style as the
+  // watchdog timer above so it can be coalesced and cancelled.
+  let sseReconnectTimer = null;
   const SSE_WATCHDOG_MS = 45_000;
 
   function markSSEAlive() {
@@ -4424,12 +4464,20 @@ const apiBase = apiBaseProp ?? '';
   }
 
   function scheduleSSEReconnect() {
+    // Coalesce: if a reconnect is already queued, do not stack another.
+    // A flaky network fires `onerror` in bursts, and one timer per error
+    // would have several `connectSSE()` calls land at once, each opening
+    // an EventSource and claiming a subscriber slot on the server.
+    if (sseReconnectTimer) return;
     // Exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s, + up to 1s jitter.
     const base = Math.min(30_000, 1000 * Math.pow(2, sseReconnectAttempt));
     const jitter = Math.floor(Math.random() * 1000);
     const delay = base + jitter;
     sseReconnectAttempt++;
-    setTimeout(connectSSE, delay);
+    sseReconnectTimer = setTimeout(() => {
+      sseReconnectTimer = null;
+      connectSSE();
+    }, delay);
   }
 
   function connectSSE() {
@@ -4441,6 +4489,12 @@ const apiBase = apiBaseProp ?? '';
     if (sseWatchdogTimer) {
       clearTimeout(sseWatchdogTimer);
       sseWatchdogTimer = null;
+    }
+    // Connecting now satisfies any queued reconnect (e.g. the pageshow
+    // handler below reconnecting ahead of the backoff timer).
+    if (sseReconnectTimer) {
+      clearTimeout(sseReconnectTimer);
+      sseReconnectTimer = null;
     }
 
     // Get token from URL parameter (for share links) or admin token
@@ -4697,9 +4751,30 @@ const apiBase = apiBaseProp ?? '';
     });
   });
 
+  // Back/forward-cache restore: `beforeunload` below already closed the
+  // stream, so a page served from the bfcache would sit frozen on stale
+  // data forever with nothing to wake it. Reopen the stream (and drop any
+  // reconnect queued before the page was frozen, which would otherwise
+  // fire a second connect right after this one).
+  window.addEventListener('pageshow', (e) => {
+    if (!e.persisted) return;
+    if (sseReconnectTimer) {
+      clearTimeout(sseReconnectTimer);
+      sseReconnectTimer = null;
+    }
+    sseReconnectAttempt = 0;
+    connectSSE();
+  });
+
   window.addEventListener('beforeunload', () => {
     if (eventSource) {
       eventSource.close();
+    }
+    // Also drop any queued reconnect timer so a bfcache-restored tab
+    // doesn't fire a stray `connectSSE()` against a torn-down page.
+    if (sseReconnectTimer) {
+      clearTimeout(sseReconnectTimer);
+      sseReconnectTimer = null;
     }
   });
 </script>
@@ -4726,5 +4801,25 @@ const apiBase = apiBaseProp ?? '';
   [data-tcping-tabs] button {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* The three TCPing chart overlays (loading / no data / "this node cannot
+     reach this target") are `justify-center` inside the table's
+     `min-w-[1000px]` scroller. That scroller is wider than a phone viewport,
+     so centring parks their text at ~500 px — completely off-screen at
+     scrollLeft 0 on a 390 px handset, and the user just sees an empty box.
+     Left-align them below the `lg:` breakpoint, where the 1000 px min-width
+     starts to overflow, with a 1rem gutter so the text is not flush against
+     the card edge. Same treatment as #loading-indicator in LoadingState.astro.
+     Only the horizontal alignment changes — the fixed 200 px box is
+     untouched, so nothing reflows. */
+  @media (max-width: 1023px) {
+    [data-tcping-loading],
+    [data-tcping-no-data],
+    [data-tcping-unreachable] {
+      justify-content: flex-start;
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
   }
 </style>

@@ -91,6 +91,36 @@ const { isAdmin = false } = Astro.props;
   </nav>
 
 <script>
+  /* Navbar logo SVG comes from admin input and lands in innerHTML.
+     Accept only a plain <svg> tree: drop scripts, foreignObject, event
+     handler attributes and non-image hrefs. Returns '' when anything
+     looks off so the logo simply falls back to the default mark.
+     Byte-identical copy of the helper in SystemTable.astro and
+     AdminDashboard.astro — keep the three in sync. */
+  function sanitizeSvgMarkup(markup) {
+    if (!markup || typeof markup !== 'string') return '';
+    let doc;
+    try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return ''; }
+    const root = doc.documentElement;
+    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return '';
+    const banned = /^(script|foreignobject|iframe|object|embed|use|style|animate|set|animatetransform|animatemotion)$/i;
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    const toRemove = [];
+    let node = walker.currentNode;
+    while (node) {
+      if (banned.test(node.nodeName)) toRemove.push(node);
+      else {
+        Array.from(node.attributes).forEach((attr) => {
+          const n = attr.name.toLowerCase(), v = String(attr.value || '');
+          if (n.startsWith('on') || (/href|src/.test(n) && !/^#|^data:image\//i.test(v.trim()))) node.removeAttribute(attr.name);
+        });
+      }
+      node = walker.nextNode();
+    }
+    toRemove.forEach((n) => n.remove());
+    return new XMLSerializer().serializeToString(root);
+  }
+
   (function() {
     // Language management
     function getSystemLanguage() {
@@ -361,52 +391,29 @@ const { isAdmin = false } = Astro.props;
               }
             }
           } else if (logo.startsWith('<svg')) {
-            // SECURITY: SVG code from admin input - sanitize to prevent XSS
-            // Basic validation: must be valid SVG and not contain script tags
-            if (logo.includes('<script') || logo.includes('javascript:') || logo.includes('onerror=') || logo.includes('onload=')) {
-              // Contains dangerous content, reset to default
+            // SECURITY: SVG markup from admin input lands in innerHTML. The
+            // old check was a substring blacklist ('<script', 'javascript:',
+            // 'onerror=', 'onload=') plus attribute removal on the ROOT
+            // element only, so e.g. `onmouseenter=` on the root, or any
+            // handler / <script> / <use href=…> on a CHILD node, walked
+            // straight through. Use the shared tree-walking sanitizer
+            // instead (same copy as SystemTable.astro / AdminDashboard.astro)
+            // and insert its serialized output.
+            const safeSvg = sanitizeSvgMarkup(logo);
+            if (safeSvg) {
+              logoContainer.innerHTML = safeSvg;
+              // Ensure SVG has proper size classes
+              const svg = logoContainer.querySelector('svg');
+              if (svg) {
+                svg.classList.add('w-5', 'h-5', 'sm:w-6', 'sm:h-6');
+                if (!svg.hasAttribute('width')) svg.setAttribute('width', '20');
+                if (!svg.hasAttribute('height')) svg.setAttribute('height', '20');
+              }
+            } else {
+              // Unparseable or non-SVG markup, reset to default
               const defaultLogo = logoContainer.querySelector('.default-logo');
               if (!defaultLogo) {
                 logoContainer.innerHTML = `<svg width="20" height="20" class="sm:w-6 sm:h-6 monitor-icon default-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="--monitor-stroke: #24292f;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.5 12h2l2-6 3 18 2.5-12h2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/></path><path stroke-linecap="round" stroke-width="1.5" d="M3 12h2M19 12h2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite"/></path><path stroke-linecap="round" stroke-width="1.5" opacity="0.5" d="M1 12h1M22 12h1" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite"/></path><circle cx="12" cy="12" r="9" stroke-width="1.5" opacity="0.2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.1;0.3;0.1" dur="2s" repeatCount="indefinite"/></circle><circle cx="12" cy="12" r="5" stroke-width="1.5" opacity="0.4" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.2;0.6;0.2" dur="2s" repeatCount="indefinite"/></circle></svg>`;
-              }
-            } else {
-              // SECURITY: Use DOMParser to sanitize SVG before inserting
-              try {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(logo, 'image/svg+xml');
-                const svgElement = doc.querySelector('svg');
-                if (svgElement) {
-                  // SECURITY: Remove dangerous attributes and event handlers
-                  const dangerousAttrs = ['onerror', 'onload', 'onclick', 'onmouseover', 'href', 'xlink:href'];
-                  dangerousAttrs.forEach(attr => {
-                    svgElement.removeAttribute(attr);
-                  });
-                  // Remove script tags if any
-                  const scripts = svgElement.querySelectorAll('script');
-                  scripts.forEach(script => script.remove());
-                  
-                  // Valid SVG, insert it
-                  logoContainer.innerHTML = svgElement.outerHTML;
-                  // Ensure SVG has proper size classes
-                  const svg = logoContainer.querySelector('svg');
-                  if (svg) {
-                    svg.classList.add('w-5', 'h-5', 'sm:w-6', 'sm:h-6');
-                    if (!svg.hasAttribute('width')) svg.setAttribute('width', '20');
-                    if (!svg.hasAttribute('height')) svg.setAttribute('height', '20');
-                  }
-                } else {
-                  // Invalid SVG, reset to default
-                  const defaultLogo = logoContainer.querySelector('.default-logo');
-                  if (!defaultLogo) {
-                    logoContainer.innerHTML = `<svg width="20" height="20" class="sm:w-6 sm:h-6 monitor-icon default-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="--monitor-stroke: #24292f;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.5 12h2l2-6 3 18 2.5-12h2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/></path><path stroke-linecap="round" stroke-width="1.5" d="M3 12h2M19 12h2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite"/></path><path stroke-linecap="round" stroke-width="1.5" opacity="0.5" d="M1 12h1M22 12h1" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite"/></path><circle cx="12" cy="12" r="9" stroke-width="1.5" opacity="0.2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.1;0.3;0.1" dur="2s" repeatCount="indefinite"/></circle><circle cx="12" cy="12" r="5" stroke-width="1.5" opacity="0.4" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.2;0.6;0.2" dur="2s" repeatCount="indefinite"/></circle></svg>`;
-                  }
-                }
-              } catch (e) {
-                // Parse error, reset to default
-                const defaultLogo = logoContainer.querySelector('.default-logo');
-                if (!defaultLogo) {
-                  logoContainer.innerHTML = `<svg width="20" height="20" class="sm:w-6 sm:h-6 monitor-icon default-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="--monitor-stroke: #24292f;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.5 12h2l2-6 3 18 2.5-12h2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/></path><path stroke-linecap="round" stroke-width="1.5" d="M3 12h2M19 12h2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.3;0.8;0.3" dur="2s" repeatCount="indefinite"/></path><path stroke-linecap="round" stroke-width="1.5" opacity="0.5" d="M1 12h1M22 12h1" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite"/></path><circle cx="12" cy="12" r="9" stroke-width="1.5" opacity="0.2" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.1;0.3;0.1" dur="2s" repeatCount="indefinite"/></circle><circle cx="12" cy="12" r="5" stroke-width="1.5" opacity="0.4" style="stroke: var(--monitor-stroke);"><animate attributeName="opacity" values="0.2;0.6;0.2" dur="2s" repeatCount="indefinite"/></circle></svg>`;
-                }
               }
             }
           }

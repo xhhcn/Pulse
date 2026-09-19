@@ -703,6 +703,13 @@ const customCodePlaceholder = [
       });
     }
     
+    // A close animation may still be pending from a click ~150 ms ago;
+    // cancel it, otherwise its timer hides the freshly opened modal and
+    // runs the reset callback over the user's new input.
+    if (modal._closeTimer) { clearTimeout(modal._closeTimer); modal._closeTimer = null; }
+    modal.classList.remove('modal-backdrop-exit');
+    if (content) content.classList.remove('modal-content-exit');
+
     // Move modal to body to avoid transform stacking context issues
     document.body.appendChild(modal);
     
@@ -737,8 +744,10 @@ const customCodePlaceholder = [
       content.classList.add('modal-content-exit');
     }
     
-    // Hide modal after animation completes
-    setTimeout(() => {
+    // Hide modal after animation completes. The handle is kept on the
+    // element so a re-open within the 150 ms window can cancel it.
+    modal._closeTimer = setTimeout(() => {
+      modal._closeTimer = null;
       modal.classList.add('hidden');
       modal.classList.remove('flex');
       modal.classList.remove('modal-backdrop-exit');
@@ -1205,6 +1214,15 @@ const customCodePlaceholder = [
     return String(text).replace(/[&<>"']/g, m => map[m]);
   }
 
+  // SECURITY: escape an id before it is interpolated into a CSS selector.
+  // Ids come from agent-reported data and may contain quotes or other
+  // characters that would make querySelector throw a SyntaxError and abort
+  // the whole render. The fallback covers browsers without CSS.escape.
+  function cssEscape(s) {
+    if (window.CSS && window.CSS.escape) return window.CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => '\\' + c);
+  }
+
   // SECURITY: HTML attribute escape function
   function escapeHtmlAttr(text) {
     if (text == null) return '';
@@ -1333,15 +1351,15 @@ const customCodePlaceholder = [
                    surrounding row never jitters as the byte count grows. -->
               <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center" style="font-variant-numeric: tabular-nums; min-width: 110px;">
                 ${system.total_net_in_bytes ? `
-                <div class="flex items-center min-h-[22px]">
+                <div class="traffic-row-in flex items-center min-h-[22px]">
                   <span class="system-total-net-in text-[#525252] dark:text-[#737373]">In: ${formatBytes(system.total_net_in_bytes)}</span>
                 </div>
-                ` : '<div class="min-h-[22px]"></div>'}
+                ` : '<div class="traffic-row-in flex items-center min-h-[22px]"></div>'}
                 ${system.total_net_out_bytes ? `
-                <div class="flex items-center min-h-[22px]">
+                <div class="traffic-row-out flex items-center min-h-[22px]">
                   <span class="system-total-net-out text-[#525252] dark:text-[#737373]">Out: ${formatBytes(system.total_net_out_bytes)}</span>
                 </div>
-                ` : '<div class="min-h-[22px]"></div>'}
+                ` : '<div class="traffic-row-out flex items-center min-h-[22px]"></div>'}
               </div>
               ` : ''}
             </div>
@@ -1869,15 +1887,15 @@ const customCodePlaceholder = [
         const trafficHTML = `
           <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center" style="font-variant-numeric: tabular-nums; min-width: 110px;">
             ${item.total_net_in_bytes ? `
-            <div class="flex items-center min-h-[22px]">
+            <div class="traffic-row-in flex items-center min-h-[22px]">
               <span class="system-total-net-in text-[#525252] dark:text-[#737373]">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
             </div>
-            ` : '<div class="min-h-[22px]"></div>'}
+            ` : '<div class="traffic-row-in flex items-center min-h-[22px]"></div>'}
             ${item.total_net_out_bytes ? `
-            <div class="flex items-center min-h-[22px]">
+            <div class="traffic-row-out flex items-center min-h-[22px]">
               <span class="system-total-net-out text-[#525252] dark:text-[#737373]">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
             </div>
-            ` : '<div class="min-h-[22px]"></div>'}
+            ` : '<div class="traffic-row-out flex items-center min-h-[22px]"></div>'}
           </div>
         `;
         const tempDiv = document.createElement('div');
@@ -1890,8 +1908,10 @@ const customCodePlaceholder = [
       
       // Update In traffic value
       if (trafficContainer) {
-        const allRows = trafficContainer.querySelectorAll('.flex.items-center');
-        let inRow = allRows[0]; // First row is In
+        // Look the row up by its own class: positional indexing broke when
+        // In was 0 (the placeholder had no .flex.items-center) and the In
+        // text landed in the Out row.
+        let inRow = trafficContainer.querySelector('.traffic-row-in');
         
         if (item.total_net_in_bytes && item.total_net_in_bytes > 0) {
           const formattedIn = typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B';
@@ -1930,15 +1950,15 @@ const customCodePlaceholder = [
         const trafficHTML = `
           <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center" style="font-variant-numeric: tabular-nums; min-width: 110px;">
             ${item.total_net_in_bytes ? `
-            <div class="flex items-center min-h-[22px]">
+            <div class="traffic-row-in flex items-center min-h-[22px]">
               <span class="system-total-net-in text-[#525252] dark:text-[#737373]">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
             </div>
-            ` : '<div class="min-h-[22px]"></div>'}
+            ` : '<div class="traffic-row-in flex items-center min-h-[22px]"></div>'}
             ${item.total_net_out_bytes ? `
-            <div class="flex items-center min-h-[22px]">
+            <div class="traffic-row-out flex items-center min-h-[22px]">
               <span class="system-total-net-out text-[#525252] dark:text-[#737373]">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
             </div>
-            ` : '<div class="min-h-[22px]"></div>'}
+            ` : '<div class="traffic-row-out flex items-center min-h-[22px]"></div>'}
           </div>
         `;
         const tempDiv = document.createElement('div');
@@ -1951,8 +1971,7 @@ const customCodePlaceholder = [
       
       // Update Out traffic value
       if (trafficContainer) {
-        const allRows = trafficContainer.querySelectorAll('.flex.items-center');
-        let outRow = allRows[1]; // Second row is Out
+        let outRow = trafficContainer.querySelector('.traffic-row-out');
         
         if (item.total_net_out_bytes && item.total_net_out_bytes > 0) {
           const formattedOut = typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B';
@@ -2154,7 +2173,7 @@ const customCodePlaceholder = [
         let insertBefore = null;
         for (let i = index + 1; i < data.length; i++) {
           const nextId = data[i].id;
-          const nextItem = container.querySelector(`[data-system-id="${nextId}"]`);
+          const nextItem = container.querySelector(`[data-system-id="${cssEscape(String(nextId))}"]`);
           if (nextItem) {
             insertBefore = nextItem;
             break;
@@ -2458,10 +2477,13 @@ const customCodePlaceholder = [
       await renderSystemsSerialized(data);
     } catch (err) {
       console.error('Failed to load systems:', err);
+      // The list DOM is replaced below; forget the diff cache too, otherwise
+      // the next SSE frame appends rows underneath this banner forever.
+      currentData = new Map();
       container.innerHTML = `
         <div class="text-center py-12">
           <p class="text-sm text-red-500 dark:text-red-400">Failed to load systems</p>
-          <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-2">${err.message || 'Unknown error'}</p>
+          <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-2">${escapeHtml(err.message || 'Unknown error')}</p>
         </div>
       `;
     }
@@ -2525,7 +2547,13 @@ const customCodePlaceholder = [
   let lastMouseY = 0;
   let lastMouseX = 0;
   let containerCache = null; // Cache container rect to reduce recalculations
-  
+  // Idempotency flag for the single `document.addEventListener('dragover', ...)`
+  // mounted by setupDragAndDrop — there's only one document, and that
+  // function gets re-invoked whenever new servers register, so without
+  // this guard every new client would stack another global listener +
+  // closure on the page for the lifetime of the tab.
+  let globalDragoverBound = false;
+
   function startAutoScroll(e, container) {
     lastMouseY = e.clientY;
     lastMouseX = e.clientX;
@@ -2673,12 +2701,33 @@ const customCodePlaceholder = [
   }
 
   // Drag and drop functionality
+  //
+  // This runs again on every render that adds a row. Without the guards
+  // below a re-run would:
+  //   * mount another `document` dragover listener each time, which is an
+  //     unbounded leak on a long-lived admin tab as clients join over time;
+  //   * stack additional dragstart/dragend/dragover/dragleave/drop
+  //     listeners onto every pre-existing item element, since the items are
+  //     NOT replaced on an incremental update (only their inner buttons are,
+  //     by setupSystemEventHandlers).
+  //
+  // The dataset flag (`dndBound`) per item, `dndContainerBound` on the
+  // container and the module-level boolean (`globalDragoverBound`) make
+  // every addEventListener call below a no-op on second-or-later invocation.
   function setupDragAndDrop(container) {
     if (!container) return;
 
     const items = container.querySelectorAll('.draggable-item');
     
     items.forEach(item => {
+      if (item.dataset.dndBound === '1') {
+        // Already wired up on a previous call. Skip — re-binding
+        // would duplicate listeners and the closures would pin
+        // stale captured references.
+        return;
+      }
+      item.dataset.dndBound = '1';
+
       // Prevent dragging when clicking on interactive elements
       const interactiveElements = item.querySelectorAll('button, input, a');
       interactiveElements.forEach(el => {
@@ -2853,26 +2902,48 @@ const customCodePlaceholder = [
       });
     });
     
-    // Add global dragover listener on container for auto-scroll
-    // This ensures scrolling works even when mouse is between items
-    container.addEventListener('dragover', (e) => {
-      if (draggedElement) {
-        updateAutoScrollMouseY(e);
-        if (!autoScrollInterval) {
-          startAutoScroll(e, container);
+    // Add global dragover listener on container for auto-scroll.
+    // This ensures scrolling works even when mouse is between items.
+    //
+    // Bind ONCE per container. setupDragAndDrop runs again when new
+    // servers register, but the container element is stable, so a
+    // second `addEventListener('dragover', …)` here would just stack
+    // duplicate listeners (and their closures, capturing
+    // draggedElement / autoScrollInterval / containerCache).
+    if (container.dataset.dndContainerBound !== '1') {
+      container.dataset.dndContainerBound = '1';
+      container.addEventListener('dragover', (e) => {
+        if (draggedElement) {
+          updateAutoScrollMouseY(e);
+          if (!autoScrollInterval) {
+            startAutoScroll(e, container);
+          }
         }
-      }
-    });
-    
-    // Also listen on document for when dragging outside container
-    document.addEventListener('dragover', (e) => {
-      if (draggedElement) {
-        updateAutoScrollMouseY(e);
-        if (!autoScrollInterval) {
-          startAutoScroll(e, container);
+      });
+    }
+
+    // Also listen on document for when dragging outside container.
+    // This one MUST be guarded by a module-level flag — there's only
+    // one `document`, and stacking handlers here was the dominant
+    // memory leak on the admin page.
+    if (!globalDragoverBound) {
+      globalDragoverBound = true;
+      document.addEventListener('dragover', (e) => {
+        if (draggedElement) {
+          updateAutoScrollMouseY(e);
+          if (!autoScrollInterval) {
+            // The container we pass to startAutoScroll comes from
+            // the captured closure of the LAST setupDragAndDrop
+            // call. Since the document handler is mounted only
+            // once, reach for the live element on each tick so
+            // remounted containers (e.g. after a full re-render)
+            // still drive auto-scroll correctly.
+            const live = document.getElementById('systems-list');
+            if (live) startAutoScroll(e, live);
+          }
         }
-      }
-    });
+      });
+    }
   }
 
   // Add system
@@ -2894,19 +2965,32 @@ const customCodePlaceholder = [
       }
 
       // Get existing systems to generate unique numeric ID
+      const addSubmitBtn = addForm.querySelector('button[type="submit"]');
+      if (addSubmitBtn && addSubmitBtn.disabled) return; // a submit is already in flight
+      if (addSubmitBtn) addSubmitBtn.disabled = true;
+      const releaseSubmit = () => { if (addSubmitBtn) addSubmitBtn.disabled = false; };
+
       let existingIds = [];
       try {
         const existingRes = await fetch(`${apiBase}/api/metrics`);
+        if (!existingRes.ok) throw new Error(`HTTP ${existingRes.status}`);
         const existingData = await existingRes.json();
-        if (Array.isArray(existingData)) {
-          existingIds = existingData.map(s => {
-            // Extract numeric part from ID (handle both "123" and "server-123" formats)
-            const match = s.id.toString().match(/\d+/);
-            return match ? parseInt(match[0]) : 0;
-          });
-        }
+        if (!Array.isArray(existingData)) throw new Error('unexpected response');
+        existingIds = existingData.map(s => {
+          // Extract numeric part from ID (handle both "123" and "server-123" formats)
+          const match = String(s.id).match(/\d+/);
+          return match ? parseInt(match[0]) : 0;
+        });
       } catch (err) {
-        // Could not fetch existing systems
+        /* Without the current list we cannot pick a free id; guessing
+           "1" would silently overwrite an existing system. */
+        if (messageEl) {
+          messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+          messageEl.textContent = '❌ Could not load the existing services, please try again: ' + err.message;
+          messageEl.classList.remove('hidden');
+        }
+        releaseSubmit();
+        return;
       }
 
       // Generate unique numeric ID
@@ -2949,6 +3033,8 @@ const customCodePlaceholder = [
           messageEl.textContent = '❌ Failed to add system: ' + err.message;
           messageEl.classList.remove('hidden');
         }
+      } finally {
+        releaseSubmit();
       }
     });
   }

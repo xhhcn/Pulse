@@ -374,7 +374,13 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
         window.location.href = '/login?redirect=/admin';
       }
     } catch (err) {
-      localStorage.removeItem('admin_auth_token');
+      // We never got a verdict — the request threw (offline, DNS, CORS,
+      // aborted navigation). That is exactly the case the comment above
+      // rules out, so do NOT drop the token: a 24 h session must survive a
+      // transient network blip. Send the admin to the login page, which
+      // will reuse the stored token and come straight back if it is still
+      // good. A genuinely bad token is caught by the fetch wrapper's 401
+      // handling or by the explicit invalid branch above.
       window.location.href = '/login?redirect=/admin';
     }
   })();
