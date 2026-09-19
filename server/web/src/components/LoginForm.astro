@@ -139,8 +139,20 @@
     try {
       const u = new URL(redirect, window.location.origin);
       if (u.origin !== window.location.origin) return '/admin';
-      if (u.pathname.includes('..')) return '/admin';
-      return u.pathname + u.search + u.hash;
+      /* The WHATWG parser resolves "." / ".." segments BEFORE we get to look
+         at the result, so "/..//evil.com", "/.//evil.com", "/a/../..//evil.com"
+         and "/%2e%2e//evil.com" all collapse to the pathname "//evil.com".
+         Handing that to location.href is a protocol-relative navigation to
+         another origin. Re-check the *resolved* pathname: it must be a single
+         "/" followed by a character that is neither "/" nor "\\". */
+      const path = u.pathname;
+      if (path.length > 1 && (path[1] === '/' || path[1] === '\\')) return '/admin';
+      if (path.includes('..')) return '/admin';
+      /* Belt and braces: restrict the resolved path to unreserved URL
+         characters, so nothing exotic (backslashes, control characters,
+         encoded separators) survives into location.href. */
+      if (!/^\/[A-Za-z0-9._~\-\/]*$/.test(path)) return '/admin';
+      return path + u.search + u.hash;
     } catch (_) {
       return '/admin';
     }

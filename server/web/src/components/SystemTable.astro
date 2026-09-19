@@ -347,8 +347,45 @@ const apiBase = apiBaseProp ?? '';
   // a 32px one was asked for is safe visually (SVGs scale) but the
   // raw bytes differ — keying by size keeps the two callers consistent
   // with their original behaviour.
+  // Icon names reach the CDN URL from agent-reported fields (os_icon) and
+  // from the country -> flag lookup. Restrict them to the iconify
+  // "prefix:name" shape so a hostile agent can never steer the request at
+  // a different path (slashes, "..", "?", "#" are all rejected here).
+  const ICONIFY_NAME_RE = /^[a-z0-9-]+:[a-z0-9-]+$/i;
+
+  /* The icon CDN response is third-party markup that lands in innerHTML.
+     Accept only a plain <svg> tree: drop scripts, foreignObject, event
+     handler attributes and non-image hrefs. Returns '' when anything
+     looks off so the icon is simply not shown. */
+  function sanitizeSvgMarkup(markup) {
+    if (!markup || typeof markup !== 'string') return '';
+    let doc;
+    try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return ''; }
+    const root = doc.documentElement;
+    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return '';
+    const banned = /^(script|foreignobject|iframe|object|embed|use)$/i;
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    const toRemove = [];
+    let node = walker.currentNode;
+    while (node) {
+      if (banned.test(node.nodeName)) toRemove.push(node);
+      else {
+        Array.from(node.attributes).forEach((attr) => {
+          const n = attr.name.toLowerCase(), v = String(attr.value || '');
+          if (n.startsWith('on') || (/href|src/.test(n) && !/^#|^data:image\//i.test(v.trim()))) node.removeAttribute(attr.name);
+        });
+      }
+      node = walker.nextNode();
+    }
+    toRemove.forEach((n) => n.remove());
+    return new XMLSerializer().serializeToString(root);
+  }
+
   const iconSvgCache = new Map();
   const fetchIconSvg = (iconName, height) => {
+    // Reject anything that is not a plain iconify "prefix:name" pair before
+    // it can influence the CDN URL.
+    if (!ICONIFY_NAME_RE.test(String(iconName || ''))) return Promise.resolve(null);
     const key = `${iconName}@${height}`;
     let pending = iconSvgCache.get(key);
     if (pending) return pending;
@@ -379,7 +416,10 @@ const apiBase = apiBaseProp ?? '';
       if (el.dataset.iconLoaded === iconName && el.querySelector('svg')) return;
       const svg = await fetchIconSvg(iconName, 26);
       if (!svg) return;
-      el.innerHTML = svg;
+      // Third-party markup: only a sanitized <svg> tree may reach innerHTML.
+      const safeSvg = sanitizeSvgMarkup(svg);
+      if (!safeSvg) return;
+      el.innerHTML = safeSvg;
       el.dataset.iconLoaded = iconName;
       const svgEl = el.querySelector('svg');
       if (svgEl) {
@@ -405,7 +445,10 @@ const apiBase = apiBaseProp ?? '';
       if (el.dataset.iconLoaded === iconName && el.querySelector('svg')) return;
       const svg = await fetchIconSvg(iconName, 32);
       if (!svg) return;
-      el.innerHTML = svg;
+      // Third-party markup: only a sanitized <svg> tree may reach innerHTML.
+      const safeSvg = sanitizeSvgMarkup(svg);
+      if (!safeSvg) return;
+      el.innerHTML = safeSvg;
       el.dataset.iconLoaded = iconName;
       const svgEl = el.querySelector('svg');
       if (svgEl) {
@@ -910,7 +953,7 @@ const apiBase = apiBaseProp ?? '';
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
     </div>
-        <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center">${item.time || '-'}</div>
+        <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center">${escapeHtml(item.time || '-')}</div>
         <div class="h-5 flex items-center" title="${escapeHtmlAttr(item.location || '-')}">
           ${item.location ? (() => {
             const flagIcon = countryToFlag(item.location);
@@ -1482,12 +1525,12 @@ const apiBase = apiBaseProp ?? '';
         if (item.location) {
           const flagIcon = countryToFlag(item.location);
           if (flagIcon) {
-            locationCell.innerHTML = `<span class="flag-icon block leading-none w-6 h-6 sm:w-8 sm:h-8" data-icon="${flagIcon}"></span>`;
+            locationCell.innerHTML = `<span class="flag-icon block leading-none w-6 h-6 sm:w-8 sm:h-8" data-icon="${escapeHtmlAttr(flagIcon)}"></span>`;
             locationCell.title = item.location; // Set title for tooltip
             setTimeout(() => loadFlagIcons(), 0);
           } else {
-            // SECURITY: Escape HTML to prevent XSS
-            const escapedLocation = (item.location || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+            // SECURITY: Escape HTML to prevent XSS (same helper as renderRow)
+            const escapedLocation = escapeHtml(item.location || '');
             locationCell.innerHTML = `<span class="text-xs text-[#404040] dark:text-[#a3a3a3]">${escapedLocation}</span>`;
             locationCell.title = item.location || '';
           }
@@ -1589,11 +1632,11 @@ const apiBase = apiBaseProp ?? '';
       const osCell = cells[7];
       if (osCell) {
         if (item.os_icon) {
-          osCell.innerHTML = `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${item.os_icon}"></span>`;
+          osCell.innerHTML = `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${escapeHtmlAttr(item.os_icon)}"></span>`;
           setTimeout(() => loadOSIcons(), 0);
         } else {
-          // SECURITY: Escape HTML to prevent XSS
-          const escapedOS = (item.os || '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+          // SECURITY: Escape HTML to prevent XSS (same helper as renderRow)
+          const escapedOS = escapeHtml(item.os || '-');
           osCell.innerHTML = `<span class="text-xs text-[#404040] dark:text-[#a3a3a3]">${escapedOS}</span>`;
         }
       }
@@ -3860,7 +3903,7 @@ const apiBase = apiBaseProp ?? '';
             loadingIndicator.innerHTML = `
               <div class="text-center">
                 <p class="text-sm text-red-500 dark:text-red-400">Failed to render data</p>
-                <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-1">${err.message}</p>
+                <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-1">${escapeHtml(err.message)}</p>
               </div>
             `;
           }
@@ -3980,7 +4023,7 @@ const apiBase = apiBaseProp ?? '';
         loadingIndicator.innerHTML = `
           <div class="text-center">
             <p class="text-sm text-red-500 dark:text-red-400">Failed to connect to backend</p>
-            <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-1">${err.message}</p>
+            <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-1">${escapeHtml(err.message)}</p>
           </div>
         `;
       }

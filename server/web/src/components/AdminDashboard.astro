@@ -865,8 +865,41 @@ const customCodePlaceholder = [
   // Storing Promise<string|null> means concurrent callers for the same
   // icon share one in-flight fetch, and a failed fetch caches `null`
   // so we don't retry a broken icon on every subsequent render.
+  // Icon names must be a plain iconify "prefix:name" pair before they can
+  // influence the CDN URL path.
+  const ICONIFY_NAME_RE = /^[a-z0-9-]+:[a-z0-9-]+$/i;
+
+  /* The icon CDN response is third-party markup that lands in innerHTML.
+     Accept only a plain <svg> tree: drop scripts, foreignObject, event
+     handler attributes and non-image hrefs. Returns '' when anything
+     looks off so the icon is simply not shown. */
+  function sanitizeSvgMarkup(markup) {
+    if (!markup || typeof markup !== 'string') return '';
+    let doc;
+    try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return ''; }
+    const root = doc.documentElement;
+    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return '';
+    const banned = /^(script|foreignobject|iframe|object|embed|use)$/i;
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    const toRemove = [];
+    let node = walker.currentNode;
+    while (node) {
+      if (banned.test(node.nodeName)) toRemove.push(node);
+      else {
+        Array.from(node.attributes).forEach((attr) => {
+          const n = attr.name.toLowerCase(), v = String(attr.value || '');
+          if (n.startsWith('on') || (/href|src/.test(n) && !/^#|^data:image\//i.test(v.trim()))) node.removeAttribute(attr.name);
+        });
+      }
+      node = walker.nextNode();
+    }
+    toRemove.forEach((n) => n.remove());
+    return new XMLSerializer().serializeToString(root);
+  }
+
   const cpuIconSvgCache = new Map();
   const fetchCpuIconSvg = (iconName) => {
+    if (!ICONIFY_NAME_RE.test(String(iconName || ''))) return Promise.resolve(null);
     let pending = cpuIconSvgCache.get(iconName);
     if (pending) return pending;
     pending = (async () => {
@@ -895,7 +928,10 @@ const customCodePlaceholder = [
       if (el.dataset.iconLoaded === iconName && el.querySelector('svg')) return;
       const svg = await fetchCpuIconSvg(iconName);
       if (!svg) return;
-      el.innerHTML = svg;
+      // Third-party markup: only a sanitized <svg> tree may reach innerHTML.
+      const safeSvg = sanitizeSvgMarkup(svg);
+      if (!safeSvg) return;
+      el.innerHTML = safeSvg;
       el.dataset.iconLoaded = iconName;
       const svgEl = el.querySelector('svg');
       if (svgEl) {
@@ -1199,7 +1235,7 @@ const customCodePlaceholder = [
               if (cpuBrandIcon) {
                 return `
                 <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none opacity-20" style="z-index: 0;">
-                  <span class="cpu-brand-icon block leading-none" data-icon="${cpuBrandIcon}"></span>
+                  <span class="cpu-brand-icon block leading-none" data-icon="${escapeHtmlAttr(cpuBrandIcon)}"></span>
                 </div>
                 `;
               }
@@ -3032,6 +3068,23 @@ const customCodePlaceholder = [
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
+      // Revoke the session server-side too. Dropping the token from
+      // localStorage only blinds this browser — the bearer token stays
+      // valid until it expires, so anyone who captured it keeps admin
+      // access. Best effort: `keepalive` lets the POST outlive the
+      // navigation below, and a failure must never block the logout.
+      const token = localStorage.getItem('admin_auth_token');
+      if (token) {
+        try {
+          fetch(`${apiBase}/api/auth/logout`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            keepalive: true
+          }).catch(() => {});
+        } catch (_) {
+          // Ignore — the local logout below must still happen.
+        }
+      }
       // Clear admin token and redirect to login
       localStorage.removeItem('admin_auth_token');
       window.location.href = '/login?redirect=/admin';
