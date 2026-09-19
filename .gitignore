@@ -26,6 +26,8 @@ server/pulse-server-standalone-linux-arm64
 *.db
 *.db-journal
 data/
+!server/web/src/data/
+!server/web/src/data/*.ts
 
 # IDE and OS files
 .DS_Store

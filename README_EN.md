@@ -104,7 +104,7 @@ wget https://github.com/xhhcn/Pulse/releases/latest/download/pulse-server-standa
 chmod +x pulse-server-standalone-linux-amd64
 
 # Run
-./pulse-server-standalone-linux-amd64
+PORT=8008 ./pulse-server-standalone-linux-amd64
 ```
 
 **Linux (arm64)**
@@ -206,6 +206,12 @@ Pulse supports IPv4/IPv6 dual-stack. If your server requires IPv6 support, pleas
        volumes:
          - pulse-data:/app/data
        restart: unless-stopped
+       logging:
+         driver: json-file
+         options:
+           max-size: "20m"
+           max-file: "5"
+       stop_grace_period: 45s
        networks:
          - pulse-network
 
@@ -218,6 +224,7 @@ Pulse supports IPv4/IPv6 dual-stack. If your server requires IPv6 support, pleas
        ipam:
          driver: default
    ```
+   > The repository ships this configuration as `docker-compose.ipv6.yaml`; download it directly: `curl -fsSL https://raw.githubusercontent.com/xhhcn/Pulse/main/docker-compose.ipv6.yaml -o docker-compose.yaml`.
 
 4. **Recreate containers**
 
@@ -516,7 +523,7 @@ sudo systemctl start pulse-server
 
 # Docker
 docker compose stop
-cp datatz/metrics.db.pre-restore-* datatz/metrics.db
+cp data/metrics.db.pre-restore-* data/metrics.db
 docker compose up -d
 ```
 

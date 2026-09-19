@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g., v1.3.3)'
+        description: 'Tag to build (e.g., v1.3.26)'
         required: true
         type: string
 
@@ -92,13 +92,16 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Set up Go
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
         uses: actions/setup-go@v5
         with:
-          # Client builds only require Go 1.15, but we use 1.22 to match
-          # the server toolchain and allow rebuilding anything in-repo.
+          # Client binaries are built with Go 1.26 (macOS 12+); the server
+          # image and standalone binaries use Go 1.27 (see Dockerfile and
+          # build-server-standalone.yml).
           go-version: '1.26'
 
       - name: Build Client Binaries
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
         # Build the whole client package (`.`), not `main.go` alone.
         # The client has been split into main.go + hwprobe_*.go/.s +
         # linux_kernel{,_other}.go (selected by GOOS/GOARCH build tags),
@@ -118,6 +121,7 @@ jobs:
           echo "Client binaries built successfully"
 
       - name: Create GitHub Release
+        if: steps.check_server_files.outputs.server_files_exist == 'true'
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

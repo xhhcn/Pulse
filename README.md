@@ -104,7 +104,7 @@ wget https://github.com/xhhcn/Pulse/releases/latest/download/pulse-server-standa
 chmod +x pulse-server-standalone-linux-amd64
 
 # 运行
-./pulse-server-standalone-linux-amd64
+PORT=8008 ./pulse-server-standalone-linux-amd64
 ```
 
 **Linux (arm64)**
@@ -206,6 +206,12 @@ Pulse 支持 IPv4/IPv6 双栈，如果您的服务器需要 IPv6 支持，请按
        volumes:
          - pulse-data:/app/data
        restart: unless-stopped
+       logging:
+         driver: json-file
+         options:
+           max-size: "20m"
+           max-file: "5"
+       stop_grace_period: 45s
        networks:
          - pulse-network
 
@@ -218,6 +224,7 @@ Pulse 支持 IPv4/IPv6 双栈，如果您的服务器需要 IPv6 支持，请按
        ipam:
          driver: default
    ```
+   > 仓库内的 `docker-compose.ipv6.yaml` 就是这份配置的完整版本，可直接下载使用：`curl -fsSL https://raw.githubusercontent.com/xhhcn/Pulse/main/docker-compose.ipv6.yaml -o docker-compose.yaml`。
 
 4. **重新创建容器**
 
@@ -516,7 +523,7 @@ sudo systemctl start pulse-server
 
 # Docker
 docker compose stop
-cp datatz/metrics.db.pre-restore-* datatz/metrics.db
+cp data/metrics.db.pre-restore-* data/metrics.db
 docker compose up -d
 ```
 
