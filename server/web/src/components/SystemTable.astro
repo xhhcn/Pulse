@@ -1196,6 +1196,21 @@ const apiBase = apiBaseProp ?? '';
                 <span class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate-detail="noData">No data</span>
     </div>
   </div>
+            <!-- "Target unreachable from this node" state.
+                 Distinct from "No data": the agent explicitly reported this
+                 target as skipped (e.g. an IPv6 target on a v4-only node), so
+                 there is nothing to plot and never will be until routing
+                 changes. Same absolute / inset-0 / fixed-200px box as the
+                 other two overlays, so switching between them never changes
+                 the row height. -->
+            <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#151515] bg-white rounded hidden" data-tcping-unreachable="${safeId}" style="height: 200px; min-height: 200px;">
+              <div class="flex flex-col items-center gap-2 px-4 text-center">
+                <svg class="w-8 h-8 text-[#737373] dark:text-[#a3a3a3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span class="text-xs text-[#525252] dark:text-[#a3a3a3] max-w-[18rem] leading-relaxed" data-translate-detail="tcpingUnreachable">This node cannot reach this target (no IPv4/IPv6 route)</span>
+    </div>
+  </div>
             <canvas data-tcping-chart="${safeId}" style="width: 100%; height: 200px; min-height: 200px;" class="opacity-0 transition-opacity duration-300" data-tcping-canvas="${safeId}"></canvas>
 </div>
       </div>` : ''}
@@ -1219,6 +1234,16 @@ const apiBase = apiBaseProp ?? '';
     'packetLoss': { en: 'Loss:', zh: '丢包:' },
     'loading': { en: 'Loading...', zh: '加载中...' },
     'noData': { en: 'No data', zh: '暂无数据' },
+    // The agent reported this target as "skipped": the node has no route of
+    // the target's address family (typically an IPv6 target on a v4-only
+    // node). This is NOT packet loss, and NOT "no samples yet".
+    'tcpingUnreachable': {
+      en: 'This node cannot reach this target (no IPv4/IPv6 route)',
+      zh: '此节点无法访问该目标（无对应的 IPv4/IPv6 路由）'
+    },
+    // Summary value for a skipped target — never "0.00 ms" / "0.00%", which
+    // would read as "perfect link" / "total loss" respectively.
+    'notApplicable': { en: 'N/A', zh: '不适用' },
   };
 
   function getCurrentLanguage() {
@@ -1254,6 +1279,19 @@ const apiBase = apiBaseProp ?? '';
         const translatedText = translations[key][lang];
         if (translatedText) {
           el.textContent = translatedText;
+        }
+      }
+    });
+
+    // Tooltips (currently: the "unreachable target" hint on a muted tcping
+    // tab). setAttribute only — never innerHTML — so the translated string
+    // can never be interpreted as markup.
+    document.querySelectorAll('[data-translate-title]').forEach(el => {
+      const key = el.getAttribute('data-translate-title');
+      if (key && translations[key]) {
+        const translatedText = translations[key][lang];
+        if (translatedText) {
+          el.setAttribute('title', translatedText);
         }
       }
     });
@@ -1309,6 +1347,7 @@ const apiBase = apiBaseProp ?? '';
       try { cleanupTCPingChart(id); } catch (_) {}
       tcpingConfigs.delete(id);
       tcpingActiveTargets.delete(id);
+      tcpingSkippedTargets.delete(id);
     });
 
     // CRITICAL: Clear currentData to ensure next load triggers column width calculation
@@ -1814,11 +1853,82 @@ const apiBase = apiBaseProp ?? '';
       // pushed a new sample for this target — i.e. exactly at the
       // admin-configured interval. If every timestamp matches what we
       // rendered last time, there is no new tcping point to draw.
-      parts.push(k + '@' + (v.timestamp || ''));
+      // The `skipped` flag is part of the signature too. A target that the
+      // agent cannot probe at all (no route of the matching address family)
+      // carries a marker entry whose timestamp still advances every push, so
+      // timestamps alone would already trigger a redraw — but the reverse
+      // matters more: when a real probe finally replaces the marker (route
+      // restored, IPv6 enabled), the presentation has to flip from the
+      // "unreachable" notice back to a live chart. Folding the flag in makes
+      // that flip an explicit signature change, so it is picked up on the
+      // very next 3-second broadcast rather than depending on the timestamp
+      // happening to differ.
+      parts.push(k + '@' + (v.timestamp || '') + (v.skipped === true ? '#skip' : ''));
     }
     return parts.join('|');
   }
-  
+
+  // Map: systemId -> Set of target addresses the agent reported as "skipped".
+  //
+  // A skipped target is one this node has no route to (an IPv6 target on a
+  // v4-only node, or vice versa). The agent flags the probe instead of
+  // reporting a failure, and the server keeps the marker out of history —
+  // so `/api/tcping/history` returns no rows for it and the server-side
+  // `stats` already exclude it. The frontend therefore must NOT read the
+  // resulting absence as packet loss or as "no data yet": it is a third,
+  // distinct state that gets its own notice and an N/A summary.
+  const tcpingSkippedTargets = new Map(); // systemId -> Set<targetAddress>
+
+  // Record (or clear) the skipped-target set for one system from a raw
+  // /api/metrics or SSE `systems[]` entry. Cheap: one pass over the
+  // tcping_data keys, and the map entry is dropped entirely in the common
+  // case where nothing is skipped, so lookups stay a single Map.get miss.
+  function noteTCPingSkippedTargets(system) {
+    if (!system || system.id === undefined || system.id === null) return;
+    const systemId = String(system.id);
+    const data = system.tcping_data;
+    if (!data || typeof data !== 'object') {
+      tcpingSkippedTargets.delete(systemId);
+      return;
+    }
+    let skipped = null;
+    for (const address of Object.keys(data)) {
+      const entry = data[address];
+      if (entry && entry.skipped === true) {
+        if (skipped === null) skipped = new Set();
+        skipped.add(address);
+      }
+    }
+    if (skipped === null) {
+      tcpingSkippedTargets.delete(systemId);
+    } else {
+      tcpingSkippedTargets.set(systemId, skipped);
+    }
+  }
+
+  function isTCPingTargetSkipped(systemId, targetAddress) {
+    if (!targetAddress) return false;
+    const skipped = tcpingSkippedTargets.get(String(systemId));
+    return !!(skipped && skipped.has(targetAddress));
+  }
+
+  // Should the chart area show the "node cannot reach this target" notice?
+  //
+  //   * a target is selected  → only when THAT target is skipped;
+  //   * the "all targets" view → only when EVERY configured target is
+  //     skipped. With a mix, the remaining targets still have real lines to
+  //     draw and real stats to show, so the all-targets view stays a normal
+  //     chart and the skipped ones are simply absent from it (which is
+  //     exactly what "no history rows" already produces).
+  function shouldShowTCPingUnreachable(systemId, selectedTarget, config) {
+    const skipped = tcpingSkippedTargets.get(String(systemId));
+    if (!skipped || skipped.size === 0) return false;
+    if (selectedTarget) return skipped.has(selectedTarget);
+    const targets = (config && Array.isArray(config.targets)) ? config.targets : [];
+    if (targets.length === 0) return false;
+    return targets.every(t => t && skipped.has(t.address));
+  }
+
   // Global cache for TCPing config (preloaded on page load)
   let cachedTCPingConfig = null;
   let tcpingConfigLoading = null; // Promise to prevent duplicate fetches
@@ -1866,6 +1976,15 @@ const apiBase = apiBaseProp ?? '';
     // Reset canvas to ensure clean state for next initialization
     const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
     if (container) {
+      // Hide the "unreachable target" notice so a later expand starts from
+      // the loading overlay rather than a stale message. The skipped-target
+      // set itself is NOT cleared here: it is derived from the metrics feed,
+      // not from the chart, and stays valid while the row is collapsed.
+      const noticeElement = container.querySelector(`[data-tcping-unreachable="${systemId}"]`);
+      if (noticeElement) {
+        noticeElement.classList.add('hidden');
+        noticeElement.style.display = 'none';
+      }
       const canvas = container.querySelector(`[data-tcping-chart="${systemId}"]`);
       if (canvas) {
         // Clear the canvas context
@@ -2067,29 +2186,84 @@ const apiBase = apiBaseProp ?? '';
     }
   }
 
+  // Tab appearance. Three inputs: selected or not, and whether the agent
+  // reported this target as skipped.
+  //
+  // A skipped tab is muted and carries the translated "cannot reach" string
+  // as its tooltip, so the state is legible from the tab strip without having
+  // to open the tab. The mute is opacity ONLY — no added glyphs, no italics,
+  // no border — because the strip is `flex-wrap` directly above the chart: any
+  // change to a tab's measured width could push it onto a second line and
+  // shift every row below. A target flipping between skipped and measured
+  // therefore repaints in place and never moves anything.
+  const TCPING_TAB_BASE = 'px-3 py-1 text-xs font-medium rounded transition-colors';
+  const TCPING_TAB_ACTIVE = 'bg-[#404040]/50 dark:bg-[#404040]/50 text-[#151515] dark:text-[#f5f5f5]';
+  const TCPING_TAB_INACTIVE = 'bg-transparent text-[#525252] dark:text-[#a3a3a3] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
+  const TCPING_TAB_SKIPPED = 'opacity-50';
+
+  function applyTCPingTabAppearance(tab, isActive, isSkipped) {
+    tab.className = `${TCPING_TAB_BASE} ${isActive ? TCPING_TAB_ACTIVE : TCPING_TAB_INACTIVE}${isSkipped ? ' ' + TCPING_TAB_SKIPPED : ''}`;
+    if (isSkipped) {
+      tab.setAttribute('data-translate-title', 'tcpingUnreachable');
+      tab.setAttribute('title', translations.tcpingUnreachable[getCurrentLanguage()] || translations.tcpingUnreachable.en);
+    } else {
+      tab.removeAttribute('data-translate-title');
+      tab.removeAttribute('title');
+    }
+  }
+
+  // Re-apply tab appearance in place, without rebuilding the strip.
+  //
+  // createTCPingTabs() wipes and recreates every button, which would be far
+  // too heavy to run on an SSE tick (and would drop the click listeners). This
+  // only rewrites className/title on the existing buttons, and only for the
+  // ones whose skipped state actually changed — so the common tick, where
+  // nothing is skipped and nothing changed, touches no DOM at all.
+  function refreshTCPingTabStates(systemId) {
+    const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
+    if (!container) return;
+    const tabsContainer = container.querySelector(`[data-tcping-tabs="${systemId}"]`);
+    if (!tabsContainer) return;
+
+    const activeTargetInfo = tcpingActiveTargets.get(systemId);
+    const selectedTarget = activeTargetInfo ? activeTargetInfo.target : null;
+
+    tabsContainer.querySelectorAll('button').forEach(tab => {
+      const address = tab.dataset.target;
+      if (!address) return;
+      const isSkipped = isTCPingTargetSkipped(systemId, address);
+      const wasSkipped = tab.dataset.tcpingTargetSkipped === 'true';
+      const isActive = selectedTarget === address;
+      const wasActive = tab.dataset.tcpingActive === 'true';
+      if (isSkipped === wasSkipped && isActive === wasActive) return;
+      tab.dataset.tcpingTargetSkipped = isSkipped ? 'true' : 'false';
+      tab.dataset.tcpingActive = isActive ? 'true' : 'false';
+      applyTCPingTabAppearance(tab, isActive, isSkipped);
+    });
+  }
+
   // Helper function to create tabs for TCPing targets
   function createTCPingTabs(systemId, config, tabsContainer) {
     // Clear existing tabs
     tabsContainer.innerHTML = '';
-    
+
     // Check if there's a previously selected target for this system
     const activeTargetInfo = tcpingActiveTargets.get(systemId);
     const previouslySelectedTarget = activeTargetInfo ? activeTargetInfo.target : null;
-    
+
     // Create tabs for each target
     config.targets.forEach((target, index) => {
       const tab = document.createElement('button');
-      
+
       // Check if this tab should be active (restore previous selection)
       const isActive = previouslySelectedTarget === target.address;
-      
+      const isSkipped = isTCPingTargetSkipped(systemId, target.address);
+
       // Set initial state based on previous selection
-      if (isActive) {
-        tab.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-[#404040]/50 dark:bg-[#404040]/50 text-[#151515] dark:text-[#f5f5f5]';
-      } else {
-        tab.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-transparent text-[#525252] dark:text-[#a3a3a3] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
-      }
-      
+      tab.dataset.tcpingTargetSkipped = isSkipped ? 'true' : 'false';
+      tab.dataset.tcpingActive = isActive ? 'true' : 'false';
+      applyTCPingTabAppearance(tab, isActive, isSkipped);
+
       tab.textContent = target.name || target.address;
       tab.dataset.target = target.address;
       tab.dataset.targetName = target.name || target.address;
@@ -2098,31 +2272,34 @@ const apiBase = apiBaseProp ?? '';
         // Check if this tab is already active
         const currentActiveTargetInfo = tcpingActiveTargets.get(systemId);
         const isCurrentlyActive = currentActiveTargetInfo && currentActiveTargetInfo.target === target.address;
-        
+
         if (isCurrentlyActive) {
           // Clicking the active tab: deselect it and show all targets
-          tab.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-transparent text-[#525252] dark:text-[#a3a3a3] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
-          
+          tab.dataset.tcpingActive = 'false';
+          applyTCPingTabAppearance(tab, false, isTCPingTargetSkipped(systemId, target.address));
+
           // Clear active target to show all targets with distinct colors
           tcpingActiveTargets.delete(systemId);
-          
+
           // Update chart colors to show all targets (don't reload data)
           updateTCPingChartColors(systemId, null);
         } else {
           // Clicking an inactive tab: select it
           // Update all tabs to inactive state
           tabsContainer.querySelectorAll('button').forEach(btn => {
-            btn.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-transparent text-[#525252] dark:text-[#a3a3a3] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
+            btn.dataset.tcpingActive = 'false';
+            applyTCPingTabAppearance(btn, false, isTCPingTargetSkipped(systemId, btn.dataset.target));
           });
           // Set clicked tab as active
-          tab.className = 'px-3 py-1 text-xs font-medium rounded transition-colors bg-[#404040]/50 dark:bg-[#404040]/50 text-[#151515] dark:text-[#f5f5f5]';
-        
+          tab.dataset.tcpingActive = 'true';
+          applyTCPingTabAppearance(tab, true, isTCPingTargetSkipped(systemId, target.address));
+
         // Update current active target for this system
         tcpingActiveTargets.set(systemId, {
           target: target.address,
           targetName: target.name || target.address
         });
-        
+
           // Update chart colors based on selected target (don't reload data)
           updateTCPingChartColors(systemId, target.address);
         }
@@ -2253,6 +2430,16 @@ const apiBase = apiBaseProp ?? '';
       if (incremental) {
         tcpingIncrementalInFlight.delete(systemId);
       }
+      // Reconcile the "unreachable target" overlay here rather than at each
+      // of the impl's many return points (transient fetch error, no-data
+      // early exit, incremental tail-merge, full rebuild). It is a handful of
+      // class toggles against elements that already exist, costs no layout,
+      // and is idempotent — so it is safe to run on every exit path, and it
+      // is the single place that decides whether the chart or the notice is
+      // visible. It runs LAST on purpose: the impl may have just written 0 ms
+      // / 0.00% or "-" into the summary, and for a skipped target that has to
+      // be replaced with N/A.
+      try { applyTCPingUnreachableState(systemId); } catch (_) {}
     }
   }
 
@@ -2496,8 +2683,14 @@ const apiBase = apiBaseProp ?? '';
         loadingElement.style.display = 'none';
       }
 
+      // "No data" only when the emptiness is genuinely unexplained. If every
+      // configured target is one this node cannot reach, the history is empty
+      // *by design* and the unreachable notice (applied by the caller's
+      // finally block) is the honest message — showing "No data" first would
+      // invite the reader to wait for samples that will never arrive.
+      const unreachable = shouldShowTCPingUnreachable(systemId, selectedTarget, config);
       const noDataElement = container.querySelector(`[data-tcping-no-data="${systemId}"]`);
-      if (noDataElement) {
+      if (noDataElement && !unreachable) {
         noDataElement.classList.remove('hidden');
         noDataElement.style.display = 'flex';
       }
@@ -3159,14 +3352,16 @@ const apiBase = apiBaseProp ?? '';
     const lossElement = statsContainer.querySelector(`[data-tcping-loss="${systemId}"]`);
     
     if (avgElement) {
+      avgElement.removeAttribute('data-translate-detail');
       if (avgLatency > 0) {
         avgElement.textContent = `${avgLatency.toFixed(2)} ms`;
       } else {
         avgElement.textContent = '-';
       }
     }
-    
+
     if (lossElement) {
+      lossElement.removeAttribute('data-translate-detail');
       // Only show loss percentage if there's actual data (avgLatency > 0)
       // When avgLatency is 0, it means no data, so show '-' instead of '0.00%'
       if (avgLatency > 0) {
@@ -3176,13 +3371,112 @@ const apiBase = apiBaseProp ?? '';
       }
     }
   }
-  
+
+  // Summary for a skipped target: "N/A" / "不适用" for BOTH avg and loss.
+  //
+  // We deliberately do not reuse the "-" (no data) rendering: "-" means "we
+  // expect numbers here, they just haven't arrived", whereas a skipped target
+  // will never produce numbers. Marking the two spans with
+  // data-translate-detail="notApplicable" (instead of writing a literal
+  // string) is what makes them follow a later language switch for free — the
+  // existing updateTranslations() sweep picks them up. updateTCPingStats
+  // strips the attribute again when real numbers come back, so a recovered
+  // target cannot get its value overwritten by the next translation pass.
+  function setTCPingStatsNotApplicable(systemId) {
+    const statsContainer = document.querySelector(`[data-tcping-stats="${systemId}"]`);
+    if (!statsContainer) return;
+
+    const label = translations.notApplicable[getCurrentLanguage()] || translations.notApplicable.en;
+    const avgElement = statsContainer.querySelector(`[data-tcping-avg="${systemId}"]`);
+    const lossElement = statsContainer.querySelector(`[data-tcping-loss="${systemId}"]`);
+
+    if (avgElement) {
+      avgElement.setAttribute('data-translate-detail', 'notApplicable');
+      avgElement.textContent = label;
+    }
+    if (lossElement) {
+      lossElement.setAttribute('data-translate-detail', 'notApplicable');
+      lossElement.textContent = label;
+    }
+  }
+
+  // Reconcile the chart area with the current skipped state for this system.
+  //
+  // Runs after every chart update and after every tab switch. It never
+  // touches the Chart.js instance or the canvas geometry — only the overlay's
+  // visibility and the canvas opacity — so the datasets stay live and fresh
+  // underneath a shown notice, and deselecting the target reveals an
+  // up-to-date chart with no refetch and no resize. The canvas keeps
+  // `display: block` (we only fade it out) precisely so Chart.js never sees a
+  // zero-sized canvas and never has to re-lay-out on the way back.
+  //
+  // Returns true when the notice is showing.
+  function applyTCPingUnreachableState(systemId) {
+    const container = document.querySelector(`[data-tcping-chart-container="${systemId}"]`);
+    if (!container || !container.isConnected) return false;
+
+    const noticeElement = container.querySelector(`[data-tcping-unreachable="${systemId}"]`);
+    const canvas = container.querySelector(`[data-tcping-chart="${systemId}"]`);
+    const config = tcpingConfigs.get(systemId);
+    const activeTargetInfo = tcpingActiveTargets.get(systemId);
+    const selectedTarget = activeTargetInfo ? activeTargetInfo.target : null;
+    const unreachable = shouldShowTCPingUnreachable(systemId, selectedTarget, config);
+
+    if (unreachable) {
+      const loadingElement = container.querySelector(`[data-tcping-loading="${systemId}"]`);
+      if (loadingElement) loadingElement.style.display = 'none';
+
+      // "No data" and "unreachable" are mutually exclusive — never stack them.
+      const noDataElement = container.querySelector(`[data-tcping-no-data="${systemId}"]`);
+      if (noDataElement) {
+        noDataElement.classList.add('hidden');
+        noDataElement.style.display = 'none';
+      }
+
+      if (noticeElement) {
+        noticeElement.classList.remove('hidden');
+        noticeElement.style.display = 'flex';
+      }
+      if (canvas) {
+        // Fade the canvas out but keep it laid out at its full size when a
+        // chart is mounted on it: hiding it with display:none would make
+        // Chart.js measure a 0x0 box on the next tick and force a full
+        // re-layout when the notice clears. The notice is absolutely
+        // positioned over inset-0 with an opaque background, so opacity is
+        // all that is needed to get it out of the way.
+        canvas.classList.add('opacity-0');
+        if (tcpingCharts.has(`${systemId}_all`)) {
+          canvas.style.display = 'block';
+        }
+      }
+      setTCPingStatsNotApplicable(systemId);
+    } else if (noticeElement && !noticeElement.classList.contains('hidden')) {
+      noticeElement.classList.add('hidden');
+      noticeElement.style.display = 'none';
+      // Only un-fade the canvas if there is actually a chart behind it;
+      // otherwise the "No data" overlay owns the box and we leave it alone.
+      if (canvas && tcpingCharts.has(`${systemId}_all`)) {
+        canvas.style.display = 'block';
+        canvas.classList.remove('opacity-0');
+      }
+    }
+
+    refreshTCPingTabStates(systemId);
+    return unreachable;
+  }
+
   // Update TCPing chart colors based on selected target
   function updateTCPingChartColors(systemId, selectedTarget) {
     const chartKey = `${systemId}_all`;
     const chartData = tcpingCharts.get(chartKey);
-    if (!chartData || !chartData.chart) return;
-    
+    if (!chartData || !chartData.chart) {
+      // No chart instance (e.g. every target is skipped, so history was
+      // empty and the "No data"/unreachable overlay owns the box). The tab
+      // click still has to switch the notice and the summary.
+      applyTCPingUnreachableState(systemId);
+      return;
+    }
+
     const chart = chartData.chart;
     const config = tcpingConfigs.get(systemId);
     if (!config || !config.targets) return;
@@ -3223,11 +3517,17 @@ const apiBase = apiBaseProp ?? '';
     });
     
     chart.update('none');
-    
+
     // Recalculate statistics based on selected target
     calculateAndUpdateStats(systemId, selectedTarget);
+
+    // …then let the skipped state have the last word: for a target the node
+    // cannot reach, calculateAndUpdateStats above just wrote 0 ms / "-" from
+    // an empty dataset, which has to become N/A, and the chart has to be
+    // covered by the "unreachable" notice.
+    applyTCPingUnreachableState(systemId);
   }
-  
+
   // Calculate and update statistics for selected target or all targets
   function calculateAndUpdateStats(systemId, selectedTarget) {
     const chartKey = `${systemId}_all`;
@@ -3561,6 +3861,13 @@ const apiBase = apiBaseProp ?? '';
       const normalized = normalizeItem(item);
       normalized.original = item; // Keep original for rendering
       newData.set(item.id, normalized);
+      // Keep the skipped-target index in step with every snapshot that
+      // reaches the table — the initial /api/metrics fetch, the legacy
+      // signal-only refetch path, and the SSE payloads alike. normalizeItem
+      // deliberately does not carry tcping_data (it drives the row-diff, and
+      // tcping changes must not by themselves repaint a row), so this reads
+      // straight off the raw item.
+      noteTCPingSkippedTargets(item);
     });
     
     // Initial render - if no existing data, render everything
@@ -3697,6 +4004,7 @@ const apiBase = apiBaseProp ?? '';
       try { cleanupTCPingChart(id); } catch (_) {}
       tcpingConfigs.delete(id);
       tcpingActiveTargets.delete(id);
+      tcpingSkippedTargets.delete(id);
       const rowElement = existingRowMap.get(id);
       if (rowElement) {
         const systemRow = rowElement.closest('.system-row');
@@ -4257,6 +4565,15 @@ const apiBase = apiBaseProp ?? '';
               updateTCPingChart(systemId, null, null, true);
               return;
             }
+
+            // Refresh the skipped-target index BEFORE the signature compare
+            // and the redraw. debouncedRenderData() also does this, but on an
+            // 80 ms timer, so at this point currentData can still hold the
+            // previous snapshot — and updateTCPingChart below reads the index
+            // to decide between the chart and the "unreachable" notice. Doing
+            // it here makes a skipped↔measured flip visible on the very tick
+            // that carried it.
+            noteTCPingSkippedTargets(systemData);
 
             const newSig = computeTCPingSignature(systemData);
             const oldSig = tcpingDataSignatures.get(systemId) || '';
