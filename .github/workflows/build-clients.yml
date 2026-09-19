@@ -43,7 +43,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.27'
 
       # NOTE: We build the whole package (`.`) rather than `main.go`. The
       # client is split across multiple source files (main.go +

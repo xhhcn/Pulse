@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.22"><img src="https://img.shields.io/badge/release-v1.3.22-blue?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.23"><img src="https://img.shields.io/badge/release-v1.3.23-blue?style=flat-square" alt="Release"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/pulls/xhh1128/pulse?style=flat-square&color=blue" alt="Docker Pulls"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/image-size/xhh1128/pulse/latest?style=flat-square&color=blue" alt="Docker Size"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
@@ -555,6 +555,7 @@ docker compose up -d
 - **资源**：服务端为单二进制，1 核 2G 的 VPS 足够。实测 1000 个客户端每 3 秒推送一次并各带 TCPing 结果时，单核 CPU 占用约 25%，常驻内存约 30 MB。
 - **TCPing 数据量**：历史保留 24 小时，磁盘占用约为 `客户端数 × 目标数 × (86400 / 间隔秒) × 0.4 KB`。客户端很多时请把间隔保持在 60 秒以上、目标数控制在 3 到 5 个。
 - **反向代理 / CDN**：服务端只信任本机回环、Cloudflare 官方边缘网段（内置，无需配置）以及 `TRUSTED_PROXIES`（逗号分隔的 IP 或 CIDR）转发的 `X-Forwarded-For`。使用 Cloudflare 时无需额外设置；若前面是其它反代或 CDN，请设置该变量，否则登录限流会按代理 IP 计数，探针的位置也可能被判成代理所在地。镜像内置的 nginx 会保留上游的 `X-Forwarded-For` 链，因此 docker 部署时可把桥接网关（如 `172.17.0.0/16`）加入 `TRUSTED_PROXIES`。不经过 Cloudflare 且希望关闭内置信任时，设置 `TRUSTED_PROXIES=none`（可与其它网段并列）。
+- **会话与令牌**：管理令牌只通过 `Authorization: Bearer` 请求头接受（事件流例外，使用 `admin_token` 参数）；退出登录会在服务端吊销当前会话，修改密码会吊销其它所有会话；分享链接被撤销或过期后，已打开的页面会在 30 秒内断开并重新鉴权。探针上报的字符串会被限长并去除标记字符，`os_icon` 只接受 `set:name` 形式的图标名。
 - **SSE 上限**：匿名实时流默认全局 2000 路、单 IP 200 路，可用 `SSE_MAX_STREAMS` 与 `SSE_MAX_STREAMS_PER_IP` 调整；管理员会话不受限制。单 IP 上限只对公网地址生效。
 - **Docker**：`docker-compose.yaml` 已设置 45 秒优雅停止，请勿缩短，否则强制退出可能损坏数据库。
 - **外部资源**：展开行的 TCPing 图表在首次打开时从 `cdn.jsdelivr.net`（备用 `unpkg.com`）加载 Chart.js，访客所在网络需能访问其中之一。

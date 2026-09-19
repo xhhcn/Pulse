@@ -96,7 +96,7 @@ jobs:
         with:
           # Client builds only require Go 1.15, but we use 1.22 to match
           # the server toolchain and allow rebuilding anything in-repo.
-          go-version: '1.22'
+          go-version: '1.27'
 
       - name: Build Client Binaries
         # Build the whole client package (`.`), not `main.go` alone.
@@ -135,15 +135,17 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} is a privacy fix plus follow-ups from a final review. Existing clients and databases stay compatible; upgrading is recommended.
+            v${{ steps.version.outputs.version }} is a security release from a dedicated review of the server, agent, web pages and deployment files. Existing clients and databases stay compatible; upgrading is recommended.
 
             ### Highlights
 
-            - The public view (anonymous /api/metrics and the public event stream) no longer includes the `location_ip` field introduced in v1.3.21, which exposed each agent's public address.
-            - A private reported address is never persisted; an agent that reaches the server over IPv6 gets its IPv6 recorded independently of the IPv4 rule; `TRUSTED_PROXIES=none` disables the built-in Cloudflare trust.
-            - `/admin/` and `/login/` carry an ETag like the homepage; If-None-Match accepts weak validators and `*`; a connect-time prime never drops a `tcping_config_updated` signal queued for the subscriber.
-            - Agent: a previously detected address is kept for at most ten minutes of failed refreshes. Reports version 1.3.22.
-            - README: Cloudflare ranges are trusted by default; Go 1.22; client install examples use port 8008.
+            - Sessions: `POST /api/auth/logout` revokes the session, changing the password revokes every other session, and admin tokens are accepted only in the `Authorization` header (the event stream keeps `admin_token`). First-run setup is atomic.
+            - Open event streams re-check their admission every 30 s: a revoked or expired share link, privacy mode being enabled, or a revoked admin session ends the stream.
+            - Agent input is bounded: strings are length-capped and stripped of control and markup characters, `os_icon` must be an iconify `set:name`, addresses are canonicalised and percentages clamped; registration validates the port so the poll URL cannot be pointed elsewhere; a push stores at most 600 tcping samples and no longer stalls the database writer.
+            - The legacy ingest echo masks addresses for agent callers; `/api/tcping` records configured targets only; `/api/tcping/history` answers 404 for unknown ids; `/api/privacy/verify-token` is rate limited and a token without expiry no longer verifies.
+            - Web: the table's incremental update escapes `os_icon` and flag attributes, icon SVG from the CDN is sanitised before insertion, the login redirect rejects collapsed protocol-relative paths, and logout revokes the session.
+            - Agent: `/tcping` requires a configured secret, server responses are capped at 1 MiB, and tcping targets from the server are validated and capped. Reports version 1.3.23.
+            - Build: Go 1.27 and Alpine 3.22; nginx hardening headers, `server_tokens off` and API prefix precedence; the installer's systemd unit is sandboxed; helper downloads are HTTPS-only.
 
             ### Compatibility
 
