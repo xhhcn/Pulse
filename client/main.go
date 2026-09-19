@@ -453,11 +453,19 @@ func appleSiliconNominalGHz(model string) float64 {
 // jittered 3/6/10-second gaps on charts for a cleanly-configured, e.g. 5-second,
 // polling interval. Empty / zero timestamps are treated as "use server time" for
 // backward compatibility with older clients.
+//
+// Skipped marks a probe this host was physically unable to attempt (see
+// classifyDialError) — e.g. an IPv6 target on a machine with no IPv6 route.
+// Such a result is NOT packet loss: the server is expected to record no data
+// point rather than a failure, so a mis-targeted probe stops showing up as a
+// permanent 50 % loss on the dashboard. Omitted from the wire when false, so
+// older servers see exactly the payload they see today.
 type ClientTCPingResult struct {
 	Target     string    `json:"target"`
 	Latency    float64   `json:"latency"` // milliseconds; 0 if failed
 	Success    bool      `json:"success"`
 	MeasuredAt time.Time `json:"measured_at,omitempty"`
+	Skipped    bool      `json:"skipped,omitempty"`
 }
 
 // ClientPushResponse is the server's reply to a push request
@@ -843,10 +851,15 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // TCPingResponse represents the response from tcping
+//
+// Skipped means the agent could not attempt the probe from this host at all
+// (see classifyDialError); the reply is still HTTP 200 with success:false, but
+// the caller must treat it as "no measurement" rather than as packet loss.
 type TCPingResponse struct {
 	Latency float64 `json:"latency"` // Latency in milliseconds
 	Success bool    `json:"success"`
 	Error   string  `json:"error,omitempty"`
+	Skipped bool    `json:"skipped,omitempty"`
 }
 
 // TCPingRequest represents the request from backend
@@ -976,25 +989,70 @@ func handleTCPingRequest(w http.ResponseWriter, r *http.Request) {
 	response := TCPingResponse{
 		Success: err == nil,
 		Latency: latency,
+		Skipped: classifyDialError(err),
 	}
 
 	if err != nil {
 		response.Error = err.Error()
-		log.Printf("❌ TCPing to %s failed: %v", target, err)
+		if response.Skipped {
+			// Throttled: a mis-targeted probe fails on every single poll, and
+			// the operator only needs to be told once why this target has no
+			// data. Still HTTP 200 — the caller distinguishes via "skipped".
+			logOncePerMinute(fmt.Sprintf("⏭️  TCPing to %s skipped: %v (this host cannot reach that address family — reporting no data instead of packet loss)", target, err))
+		} else {
+			log.Printf("❌ TCPing to %s failed: %v", target, err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
+// classifyDialError reports whether a failed TCPing dial means the probe could
+// not be attempted from this host at all, as opposed to the target being down.
+//
+// The motivating bug: a monitored machine with no IPv6 connectivity is given an
+// IPv6 tcping target. Every probe fails in ~0 ms with ENETUNREACH, the agent
+// reports success:false, and the dashboard shows a flat 50 % packet loss for a
+// probe that never once left the box. "Cannot attempt" and "target down" are
+// different facts and must be reported differently.
+//
+// Only three errnos qualify (per platform, see tcping_errno_unix.go /
+// tcping_errno_windows.go): ENETUNREACH, EAFNOSUPPORT and EADDRNOTAVAIL — no
+// route for that address family, family disabled outright, or no local source
+// address to bind. Everything else stays loss: a timeout (no errno at all),
+// ECONNREFUSED (the host answered with an RST, so it is up), EHOSTUNREACH (the
+// network is reachable, that one host is not), EINVAL (a malformed target such
+// as a link-local literal missing its zone) and DNS failures (*net.DNSError,
+// which carries no syscall.Errno).
+//
+// The error chain from net.DialTimeout is
+// *net.OpError → *os.SyscallError → syscall.Errno, and both links implement
+// Unwrap, so a single errors.As reaches the errno regardless of depth. It also
+// sees through executeTCPing's own %w wrapping.
+func classifyDialError(err error) (skipped bool) {
+	if err == nil {
+		return false
+	}
+	var errno syscall.Errno
+	if !errors.As(err, &errno) {
+		return false
+	}
+	return isUnattemptableErrno(errno)
+}
+
 // Execute tcping command
+//
+// The returned error wraps the dial error with %w so callers can hand it to
+// classifyDialError; the message text is unchanged from the %v form that the
+// /tcping response has always reported.
 func executeTCPing(target string) (float64, error) {
 	// Use net.DialTimeout to measure TCP connection latency
 	// Use shorter timeout (3 seconds) to avoid blocking the HTTP request handler too long
 	start := time.Now()
 	conn, err := net.DialTimeout("tcp", target, 3*time.Second)
 	if err != nil {
-		return 0, fmt.Errorf("connection failed: %v", err)
+		return 0, fmt.Errorf("connection failed: %w", err)
 	}
 	defer conn.Close()
 
@@ -1186,11 +1244,19 @@ func measureTCPingOnce(targets []string) {
 		go func(tgt string) {
 			defer wg.Done()
 			latency, err := executeTCPing(tgt)
+			skipped := classifyDialError(err)
+			if skipped {
+				// Throttled: this fires on every cycle for a mis-targeted
+				// probe (e.g. an IPv6 target on a v4-only host), so log the
+				// reason at most once a minute rather than per probe.
+				logOncePerMinute(fmt.Sprintf("⏭️  TCPing target %s skipped: %v (this host cannot reach that address family — reporting no data instead of packet loss)", tgt, err))
+			}
 			result := ClientTCPingResult{
 				Target:     tgt,
 				Latency:    latency,
 				Success:    err == nil,
 				MeasuredAt: time.Now().UTC(),
+				Skipped:    skipped,
 			}
 			pendingTCPingResultsMu.Lock()
 			if len(pendingTCPingResults) >= maxPendingTCPingResults {
@@ -1311,7 +1377,7 @@ func collectSystemMetrics() metricPayload {
 		NetOutMBps:         netOut,
 		TotalNetInBytes:    totalNetInBytes,
 		TotalNetOutBytes:   totalNetOutBytes,
-		AgentVersion:       "1.3.23",
+		AgentVersion:       "1.3.25",
 		Alert:              false, // Can be enhanced with actual alert logic
 	}
 }
