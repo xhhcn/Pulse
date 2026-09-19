@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/Astro-4.0+-FF5D01?style=flat-square&logo=astro&logoColor=white" alt="Astro">
   <img src="https://img.shields.io/badge/Platform-amd64%20%7C%20arm64-lightgrey?style=flat-square" alt="Platform">
 </p>
@@ -554,7 +554,7 @@ The same scripts make good cron fodder for zero-downtime backups (env var keeps 
 
 - **Resources**: the server is a single binary; a 1-core / 2 GB VPS is enough. With 1000 clients pushing every 3 s, each with TCPing results, it uses about 25% of one core and about 30 MB RSS.
 - **TCPing data volume**: history is kept for 24 hours; disk use is about `clients × targets × (86400 / interval seconds) × 0.4 KB`. With many clients keep the interval at 60 s or more and 3 to 5 targets.
-- **Reverse proxy / CDN**: the server trusts `X-Forwarded-For` only from loopback and from `TRUSTED_PROXIES` (comma-separated IPs or CIDRs). Set it when a proxy or CDN sits in front, otherwise login rate limits count per proxy address. The bundled nginx preserves the upstream `X-Forwarded-For` chain, so with Docker you can add the bridge gateway (for example `172.17.0.0/16`) to `TRUSTED_PROXIES`.
+- **Reverse proxy / CDN**: the server trusts `X-Forwarded-For` from loopback, from Cloudflare's published edge ranges (built in, no configuration needed) and from `TRUSTED_PROXIES` (comma-separated IPs or CIDRs). Set `TRUSTED_PROXIES` when a non-Cloudflare proxy or CDN sits in front, otherwise login rate limits count per proxy address and agents may be located at the proxy. The bundled nginx preserves the upstream `X-Forwarded-For` chain, so with Docker you can add the bridge gateway (for example `172.17.0.0/16`) to `TRUSTED_PROXIES`. Set `TRUSTED_PROXIES=none` (optionally next to other ranges) to disable the built-in Cloudflare trust.
 - **SSE caps**: anonymous streams default to 2000 in total and 200 per IP, adjustable with `SSE_MAX_STREAMS` and `SSE_MAX_STREAMS_PER_IP`; admin sessions are exempt. The per-IP cap applies to public addresses only.
 - **Docker**: `docker-compose.yaml` sets a 45 s graceful stop; do not shorten it, a forced exit can damage the database.
 - **External resources**: the detail-row TCPing chart loads Chart.js from `cdn.jsdelivr.net` (fallback `unpkg.com`) on first open; visitors need to reach one of them.

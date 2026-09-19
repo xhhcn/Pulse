@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/Astro-4.0+-FF5D01?style=flat-square&logo=astro&logoColor=white" alt="Astro">
   <img src="https://img.shields.io/badge/Platform-amd64%20%7C%20arm64-lightgrey?style=flat-square" alt="Platform">
 </p>
@@ -554,7 +554,7 @@ docker compose up -d
 
 - **资源**：服务端为单二进制，1 核 2G 的 VPS 足够。实测 1000 个客户端每 3 秒推送一次并各带 TCPing 结果时，单核 CPU 占用约 25%，常驻内存约 30 MB。
 - **TCPing 数据量**：历史保留 24 小时，磁盘占用约为 `客户端数 × 目标数 × (86400 / 间隔秒) × 0.4 KB`。客户端很多时请把间隔保持在 60 秒以上、目标数控制在 3 到 5 个。
-- **反向代理 / CDN**：服务端只信任本机回环和 `TRUSTED_PROXIES`（逗号分隔的 IP 或 CIDR）转发的 `X-Forwarded-For`。若前面还有一层反代或 CDN，请设置该变量，否则登录限流会按代理 IP 计数。镜像内置的 nginx 会保留上游的 `X-Forwarded-For` 链，因此 docker 部署时可把桥接网关（如 `172.17.0.0/16`）加入 `TRUSTED_PROXIES`。
+- **反向代理 / CDN**：服务端只信任本机回环、Cloudflare 官方边缘网段（内置，无需配置）以及 `TRUSTED_PROXIES`（逗号分隔的 IP 或 CIDR）转发的 `X-Forwarded-For`。使用 Cloudflare 时无需额外设置；若前面是其它反代或 CDN，请设置该变量，否则登录限流会按代理 IP 计数，探针的位置也可能被判成代理所在地。镜像内置的 nginx 会保留上游的 `X-Forwarded-For` 链，因此 docker 部署时可把桥接网关（如 `172.17.0.0/16`）加入 `TRUSTED_PROXIES`。不经过 Cloudflare 且希望关闭内置信任时，设置 `TRUSTED_PROXIES=none`（可与其它网段并列）。
 - **SSE 上限**：匿名实时流默认全局 2000 路、单 IP 200 路，可用 `SSE_MAX_STREAMS` 与 `SSE_MAX_STREAMS_PER_IP` 调整；管理员会话不受限制。单 IP 上限只对公网地址生效。
 - **Docker**：`docker-compose.yaml` 已设置 45 秒优雅停止，请勿缩短，否则强制退出可能损坏数据库。
 - **外部资源**：展开行的 TCPing 图表在首次打开时从 `cdn.jsdelivr.net`（备用 `unpkg.com`）加载 Chart.js，访客所在网络需能访问其中之一。

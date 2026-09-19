@@ -177,7 +177,7 @@ jobs:
 
             **Quick Install (Linux & macOS):**
             ```bash
-            curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id YOUR_ID --server http://YOUR_SERVER:8080
+            curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id YOUR_ID --server http://YOUR_SERVER:8008
             ```
 
             **One-click migration to a new host:**
