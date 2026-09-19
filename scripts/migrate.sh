@@ -156,7 +156,7 @@ if [[ ! -x "$SCRIPT_DIR/backup.sh" || ! -x "$SCRIPT_DIR/restore.sh" ]]; then
   chmod 700 "$boot"
   CLEANUP_DIRS+=( "$boot" )
   for s in backup.sh restore.sh; do
-    if ! curl -fsSL --proto '=https' --retry 2 --retry-delay 1 -o "$boot/$s" "$base/$s"; then
+    if ! curl -fsSL --proto '=https' --proto-redir '=https' --retry 2 --retry-delay 1 -o "$boot/$s" "$base/$s"; then
       echo "error: failed to download $s from $base" >&2
       echo "       (set PULSE_SCRIPT_BASE to a mirror, or pre-install the scripts)" >&2
       exit 10

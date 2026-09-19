@@ -252,7 +252,7 @@ download_binary() {
     if command -v curl &>/dev/null; then
         curl -sSL --proto '=https' "$download_url" -o "$INSTALL_DIR/probe-client" || error "Failed to download binary"
     elif command -v wget &>/dev/null; then
-        wget -q --https-only "$download_url" -O "$INSTALL_DIR/probe-client" || error "Failed to download binary"
+        wget -q "$download_url" -O "$INSTALL_DIR/probe-client" || error "Failed to download binary"
     else
         error "Neither curl nor wget found. Please install one of them."
     fi
@@ -384,6 +384,9 @@ EOF
 
     # Use bootstrap/bootout (modern API, required on macOS 11+)
     # bootout removes an existing registration so we can re-register cleanly
+    # The plist carries the agent secret; keep it readable by root only
+    # (launchd accepts 0600 for root-owned daemons).
+    chmod 600 "$MACOS_PLIST_PATH"
     launchctl bootout system/${MACOS_PLIST_LABEL} 2>/dev/null || true
     launchctl bootstrap system "$MACOS_PLIST_PATH"
     success "launchd daemon created and started"
@@ -550,7 +553,7 @@ main() {
             exit 0
         fi
     elif command -v wget &>/dev/null; then
-        if ! wget -q --https-only --timeout=120 "$download_url" -O "$TEMP_BINARY" 2>/dev/null; then
+        if ! wget -q --timeout=120 "$download_url" -O "$TEMP_BINARY" 2>/dev/null; then
             log_msg "[WARN] Download failed, will retry next cycle"
             exit 0
         fi

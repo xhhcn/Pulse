@@ -67,7 +67,11 @@ fi
 # Download next to the installed binary and swap it in: writing over a
 # running executable fails with "Text file busy", so an in-place upgrade
 # used to abort here.
-if ! wget -q --show-progress --https-only "$DOWNLOAD_URL" -O "$INSTALL_DIR/pulse-server.new"; then
+case "$DOWNLOAD_URL" in
+    https://*) ;;
+    *) print_message "$RED" "❌ Refusing to download over a non-HTTPS URL: $DOWNLOAD_URL"; exit 1 ;;
+esac
+if ! wget -q --show-progress "$DOWNLOAD_URL" -O "$INSTALL_DIR/pulse-server.new"; then
     rm -f "$INSTALL_DIR/pulse-server.new"
     print_message "$RED" "❌ Failed to download binary"
     print_message "$YELLOW" "   URL: $DOWNLOAD_URL"
@@ -97,7 +101,8 @@ else
 fi
 SCRIPTS_OK=true
 for s in backup.sh restore.sh migrate.sh; do
-    if ! wget -q --https-only "$SCRIPT_BASE/$s" -O "$INSTALL_DIR/scripts/$s"; then
+    case "$SCRIPT_BASE" in https://*) ;; *) SCRIPTS_OK=false; break ;; esac
+    if ! wget -q "$SCRIPT_BASE/$s" -O "$INSTALL_DIR/scripts/$s"; then
         SCRIPTS_OK=false
         break
     fi
