@@ -630,16 +630,72 @@ func (b *SSEBroker) PrimeSnapshot(sub *sseSubscriber) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	// Bounded drain: the buffer holds sseSubscriberBuffer events and no
-	// sender can add to it while we hold the read lock.
+	// Bounded drain of queued snapshots (the prime supersedes them). Signal
+	// events such as tcping_config_updated are kept: Broadcast() enqueues
+	// them under the read lock, concurrently with this, and a dropped
+	// signal would leave the client with a stale tcping configuration.
+	var kept []string
 	for i := 0; i <= sseSubscriberBuffer; i++ {
 		select {
-		case <-sub.ch:
+		case ev := <-sub.ch:
+			if !isSnapshotEvent(ev) {
+				kept = append(kept, ev)
+			}
+			continue
 		default:
-			return payload, true
+		}
+		break
+	}
+	for _, ev := range kept {
+		select {
+		case sub.ch <- ev:
+		default:
 		}
 	}
 	return payload, true
+}
+
+// isSnapshotEvent tells a state-carrying broadcast (superseded by a newer
+// one) from a signal event, which must not be dropped. Marshalled maps keep
+// their keys sorted, so the marker is not at the start of the payload.
+func isSnapshotEvent(ev string) bool {
+	return strings.Contains(ev, `"type":"metric_updated"`)
+}
+
+// computeStaticETag hashes an embedded file; "" for directories and errors.
+func computeStaticETag(fsys fs.FS, path string) string {
+	f, err := fsys.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	if st, err := f.Stat(); err != nil || st.IsDir() {
+		return ""
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return ""
+	}
+	return `"` + hex.EncodeToString(h.Sum(nil))[:20] + `"`
+}
+
+// etagMatches implements If-None-Match for a strong validator: a list of
+// tags, weak forms (W/"x", which CDNs produce when they recompress) and "*".
+func etagMatches(ifNoneMatch, tag string) bool {
+	if tag == "" || strings.TrimSpace(ifNoneMatch) == "" {
+		return false
+	}
+	if strings.TrimSpace(ifNoneMatch) == "*" {
+		return true
+	}
+	strip := func(s string) string { return strings.TrimPrefix(strings.TrimSpace(s), "W/") }
+	want := strip(tag)
+	for _, cand := range strings.Split(ifNoneMatch, ",") {
+		if strip(cand) == want {
+			return true
+		}
+	}
+	return false
 }
 
 // sendWithDropOldest delivers event into ch without ever blocking the caller.
@@ -660,7 +716,8 @@ func (b *SSEBroker) PrimeSnapshot(sub *sseSubscriber) (string, bool) {
 // with other senders or with Unsubscribe's close(ch) can never live-lock or
 // misbehave. A send onto a closed channel would panic; it is only safe
 // because Unsubscribe holds the broker's write lock which excludes every
-// BroadcastByView/Broadcast call holding the read lock. By the time the
+// Broadcast call holding the read lock and every BroadcastByView call
+// holding the write lock. By the time the
 // channel is closed, no sendWithDropOldest for this subscriber is running
 // and the subscriber has already been removed from the clients map, so no
 // new sends start.
@@ -1417,17 +1474,10 @@ func main() {
 			if v, ok := staticETags.Load(path); ok {
 				return v.(string)
 			}
-			f, err := distFS.Open(path)
-			if err != nil {
-				return ""
+			tag := computeStaticETag(distFS, path)
+			if tag != "" {
+				staticETags.Store(path, tag)
 			}
-			defer f.Close()
-			h := sha256.New()
-			if _, err := io.Copy(h, f); err != nil {
-				return ""
-			}
-			tag := `"` + hex.EncodeToString(h.Sum(nil))[:20] + `"`
-			staticETags.Store(path, tag)
 			return tag
 		}
 		notModified := func(w http.ResponseWriter, r *http.Request, tag string) bool {
@@ -1435,11 +1485,9 @@ func main() {
 				return false
 			}
 			w.Header().Set("ETag", tag)
-			for _, cand := range strings.Split(r.Header.Get("If-None-Match"), ",") {
-				if strings.TrimSpace(cand) == tag {
-					w.WriteHeader(http.StatusNotModified)
-					return true
-				}
+			if etagMatches(r.Header.Get("If-None-Match"), tag) {
+				w.WriteHeader(http.StatusNotModified)
+				return true
 			}
 			return false
 		}
@@ -1463,14 +1511,20 @@ func main() {
 
 			// Try to open the file from embedded FS
 			if f, err := distFS.Open(path); err == nil {
+				st, serr := f.Stat()
 				f.Close()
-				setStaticCacheHeaders(w, r.URL.Path)
-				// FileServer honours If-None-Match against the ETag we set.
-				if tag := staticETag(path); tag != "" {
-					w.Header().Set("ETag", tag)
+				// Directories (/admin/, /login/) take the index branch below,
+				// which sets the validator; FileServer would serve their
+				// index.html without one.
+				if serr == nil && !st.IsDir() {
+					setStaticCacheHeaders(w, r.URL.Path)
+					// FileServer honours If-None-Match against the ETag we set.
+					if tag := staticETag(path); tag != "" {
+						w.Header().Set("ETag", tag)
+					}
+					http.FileServer(http.FS(distFS)).ServeHTTP(w, r)
+					return
 				}
-				http.FileServer(http.FS(distFS)).ServeHTTP(w, r)
-				return
 			}
 
 			// File doesn't exist - try directory index.html
@@ -1914,7 +1968,9 @@ func refreshSnapshotForPrime(store *Store, registry *ClientRegistry, broker *SSE
 	}
 	broadcastMu.Lock()
 	defer broadcastMu.Unlock()
-	if broker.FreshWithin(SSEViewPublic, sseSnapshotMaxAge) && broker.FreshWithin(SSEViewAdmin, sseSnapshotMaxAge) {
+	// Half a second of margin: a payload that is fresh here must still be
+	// fresh when the caller reads it back with PrimeSnapshot.
+	if broker.FreshWithin(SSEViewPublic, sseSnapshotMaxAge-500*time.Millisecond) && broker.FreshWithin(SSEViewAdmin, sseSnapshotMaxAge-500*time.Millisecond) {
 		return
 	}
 	broadcastMetricsSnapshotLocked(store, registry, broker)

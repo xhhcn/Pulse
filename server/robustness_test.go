@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -957,10 +958,10 @@ func TestPrimeSnapshotDrainsQueueAndServesLatest(t *testing.T) {
 	if _, ok := b.PrimeSnapshot(sub); ok {
 		t.Fatalf("nothing published yet: no prime")
 	}
-	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "T1"}, time.Now())
-	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "T2"}, time.Now())
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: `{"type":"metric_updated","tag":"T1"}`}, time.Now())
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: `{"type":"metric_updated","tag":"T2"}`}, time.Now())
 	p, ok := b.PrimeSnapshot(sub)
-	if !ok || p != "T2" {
+	if !ok || p != `{"type":"metric_updated","tag":"T2"}` {
 		t.Fatalf("prime must be the latest broadcast, got %q %v", p, ok)
 	}
 	select {
@@ -969,10 +970,10 @@ func TestPrimeSnapshotDrainsQueueAndServesLatest(t *testing.T) {
 	default:
 	}
 	// Anything published afterwards is delivered normally and is newer.
-	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "T3"}, time.Now())
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: `{"type":"metric_updated","tag":"T3"}`}, time.Now())
 	select {
 	case q := <-sub.ch:
-		if q != "T3" {
+		if q != `{"type":"metric_updated","tag":"T3"}` {
 			t.Fatalf("expected T3, got %q", q)
 		}
 	default:
@@ -980,7 +981,7 @@ func TestPrimeSnapshotDrainsQueueAndServesLatest(t *testing.T) {
 	}
 	// A stale publication is not used as a prime, and the queue is left
 	// intact so the subscriber still receives what was queued.
-	b.BroadcastByView(map[SSEView]string{SSEViewPublic: "T4"}, time.Now())
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: `{"type":"metric_updated","tag":"T4"}`}, time.Now())
 	b.mu.Lock()
 	b.publishedAt[SSEViewPublic] = time.Now().Add(-2 * sseSnapshotMaxAge)
 	b.mu.Unlock()
@@ -989,7 +990,7 @@ func TestPrimeSnapshotDrainsQueueAndServesLatest(t *testing.T) {
 	}
 	select {
 	case q := <-sub.ch:
-		if q != "T4" {
+		if q != `{"type":"metric_updated","tag":"T4"}` {
 			t.Fatalf("expected the queued T4, got %q", q)
 		}
 	default:
@@ -1067,22 +1068,55 @@ func TestForwardedClientIPStopsAtUnparsableEntry(t *testing.T) {
 	}
 }
 
-func TestStaticETagRevalidation(t *testing.T) {
-	// Exercised through the real handler wiring is heavy; the helper logic
-	// is the If-None-Match comparison, covered here on the handler used by
-	// the embedded index responses.
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("If-None-Match", `"abc"`)
-	rr.Header().Set("ETag", `"abc"`)
-	matched := false
-	for _, cand := range strings.Split(req.Header.Get("If-None-Match"), ",") {
-		if strings.TrimSpace(cand) == rr.Header().Get("ETag") {
-			matched = true
+func TestStaticETagHelpers(t *testing.T) {
+	fsys := fstest.MapFS{
+		"index.html":       {Data: []byte("<html>a</html>")},
+		"admin/index.html": {Data: []byte("<html>admin</html>")},
+	}
+	tag := computeStaticETag(fsys, "index.html")
+	if tag == "" || tag[0] != '"' || tag == computeStaticETag(fsys, "admin/index.html") {
+		t.Fatalf("bad tag %q", tag)
+	}
+	if computeStaticETag(fsys, "admin") != "" || computeStaticETag(fsys, "missing") != "" {
+		t.Fatalf("directories and missing files must not get a tag")
+	}
+	for _, c := range []struct {
+		header string
+		want   bool
+	}{
+		{tag, true}, {"W/" + tag, true}, {`"other", ` + tag, true}, {"*", true},
+		{`"other"`, false}, {"", false}, {"W/" + `"nope"`, false},
+	} {
+		if got := etagMatches(c.header, tag); got != c.want {
+			t.Fatalf("etagMatches(%q) = %v, want %v", c.header, got, c.want)
 		}
 	}
-	if !matched {
-		t.Fatalf("If-None-Match comparison failed")
+	if etagMatches("*", "") {
+		t.Fatalf("no tag, no match")
+	}
+}
+
+func TestPrimeSnapshotKeepsSignalEvents(t *testing.T) {
+	b := NewSSEBroker()
+	sub, _ := b.Subscribe(SSEViewPublic, "203.0.113.3")
+	b.BroadcastByView(map[SSEView]string{SSEViewPublic: `{"type":"metric_updated","count":1}`}, time.Now())
+	b.Broadcast(`{"type":"tcping_config_updated"}`)
+	p, ok := b.PrimeSnapshot(sub)
+	if !ok || !strings.Contains(p, "metric_updated") {
+		t.Fatalf("prime: %q %v", p, ok)
+	}
+	select {
+	case ev := <-sub.ch:
+		if !strings.Contains(ev, "tcping_config_updated") {
+			t.Fatalf("expected the signal to survive the drain, got %q", ev)
+		}
+	default:
+		t.Fatalf("the signal event was dropped by the prime drain")
+	}
+	select {
+	case ev := <-sub.ch:
+		t.Fatalf("stale snapshot must be dropped, got %q", ev)
+	default:
 	}
 }
 
