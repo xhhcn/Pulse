@@ -15,13 +15,19 @@
 //     "fails", painting a permanent 50 % loss on the dashboard for a target the
 //     agent was never able to test.
 //
-// The three errnos below are the second case — the probe was never attempted:
+// The three errnos below are the second case — the probe was never attempted.
+// They are matched by their syscall constants, never by number: the numbers are
+// per-platform, so the Linux values quoted here are illustrative only (ENETUNREACH
+// is 101 on Linux but 51 on macOS/BSD, EAFNOSUPPORT 97 vs 47, EADDRNOTAVAIL 99
+// vs 49). The syscall package resolves each constant for the platform being
+// built, which is why this file can cover Linux, macOS and the BSDs at once.
 //
-//	ENETUNREACH    (Linux 101) no route to the destination's network at all;
-//	               what a v6 literal gives you on a v4-only host.
-//	EAFNOSUPPORT   (Linux 97)  the kernel refuses the address family outright,
-//	               e.g. IPv6 disabled via sysctl / ipv6.disable=1.
-//	EADDRNOTAVAIL  (Linux 99)  no local source address of that family to bind.
+//	ENETUNREACH    no route to the destination's network at all; what a v6
+//	               literal gives you on a v4-only host. (Linux 101, macOS 51)
+//	EAFNOSUPPORT   the kernel refuses the address family outright, e.g. IPv6
+//	               disabled via sysctl / ipv6.disable=1. (Linux 97, macOS 47)
+//	EADDRNOTAVAIL  no local source address of that family to bind.
+//	               (Linux 99, macOS 49)
 //
 // Deliberately NOT in the set, because they are genuine loss signals about a
 // reachable network: EHOSTUNREACH (the network is reachable, that host is not),

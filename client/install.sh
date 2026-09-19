@@ -242,22 +242,49 @@ validate_binary() {
 }
 
 # Download binary
+#
+# Downloads to a temporary file, checks it actually is a binary for this
+# platform, and only then moves it into place:
+#   * curl needs -f, or an HTTP 404/500 body (a GitHub error page) is written
+#     out as the "binary" and happily chmod +x'd and launched;
+#   * validate_binary was defined but never called here, so nothing caught that;
+#   * writing straight onto $INSTALL_DIR/probe-client fails with ETXTBSY when
+#     the agent is already running, which is exactly the re-install case.
+# mv -f over the same filesystem is atomic and replaces the directory entry, so
+# a running agent keeps its now-unlinked inode and the next start picks up the
+# new one.
 download_binary() {
     info "Creating installation directory: $INSTALL_DIR"
     mkdir -p "$INSTALL_DIR"
 
     info "Downloading Pulse client (${BINARY_NAME})..."
     local download_url="${GITHUB_REPO}/${BINARY_NAME}"
+    local tmp_binary="${INSTALL_DIR}/probe-client.tmp"
+
+    rm -f "$tmp_binary"
 
     if command -v curl &>/dev/null; then
-        curl -sSL --proto '=https' "$download_url" -o "$INSTALL_DIR/probe-client" || error "Failed to download binary"
+        curl -fsSL --proto '=https' --connect-timeout 15 --max-time 300 "$download_url" -o "$tmp_binary" \
+            || { rm -f "$tmp_binary"; error "Failed to download binary"; }
     elif command -v wget &>/dev/null; then
-        wget -q "$download_url" -O "$INSTALL_DIR/probe-client" || error "Failed to download binary"
+        # wget has no --proto equivalent, so enforce HTTPS ourselves.
+        case "$download_url" in
+            https://*) ;;
+            *) error "Refusing to download over a non-HTTPS URL: $download_url" ;;
+        esac
+        wget -q --tries=3 --timeout=120 "$download_url" -O "$tmp_binary" \
+            || { rm -f "$tmp_binary"; error "Failed to download binary"; }
     else
         error "Neither curl nor wget found. Please install one of them."
     fi
 
-    chmod +x "$INSTALL_DIR/probe-client"
+    if ! validate_binary "$tmp_binary"; then
+        rm -f "$tmp_binary"
+        error "Downloaded file is not a valid ${OS} binary (server returned an error page?)"
+    fi
+
+    chmod +x "$tmp_binary"
+    mv -f "$tmp_binary" "$INSTALL_DIR/probe-client"
     success "Downloaded and installed probe-client"
 }
 
@@ -272,6 +299,14 @@ create_service_linux() {
     env_lines+="Environment=\"SERVER_BASE=$(systemd_escape_env "$SERVER_BASE")\""$'\n'
     env_lines+="Environment=\"CLIENT_PORT=$(systemd_escape_env "$CLIENT_PORT")\""$'\n'
     [ -n "$SECRET" ]     && env_lines+="Environment=\"SECRET=$(systemd_escape_env "$SECRET")\""$'\n'
+
+    # The unit embeds SECRET, so create it unreadable to anyone but root from
+    # the start: `cat >` would create it with the default mode (typically 644)
+    # and the chmod below only tightens it afterwards, leaving a window in which
+    # any local user can read the secret.
+    local old_umask
+    old_umask=$(umask)
+    umask 077
 
     cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
 [Unit]
@@ -293,6 +328,8 @@ LogRateLimitBurst=50
 [Install]
 WantedBy=multi-user.target
 EOF
+    umask "$old_umask"
+
     # The unit carries the agent secret; keep it readable by root only.
     chmod 600 /etc/systemd/system/${SERVICE_NAME}.service
 
@@ -356,6 +393,13 @@ create_service_macos() {
     env_xml+="        <key>CLIENT_PORT</key>"$'\n'"        <string>$(xml_escape "$CLIENT_PORT")</string>"$'\n'
     [ -n "$SECRET" ] && env_xml+="        <key>SECRET</key>"$'\n'"        <string>$(xml_escape "$SECRET")</string>"$'\n'
 
+    # The plist embeds SECRET; create it root-only from the start rather than
+    # relying on the chmod below, which would leave the secret world-readable
+    # between creation and chmod.
+    local old_umask
+    old_umask=$(umask)
+    umask 077
+
     cat > "$MACOS_PLIST_PATH" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -381,6 +425,7 @@ $(printf '%s' "$env_xml")    </dict>
 </dict>
 </plist>
 EOF
+    umask "$old_umask"
 
     # Use bootstrap/bootout (modern API, required on macOS 11+)
     # bootout removes an existing registration so we can re-register cleanly
@@ -547,13 +592,24 @@ main() {
 
     log_msg "[INFO] Checking for updates (${binary_name})..."
 
+    # -f matters: without it curl writes an HTTP error body (a GitHub 404 page)
+    # to $TEMP_BINARY and exits 0, and only validate_binary below stands between
+    # that and an "update" that replaces a working agent with an HTML file.
     if command -v curl &>/dev/null; then
-        if ! curl -sSL --proto '=https' --connect-timeout 15 --max-time 120 "$download_url" -o "$TEMP_BINARY" 2>/dev/null; then
+        if ! curl -fsSL --proto '=https' --connect-timeout 15 --max-time 300 "$download_url" -o "$TEMP_BINARY" 2>/dev/null; then
             log_msg "[WARN] Download failed, will retry next cycle"
             exit 0
         fi
     elif command -v wget &>/dev/null; then
-        if ! wget -q --timeout=120 "$download_url" -O "$TEMP_BINARY" 2>/dev/null; then
+        # wget has no --proto equivalent, so enforce HTTPS ourselves.
+        case "$download_url" in
+            https://*) ;;
+            *)
+                log_msg "[ERROR] Refusing to download over a non-HTTPS URL: $download_url"
+                exit 1
+                ;;
+        esac
+        if ! wget -q --tries=3 --timeout=120 "$download_url" -O "$TEMP_BINARY" 2>/dev/null; then
             log_msg "[WARN] Download failed, will retry next cycle"
             exit 0
         fi

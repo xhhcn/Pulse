@@ -17,7 +17,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 	"syscall"
@@ -112,7 +112,7 @@ func readSysinfoUptime() (int64, bool) {
 // line. After that, fields are space-separated and well-defined. starttime
 // is the 20th field after the closing paren (index 19, 0-based).
 func readPid1StartTicks() (int64, bool) {
-	data, err := ioutil.ReadFile("/proc/1/stat")
+	data, err := os.ReadFile("/proc/1/stat")
 	if err != nil || len(data) == 0 {
 		return 0, false
 	}

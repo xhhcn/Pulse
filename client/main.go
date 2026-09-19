@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -105,14 +104,28 @@ var (
 	// refresh fails (see getIPAddresses).
 	ipKeepStaleFor = 10 * time.Minute
 	ipDetectedAt   time.Time
+	// ipRefreshInFlight is true while a background refresh goroutine is running.
+	// Without it every caller that sees a stale cache starts its own refresh,
+	// and each refresh fires a dozen outbound requests that take seconds to
+	// finish — so a single /metrics poll storm (the endpoint is unauthenticated
+	// when SECRET is unset) turns into an outbound request flood. Guarded by
+	// ipCacheMutex.
+	ipRefreshInFlight bool
 
 	// Shared HTTP client for connection reuse (important for cross-continent networks)
 	sharedHTTPClient     *http.Client
 	sharedHTTPClientOnce sync.Once
 
-	// Security warning log throttling
-	lastSecurityWarningTime time.Time
-	securityWarningMutex    sync.Mutex
+	// Per-message log throttling for logOncePerMinute (see there).
+	logThrottleTimes = make(map[string]time.Time)
+	logThrottleMutex sync.Mutex
+
+	// Most recent metric payload collected by the push loop, served to /metrics
+	// callers so that a poll does not rebase the CPU/network delta samplers.
+	// See handleMetricsRequest.
+	lastPushedMetrics     metricPayload
+	lastPushedMetricsTime time.Time
+	lastPushedMetricsMu   sync.Mutex
 
 	// Push mode: TCPing targets received from server (refreshed on every push response)
 	pushTCPingTargets     []string
@@ -280,8 +293,8 @@ func startMacOSCPULoop() {
 // sampleMacOSCPU runs "top -l 2 -n 0" which produces two snapshots ~1 s apart.
 // The second "CPU usage" line is the actual delta over that second.
 func sampleMacOSCPU() float64 {
-	out, err := exec.Command("sh", "-c",
-		`top -l 2 -n 0 2>/dev/null | grep "CPU usage" | tail -1`).Output()
+	out, err := runCommandOutput(slowProbeCommandTimeout, "sh", "-c",
+		`top -l 2 -n 0 2>/dev/null | grep "CPU usage" | tail -1`)
 	if err != nil {
 		return 0.0
 	}
@@ -307,7 +320,7 @@ func sampleMacOSCPU() float64 {
 // We read hw.memsize and vm_stat directly instead.
 func macOSMemoryStats() (usedPct float64, usedBytes, totalBytes uint64, err error) {
 	// Total physical RAM
-	out, e := exec.Command("sysctl", "-n", "hw.memsize").Output()
+	out, e := runCommandOutput(probeCommandTimeout, "sysctl", "-n", "hw.memsize")
 	if e != nil {
 		return 0, 0, 0, e
 	}
@@ -317,12 +330,12 @@ func macOSMemoryStats() (usedPct float64, usedBytes, totalBytes uint64, err erro
 
 	// Page size (4096 on Intel, 16384 on Apple Silicon)
 	pageSize := uint64(4096)
-	if out, e = exec.Command("sysctl", "-n", "hw.pagesize").Output(); e == nil {
+	if out, e = runCommandOutput(probeCommandTimeout, "sysctl", "-n", "hw.pagesize"); e == nil {
 		fmt.Sscanf(strings.TrimSpace(string(out)), "%d", &pageSize)
 	}
 
 	// Parse vm_stat for page counts
-	out, e = exec.Command("vm_stat").Output()
+	out, e = runCommandOutput(probeCommandTimeout, "vm_stat")
 	if e != nil {
 		return 0, 0, totalBytes, e
 	}
@@ -358,7 +371,7 @@ func macOSMemoryStats() (usedPct float64, usedBytes, totalBytes uint64, err erro
 // ── macOS: swap via sysctl vm.swapusage ──────────────────────────────────────
 // Output format: "total = 3072.00M  used = 2097.25M  free = 974.75M (encrypted)"
 func macOSSwapStats() (usedBytes, totalBytes uint64) {
-	out, err := exec.Command("sysctl", "-n", "vm.swapusage").Output()
+	out, err := runCommandOutput(probeCommandTimeout, "sysctl", "-n", "vm.swapusage")
 	if err != nil {
 		return 0, 0
 	}
@@ -615,21 +628,85 @@ func getSharedHTTPClient() *http.Client {
 	return sharedHTTPClient
 }
 
-// logOncePerMinute logs a message at most once per minute to avoid log spam
+const (
+	// logThrottleInterval is how long a given message stays suppressed after
+	// it has been logged.
+	logThrottleInterval = 1 * time.Minute
+	// logThrottleMaxEntries is the map size above which stale entries are
+	// pruned, so server-supplied text (TCPing target names) cannot grow the
+	// map without bound.
+	logThrottleMaxEntries = 128
+	// logThrottleRetention is how long an entry is kept when pruning. Anything
+	// older than logThrottleInterval can no longer suppress a message, so this
+	// is deliberately generous.
+	logThrottleRetention = 2 * time.Minute
+)
+
+// logOncePerMinute logs a message at most once per minute to avoid log spam.
+//
+// The throttle is keyed on the message itself. A single shared timestamp (what
+// this used to be) means the first caller in any minute silences every other
+// caller: the per-target "TCPing skipped" notice fires on every cycle and used
+// to permanently suppress the "no SECRET configured" security warning, which
+// therefore never reached the log.
 func logOncePerMinute(message string) {
-	securityWarningMutex.Lock()
-	defer securityWarningMutex.Unlock()
+	logThrottleMutex.Lock()
+	defer logThrottleMutex.Unlock()
 
 	now := time.Now()
-	if now.Sub(lastSecurityWarningTime) >= 1*time.Minute {
-		log.Println(message)
-		lastSecurityWarningTime = now
+	if last, seen := logThrottleTimes[message]; seen && now.Sub(last) < logThrottleInterval {
+		return
 	}
+
+	if len(logThrottleTimes) > logThrottleMaxEntries {
+		for msg, t := range logThrottleTimes {
+			if now.Sub(t) > logThrottleRetention {
+				delete(logThrottleTimes, msg)
+			}
+		}
+	}
+
+	log.Println(message)
+	logThrottleTimes[message] = now
 }
+
+// runCommandOutput runs an external command with a hard deadline and returns
+// its standard output.
+//
+// Every system probe the agent shells out to (df, sysctl, lscpu, wmic, ...)
+// runs on the push path, and several of them can block forever: `df` wedges on
+// a dead NFS/CIFS mount, `wmic` on a stuck WMI service, `lscpu` on a hung
+// sysfs. exec.Command applies no timeout whatsoever, so one hung probe used to
+// stall metric collection — and with it the 3-second push loop — indefinitely.
+//
+// On timeout the context kills the process and this returns ctx.Err()-flavoured
+// failure, which is the same error shape the call sites already handle: each
+// one falls back to its cached value or to the default it uses when the command
+// is missing, so a timed-out probe degrades exactly like an absent one.
+func runCommandOutput(timeout time.Duration, name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return exec.CommandContext(ctx, name, args...).Output()
+}
+
+const (
+	// probeCommandTimeout bounds the quick probes: df, sysctl, uname,
+	// systemd-detect-virt, sw_vers and the /proc greps.
+	probeCommandTimeout = 5 * time.Second
+	// slowProbeCommandTimeout bounds the probes that are routinely slow even
+	// on a healthy machine: wmic spins up a WMI query, lscpu walks every CPU,
+	// system_profiler builds a full hardware report and `top -l 2` samples for
+	// a second by design.
+	slowProbeCommandTimeout = 10 * time.Second
+)
 
 // Register client with server
 func registerWithServer() {
-	// Retry registration with exponential backoff - increased for cross-continent networks
+	// Retry registration with linear backoff: the pause before attempt i is
+	// (i+1) seconds, so 1 s, 2 s, 3 s … 10 s, about 55 s of waiting across all
+	// ten attempts. Deliberately not exponential — cross-continent registration
+	// usually succeeds after a few seconds, and doubling would push the last
+	// attempts minutes out.
 	maxRetries := 10 // Increased from 5 to handle high-latency networks (e.g., China to overseas)
 	for i := 0; i < maxRetries; i++ {
 		time.Sleep(time.Duration(i+1) * time.Second) // Wait before retry
@@ -690,7 +767,7 @@ func registerWithServer() {
 		if resp.StatusCode == http.StatusOK {
 			// Parse registration response to get initial TCPing targets for push mode
 			var regResp RegisterResponse
-			if body, readErr := ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)); readErr == nil {
+			if body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)); readErr == nil {
 				if jsonErr := json.Unmarshal(body, &regResp); jsonErr == nil {
 					applyPushTCPingConfig(regResp.TCPingTargets, regResp.TCPingIntervalSecs)
 				}
@@ -701,7 +778,7 @@ func registerWithServer() {
 			return
 		} else {
 			// Read error response body for debugging
-			body, _ := ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
 			resp.Body.Close()
 			cancel()
 			log.Printf("❌ Registration failed (attempt %d/%d): HTTP %d - %s", i+1, maxRetries, resp.StatusCode, string(body))
@@ -782,13 +859,13 @@ func startPeriodicRegistration() {
 		// connection reuse. For 200, parse TCPing config; for other statuses, discard.
 		if resp.StatusCode == http.StatusOK {
 			var regResp RegisterResponse
-			if body, readErr := ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)); readErr == nil {
+			if body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)); readErr == nil {
 				if jsonErr := json.Unmarshal(body, &regResp); jsonErr == nil {
 					applyPushTCPingConfig(regResp.TCPingTargets, regResp.TCPingIntervalSecs)
 				}
 			}
 		} else {
-			ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck
+			io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck
 		}
 		resp.Body.Close()
 		cancel()
@@ -837,11 +914,52 @@ func handleMetricsRequest(w http.ResponseWriter, r *http.Request) {
 		logOncePerMinute("⚠️  SECURITY WARNING: /metrics endpoint is accessible without authentication. Please configure SECRET environment variable for security.")
 	}
 
-	// Collect system metrics
-	metrics := collectSystemMetrics()
+	// Serve the payload the push loop most recently collected, when it is still
+	// fresh.
+	//
+	// getCPUUsage and getNetworkStats are delta samplers: each one stores the
+	// counters it read and reports the change since the previous reading. They
+	// are package-level state shared by both paths, so collecting here would
+	// consume the interval the push loop is about to report and make the next
+	// push show a near-zero delta over a few milliseconds. A poller hitting
+	// /metrics (unauthenticated when SECRET is unset) could therefore distort
+	// every CPU and traffic figure the server records.
+	//
+	// The push loop runs unconditionally (see main), so the snapshot is the
+	// normal path. The fallback covers the first seconds after start, before
+	// the first push, and any future pull-only build with no push loop.
+	metrics, fresh := recentMetricsSnapshot()
+	if !fresh {
+		metrics = collectSystemMetrics()
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(metrics)
+}
+
+// metricsSnapshotMaxAge is how old the push loop's last payload may be and
+// still be served to a /metrics caller. The push loop collects every 3 s, so 5 s
+// keeps the endpoint on the snapshot path across one missed cycle while never
+// serving data a caller would consider stale.
+const metricsSnapshotMaxAge = 5 * time.Second
+
+// storeMetricsSnapshot records the payload the push loop just collected.
+func storeMetricsSnapshot(m metricPayload) {
+	lastPushedMetricsMu.Lock()
+	lastPushedMetrics = m
+	lastPushedMetricsTime = time.Now()
+	lastPushedMetricsMu.Unlock()
+}
+
+// recentMetricsSnapshot returns the most recent payload collected by the push
+// loop and whether it is younger than metricsSnapshotMaxAge.
+func recentMetricsSnapshot() (metricPayload, bool) {
+	lastPushedMetricsMu.Lock()
+	defer lastPushedMetricsMu.Unlock()
+	if lastPushedMetricsTime.IsZero() || time.Since(lastPushedMetricsTime) > metricsSnapshotMaxAge {
+		return metricPayload{}, false
+	}
+	return lastPushedMetrics, true
 }
 
 // Handle health check
@@ -1102,12 +1220,17 @@ func startPushLoop() {
 	httpClient := getPushHTTPClient()
 
 	for range ticker.C {
-		// Collect current system metrics (uses the same caching as pull mode)
+		// Collect current system metrics. This loop owns the CPU/network delta
+		// samplers; the snapshot it publishes is what /metrics serves, so a
+		// pull never rebases those samplers mid-interval.
 		metrics := collectSystemMetrics()
+		storeMetricsSnapshot(metrics)
 
 		// Drain any pending TCPing results accumulated by startPushTCPingLoop.
-		// We drain into a local variable but put them back if the push fails so
-		// no results are silently discarded on transient network errors.
+		// We drain into a local variable and put them back on any transient
+		// failure (marshal error, request error, 5xx) so a flaky network never
+		// loses a measurement. The one case where drained results are dropped
+		// on purpose is a 404/401 reply — see that branch below.
 		pendingTCPingResultsMu.Lock()
 		tcpingResults := pendingTCPingResults
 		pendingTCPingResults = nil
@@ -1192,16 +1315,19 @@ func startPushLoop() {
 				applyPushTCPingConfig(pushResp.TCPingTargets, pushResp.TCPingIntervalSecs)
 			} else {
 				// Decode failed — drain remainder to enable connection reuse
-				ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck
+				io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck
 			}
 		} else if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized {
-			// Server doesn't know this client ID or secret is wrong.
-			// TCPing results are genuinely not needed if the server rejects us.
-			// Don't put them back to avoid infinite accumulation.
-			ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck // drain to enable connection reuse
+			// The server does not know this client ID, or the secret is wrong.
+			// These results are discarded on purpose — this is the deliberate
+			// exception to "no result is lost on failure". Retrying cannot help
+			// (both conditions persist until an admin re-registers the client or
+			// fixes SECRET) and re-queueing would grow the backlog until the cap
+			// evicts the measurements anyway.
+			io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck // drain to enable connection reuse
 		} else {
 			// Transient server error — preserve TCPing results for next cycle
-			ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck // drain to enable connection reuse
+			io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck // drain to enable connection reuse
 			if len(tcpingResults) > 0 {
 				pendingTCPingResultsMu.Lock()
 				combined := append(tcpingResults, pendingTCPingResults...)
@@ -1284,18 +1410,30 @@ func measureTCPingOnce(targets []string) {
 //
 //  2. MEASURE — produce one chart point at the current time.
 //
-//  3. TIME-DRIVEN WAIT — sleep exactly `interval` seconds before the next
-//     measurement. If the admin changes the interval mid-sleep the timer is
-//     reset to the NEW interval (fresh "N seconds from now"); we do NOT shoot
-//     an extra measurement just because the interval changed. This keeps the
-//     chart gap after a change equal to the new interval instead of producing
-//     a misleading "bonus" point right after the change.
+//  3. TIME-DRIVEN WAIT — wait until `interval` seconds have passed since the
+//     START of the measurement, not since it finished. The measurement itself
+//     takes as long as the slowest target's dial (up to the TCPing timeout), so
+//     sleeping the full interval afterwards would make the real period
+//     `interval + measurement`: with a 5 s interval and targets that time out
+//     after 3 s, points would land 8 s apart and the chart would drift steadily
+//     away from the configured cadence. A measurement that overruns its own
+//     interval simply schedules the next one immediately (no negative wait, no
+//     catch-up burst).
+//
+//     If the admin changes the interval mid-wait the schedule restarts from
+//     that moment (fresh "N seconds from now"); we do NOT shoot an extra
+//     measurement just because the interval changed. This keeps the chart gap
+//     after a change equal to the new interval instead of producing a
+//     misleading "bonus" point right after the change.
 //
 // Net effect for any admin interval N:
 //   - First point: ≤ 5 s after client start (or sooner via signal shortcut).
-//   - Every subsequent point: exactly N seconds after the previous one, with
-//     the server-side timestamp taken from the client's MeasuredAt (so the
-//     3-second push cycle no longer quantises the chart).
+//   - Every subsequent point: N seconds after the previous one — measured
+//     start-to-start, so the measurement's own duration is absorbed by the
+//     wait — with the server-side timestamp taken from the client's MeasuredAt
+//     (so the 3-second push cycle no longer quantises the chart). Only a
+//     measurement slower than N itself stretches the gap, and then only by its
+//     own overrun.
 //   - Changing N from 5→100 or 60→5 in the admin page takes effect within
 //     one push cycle (≤ 3 s) without producing out-of-schedule points.
 func startPushTCPingLoop() {
@@ -1307,25 +1445,29 @@ func startPushTCPingLoop() {
 
 	for {
 		// ── MEASURE ────────────────────────────────────────────────────
+		// cycleStart anchors the schedule: the next point is due `interval`
+		// seconds after this instant, however long the measurement takes.
+		cycleStart := time.Now()
 		targets, _ := currentPushTCPingConfig()
 		measureTCPingOnce(targets)
 
 		// ── TIME-DRIVEN WAIT ───────────────────────────────────────────
-		// Inner loop keeps us on a strict "N seconds since last measurement"
-		// schedule. Interval changes restart the timer instead of jumping
-		// straight to another measurement.
+		// Inner loop keeps us on a strict "N seconds since the last cycle
+		// started" schedule. Interval changes re-anchor the schedule instead
+		// of jumping straight to another measurement.
 	wait:
 		for {
 			_, interval := currentPushTCPingConfig()
-			timer := time.NewTimer(time.Duration(interval) * time.Second)
+			timer := time.NewTimer(tcpingWaitDuration(interval, time.Since(cycleStart)))
 			select {
 			case <-pushTCPingIntervalChanged:
 				if !timer.Stop() {
 					<-timer.C
 				}
-				// Loop around: re-read the new interval and start a fresh
-				// sleep. No measurement happens here — the next point will
-				// land exactly `new interval` seconds from now.
+				// Re-anchor to now and loop around to re-read the new
+				// interval. No measurement happens here — the next point
+				// will land exactly `new interval` seconds from now.
+				cycleStart = time.Now()
 				continue
 			case <-timer.C:
 				// Normal tick — proceed to the next measurement.
@@ -1333,6 +1475,24 @@ func startPushTCPingLoop() {
 			}
 		}
 	}
+}
+
+// tcpingWaitDuration returns how long to wait before the next TCPing
+// measurement, given the configured interval in seconds and how much time has
+// already elapsed since the current cycle started.
+//
+// The result is clamped at zero: a cycle whose measurement outran its own
+// interval starts the next one immediately rather than trying to make up the
+// lost time with back-to-back measurements.
+func tcpingWaitDuration(intervalSec int, elapsed time.Duration) time.Duration {
+	if intervalSec < 0 {
+		intervalSec = 0
+	}
+	wait := time.Duration(intervalSec)*time.Second - elapsed
+	if wait < 0 {
+		return 0
+	}
+	return wait
 }
 
 // Collect system metrics
@@ -1377,7 +1537,7 @@ func collectSystemMetrics() metricPayload {
 		NetOutMBps:         netOut,
 		TotalNetInBytes:    totalNetInBytes,
 		TotalNetOutBytes:   totalNetOutBytes,
-		AgentVersion:       "1.3.25",
+		AgentVersion:       "1.3.26",
 		Alert:              false, // Can be enhanced with actual alert logic
 	}
 }
@@ -1407,7 +1567,7 @@ func getOSInfo() OSInfo {
 			// unexpected format we fall back to the plain "macOS"
 			// string rather than logging noise.
 			name = "macOS"
-			if out, err := exec.Command("sw_vers", "-productVersion").Output(); err == nil {
+			if out, err := runCommandOutput(probeCommandTimeout, "sw_vers", "-productVersion"); err == nil {
 				if v := strings.TrimSpace(string(out)); v != "" {
 					if mn := macOSMarketingName(v); mn != "" {
 						name = fmt.Sprintf("macOS %s %s", mn, v)
@@ -1421,7 +1581,14 @@ func getOSInfo() OSInfo {
 			name = "Windows"
 			icon = "logos:microsoft-windows-icon"
 		default:
-			name = strings.Title(osName)
+			// Capitalise the GOOS string ("freebsd" → "Freebsd"). GOOS values
+			// are ASCII and single-word, so this needs none of the Unicode
+			// word-boundary machinery strings.Title used to apply (and got
+			// wrong, which is why it is deprecated).
+			name = osName
+			if name != "" {
+				name = strings.ToUpper(name[:1]) + name[1:]
+			}
 			icon = "devicon:linux"
 		}
 
@@ -1432,7 +1599,7 @@ func getOSInfo() OSInfo {
 
 func detectLinuxDistro() string {
 	// Try to detect Linux distribution from /etc/os-release
-	data, err := ioutil.ReadFile("/etc/os-release")
+	data, err := os.ReadFile("/etc/os-release")
 	if err == nil {
 		content := string(data)
 		contentLower := strings.ToLower(content)
@@ -1498,7 +1665,7 @@ func detectLinuxDistro() string {
 	}
 
 	// Fallback: try reading /etc/issue
-	if data, err := ioutil.ReadFile("/etc/issue"); err == nil {
+	if data, err := os.ReadFile("/etc/issue"); err == nil {
 		content := strings.ToLower(string(data))
 		if strings.Contains(content, "ubuntu") {
 			return "Ubuntu"
@@ -1611,6 +1778,13 @@ func isPrivateIP(ip net.IP) bool {
 		if ip4[0] == 192 && ip4[1] == 168 {
 			return true
 		}
+		// Carrier-grade NAT: 100.64.0.0/10 (RFC 6598). Handed out by mobile
+		// networks and by some VPS/IPv4-exhausted providers. It is not
+		// reachable from the internet, so reporting one as the machine's
+		// public address is as wrong as reporting a 10.x address.
+		if ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127 {
+			return true
+		}
 		// Link-local: 169.254.0.0/16
 		if ip4[0] == 169 && ip4[1] == 254 {
 			return true
@@ -1622,7 +1796,13 @@ func isPrivateIP(ip net.IP) bool {
 		return false
 	}
 
-	// Check IPv6 private ranges
+	// Check IPv6 private ranges.
+	// Guard the length first: To4 has already handled every 4-byte form, so
+	// anything that is not a 16-byte address here is malformed. Treat it as
+	// non-public instead of indexing past the end of the slice.
+	if len(ip) != net.IPv6len {
+		return true
+	}
 	// Loopback: ::1
 	if ip.IsLoopback() {
 		return true
@@ -1665,7 +1845,7 @@ func getIPAddresses() (ipv4, ipv6 string) {
 	if coldStart {
 		// Very first call: block until we have real IPs so the first push payload
 		// is populated correctly.  This happens once at startup.
-		v4, v6 = detectIPAddresses()
+		v4, v6 = detectIPAddressesFn()
 		ipCacheMutex.Lock()
 		ipv4Cache = v4
 		ipv6Cache = v6
@@ -1680,9 +1860,28 @@ func getIPAddresses() (ipv4, ipv6 string) {
 	// Cache stale (post-startup): refresh in the background so the push loop is
 	// never blocked by external IP-echo API latency (up to 8 s worst-case).
 	// The stale IPs are returned immediately; the next push cycle gets fresh IPs.
+	//
+	// Only one refresh may be in flight. A refresh takes seconds and issues a
+	// dozen outbound requests; meanwhile every caller still sees a stale cache,
+	// so without this flag each of them starts another full refresh. The push
+	// loop alone calls this every 3 s, and /metrics — unauthenticated when no
+	// SECRET is configured — calls it once per request, so an unthrottled
+	// poller could multiply into an outbound request flood.
+	ipCacheMutex.Lock()
+	if ipRefreshInFlight {
+		// Someone is already refreshing; hand back what we have.
+		v4, v6 = ipv4Cache, ipv6Cache
+		ipCacheMutex.Unlock()
+		return v4, v6
+	}
+	ipRefreshInFlight = true
+	ipCacheMutex.Unlock()
+
 	go func() {
-		newV4, newV6 := detectIPAddresses()
+		newV4, newV6 := detectIPAddressesFn()
 		ipCacheMutex.Lock()
+		defer ipCacheMutex.Unlock()
+		ipRefreshInFlight = false
 		// A refresh that finds nothing (echo services unreachable for a
 		// while) keeps the last known addresses instead of reporting none,
 		// which would make the server fall back to the connection source.
@@ -1705,11 +1904,14 @@ func getIPAddresses() (ipv4, ipv6 string) {
 			ipv6Cache = ""
 		}
 		ipCacheTime = time.Now()
-		ipCacheMutex.Unlock()
 	}()
 
 	return v4, v6
 }
+
+// detectIPAddressesFn indirects detectIPAddresses so tests can substitute a
+// stub for the network-dependent detection. Production code never reassigns it.
+var detectIPAddressesFn = detectIPAddresses
 
 // detectIPAddresses detects the machine's public IPv4 and IPv6 addresses.
 //
@@ -1817,34 +2019,20 @@ func scanInterfaceIPs() (ipv4, ipv6 string) {
 	return ipv4, ipv6
 }
 
-// getPublicIPv4 fetches the public IPv4 address from external APIs.
-// Uses parallel requests (first-wins) so a slow or unreachable service does not
-// block detection.  Each goroutine gets its own per-request timeout, avoiding
-// the shared-context starvation bug of the old sequential approach.
-func getPublicIPv4() string {
-	services := []string{
-		// Plain-text IP-echo services — most reliable and fast
-		"https://api4.my-ip.io/ip", // IPv4-forced endpoint
-		"https://api.ipify.org",
-		"https://icanhazip.com",
-		"https://ipinfo.io/ip", // ipinfo.io — accurate and widely available
-		"http://api.ipify.org", // HTTP fallback (useful behind TLS-stripping proxies)
-		"http://icanhazip.com",
-		"http://ip.sb",
-		"http://myip.ipip.net", // China-friendly
-		"http://ip.3322.net",   // China-friendly
-		"http://ifconfig.me/ip",
-	}
+// Budgets for one public-IP detection pass. The HTTPS phase and the plaintext
+// fallback phase together stay inside publicIPTotalBudget, which is the 8 s
+// worst case getIPAddresses documents.
+const (
+	publicIPTotalBudget       = 8 * time.Second
+	publicIPHTTPSBudget       = 6 * time.Second
+	publicIPFallbackMinBudget = 2 * time.Second
+)
 
-	// Result channel is buffered so goroutines never block on send.
-	resultCh := make(chan string, len(services))
-
-	// Overall deadline: if no service replies within 8 s we give up.
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-
-	// Dedicated lightweight client for IP detection — no keepalive needed here.
-	detectionClient := &http.Client{
+// newIPDetectionClient builds the lightweight one-shot HTTP client used for
+// IP-echo queries. No connection reuse is wanted here, and each request carries
+// its own timeout so one dead service cannot starve the others.
+func newIPDetectionClient() *http.Client {
+	return &http.Client{
 		Timeout: 5 * time.Second, // per-request timeout (independent of other goroutines)
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
@@ -1855,9 +2043,36 @@ func getPublicIPv4() string {
 			DisableKeepAlives:     true, // no connection reuse needed for one-shot detection
 		},
 	}
+}
+
+// raceIPEchoServices queries every service concurrently and returns the first
+// reply that parses as an address `accept` approves of, or "" if none does
+// within the budget. Losing goroutines are abandoned; the buffered channel
+// means they never block on send.
+func raceIPEchoServices(services []string, budget time.Duration, accept func(net.IP) bool) string {
+	if len(services) == 0 || budget <= 0 {
+		return ""
+	}
+
+	resultCh := make(chan string, len(services))
+
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+
+	detectionClient := newIPDetectionClient()
+
+	// done closes once every service has finished. Without it a phase in which
+	// all services fail fast (DNS refused, HTTP 500) would still sit out its
+	// whole budget, which in the HTTPS phase leaves the plaintext fallback with
+	// only the minimum budget instead of the seconds it should have inherited.
+	var wg sync.WaitGroup
+	done := make(chan struct{})
 
 	for _, svc := range services {
+		wg.Add(1)
 		go func(url string) {
+			defer wg.Done()
+
 			reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
 			defer reqCancel()
 
@@ -1877,7 +2092,7 @@ func getPublicIPv4() string {
 			if resp.StatusCode != http.StatusOK {
 				return
 			}
-			body, err := ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
+			body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
 			if err != nil {
 				return
 			}
@@ -1887,7 +2102,7 @@ func getPublicIPv4() string {
 				return
 			}
 			ip := net.ParseIP(ipStr)
-			if ip != nil && ip.To4() != nil && !isPrivateIP(ip) {
+			if ip != nil && accept(ip) {
 				select {
 				case resultCh <- ipStr:
 				default: // another goroutine already won
@@ -1896,82 +2111,104 @@ func getPublicIPv4() string {
 		}(svc)
 	}
 
-	// Return the first valid result or empty string on timeout.
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	// Return the first valid result, or give up once every service has failed
+	// or the budget runs out.
 	select {
 	case ip := <-resultCh:
 		return ip
+	case <-done:
 	case <-ctx.Done():
+	}
+
+	// A winner may have landed in the buffer just as we stopped waiting; `done`
+	// in particular closes only after every sender has returned.
+	select {
+	case ip := <-resultCh:
+		return ip
+	default:
 		return ""
 	}
+}
+
+// racePublicIP asks the HTTPS services first and only falls back to the
+// plaintext ones when every HTTPS service has failed.
+//
+// Racing HTTP against HTTPS and taking the first answer — what this used to do
+// — hands the result to whoever replies fastest, and an on-path party is
+// exactly the entity that can reply fastest to a plaintext request: it forges a
+// response to http://api.ipify.org from the first hop while the real HTTPS
+// services are still completing their TLS handshakes. The agent would then
+// report, and the dashboard would display, an attacker-chosen address. Trying
+// the authenticated services first means a forged plaintext reply can only be
+// used when no HTTPS service answered at all.
+func racePublicIP(httpsServices, httpServices []string, accept func(net.IP) bool) string {
+	deadline := time.Now().Add(publicIPTotalBudget)
+
+	if ip := raceIPEchoServices(httpsServices, publicIPHTTPSBudget, accept); ip != "" {
+		return ip
+	}
+
+	// Whatever is left of the overall budget goes to the plaintext fallback,
+	// with a floor so the phase is not pointless when the HTTPS phase used up
+	// nearly everything.
+	remaining := time.Until(deadline)
+	if remaining < publicIPFallbackMinBudget {
+		remaining = publicIPFallbackMinBudget
+	}
+	return raceIPEchoServices(httpServices, remaining, accept)
+}
+
+// isPublicIPv4 reports whether ip is a globally routable IPv4 address.
+func isPublicIPv4(ip net.IP) bool { return ip.To4() != nil && !isPrivateIP(ip) }
+
+// isPublicIPv6 reports whether ip is a globally routable IPv6 address.
+func isPublicIPv6(ip net.IP) bool { return ip.To4() == nil && !isPrivateIP(ip) }
+
+// getPublicIPv4 fetches the public IPv4 address from external APIs.
+// HTTPS services are raced first (first-wins); the plaintext services are only
+// consulted if all of them fail — see racePublicIP.
+func getPublicIPv4() string {
+	httpsServices := []string{
+		// Plain-text IP-echo services — most reliable and fast
+		"https://api4.my-ip.io/ip", // IPv4-forced endpoint
+		"https://api.ipify.org",
+		"https://icanhazip.com",
+		"https://ipinfo.io/ip", // ipinfo.io — accurate and widely available
+	}
+	httpServices := []string{
+		// Last resort only: an on-path party can forge any of these, so they
+		// run solely when every HTTPS service above has failed (useful behind
+		// TLS-stripping proxies and on networks that block 443 outright).
+		"http://api.ipify.org",
+		"http://icanhazip.com",
+		"http://ip.sb",
+		"http://myip.ipip.net", // China-friendly
+		"http://ip.3322.net",   // China-friendly
+		"http://ifconfig.me/ip",
+	}
+
+	return racePublicIP(httpsServices, httpServices, isPublicIPv4)
 }
 
 // getPublicIPv6 fetches the public IPv6 address from external APIs (parallel, first-wins).
 // Useful for NAT machines that have native IPv6 but no direct IPv4.
 func getPublicIPv6() string {
-	services := []string{
+	httpsServices := []string{
 		"https://api6.my-ip.io/ip", // IPv6-forced endpoint
 		"https://ipv6.icanhazip.com",
 		"https://v6.ident.me",
 	}
+	// No plaintext IPv6 echo services are configured. Any that are added later
+	// belong here, so they stay a fallback behind the HTTPS ones rather than
+	// racing them.
+	var httpServices []string
 
-	resultCh := make(chan string, len(services))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
-	defer cancel()
-
-	detectionClient := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout: 4 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout:   4 * time.Second,
-			ResponseHeaderTimeout: 4 * time.Second,
-			DisableKeepAlives:     true,
-		},
-	}
-
-	for _, svc := range services {
-		go func(url string) {
-			reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
-			defer reqCancel()
-
-			req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
-			if err != nil {
-				return
-			}
-			req.Header.Set("User-Agent", "PulseClient/1.0")
-
-			resp, err := detectionClient.Do(req)
-			if err != nil {
-				return
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				return
-			}
-			body, err := ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
-			if err != nil {
-				return
-			}
-			ipStr := strings.TrimSpace(string(body))
-			ip := net.ParseIP(ipStr)
-			if ip != nil && ip.To4() == nil && !isPrivateIP(ip) { // must be IPv6
-				select {
-				case resultCh <- ipStr:
-				default:
-				}
-			}
-		}(svc)
-	}
-
-	select {
-	case ip := <-resultCh:
-		return ip
-	case <-ctx.Done():
-		return ""
-	}
+	return racePublicIP(httpsServices, httpServices, isPublicIPv6)
 }
 
 func getLocation() string {
@@ -2045,7 +2282,7 @@ func getCPUUsage() float64 {
 	defer cpuStatsMutex.Unlock()
 
 	// Read /proc/stat for accurate CPU usage (Linux)
-	data, err := ioutil.ReadFile("/proc/stat")
+	data, err := os.ReadFile("/proc/stat")
 	if err != nil {
 		// /proc/stat missing/unreadable — classic locked-down LXC symptom.
 		// Fall back to cgroup-reported CPU time, which isn't affected by
@@ -2205,7 +2442,7 @@ func getMemoryUsage() float64 {
 	}
 
 	// Step 2 — /proc/meminfo.
-	data, err := ioutil.ReadFile("/proc/meminfo")
+	data, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		if u, t, ok := resolveMemoryStats(); ok && t > 0 {
 			return clamp(float64(u) / float64(t) * 100.0)
@@ -2338,7 +2575,7 @@ func computeDiskUsage() float64 {
 
 	// Get disk usage percentage for LOCAL physical filesystems only (Linux)
 	// Only include /dev/* devices, exclude virtual/network filesystems, track unique devices
-	cmd := exec.Command("sh", "-c", `df -B1 -T 2>/dev/null | tail -n +2 | awk '
+	output, err := runCommandOutput(probeCommandTimeout, "sh", "-c", `df -B1 -T 2>/dev/null | tail -n +2 | awk '
 		$1 ~ /^\/dev\// && 
 		$2 !~ /^(tmpfs|devtmpfs|squashfs|overlay|aufs|nfs|nfs4|cifs|smb|smbfs|fuse|sshfs|proc|sysfs|debugfs|securityfs|cgroup|cgroup2|pstore|bpf|tracefs|hugetlbfs|mqueue|configfs|fusectl|efivarfs|binfmt_misc|devpts|ramfs)$/ {
 			if (!seen[$1]++) {
@@ -2350,7 +2587,6 @@ func computeDiskUsage() float64 {
 			if (total > 0) printf "%.1f\n", (used/total)*100
 			else print "0"
 		}'`)
-	output, err := cmd.Output()
 	if err == nil {
 		outputStr := strings.TrimSpace(string(output))
 		if outputStr != "" && outputStr != "0" {
@@ -2368,8 +2604,7 @@ func computeDiskUsage() float64 {
 	}
 
 	// Fallback: use df -h for root partition only
-	cmd = exec.Command("df", "-h", "/")
-	output, err = cmd.Output()
+	output, err = runCommandOutput(probeCommandTimeout, "df", "-h", "/")
 	if err == nil {
 		lines := strings.Split(string(output), "\n")
 		if len(lines) > 1 {
@@ -2398,7 +2633,7 @@ func getSystemUptime() int64 {
 	}
 
 	// Try to read from /proc/uptime (Linux)
-	data, err := ioutil.ReadFile("/proc/uptime")
+	data, err := os.ReadFile("/proc/uptime")
 	if err == nil {
 		// Format: "12345.67 1234.56" (uptime in seconds, idle time)
 		fields := strings.Fields(string(data))
@@ -2511,7 +2746,7 @@ func getNetworkStats() (inMBps, outMBps float64, totalRxBytes, totalTxBytes uint
 
 	// Read current network stats from /proc/net/dev (Linux)
 	currentStats := make(map[string]netInterfaceStats)
-	data, err := ioutil.ReadFile("/proc/net/dev")
+	data, err := os.ReadFile("/proc/net/dev")
 	if err != nil {
 		return 0.0, 0.0, 0, 0
 	}
@@ -2651,7 +2886,7 @@ func getCgroupCPUCount() int {
 
 	// ── cpu bandwidth ─────────────────────────────────────────────────
 	// cgroup v2 — single file "quota period"; "max" means unlimited.
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/cpu.max"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/cpu.max"); err == nil {
 		parts := strings.Fields(strings.TrimSpace(string(data)))
 		if len(parts) >= 2 && parts[0] != "max" {
 			var quota, period int64
@@ -2666,8 +2901,8 @@ func getCgroupCPUCount() int {
 		}
 	} else {
 		// cgroup v1 — quota and period in separate files.
-		quotaData, qErr := ioutil.ReadFile("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
-		periodData, pErr := ioutil.ReadFile("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+		quotaData, qErr := os.ReadFile("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+		periodData, pErr := os.ReadFile("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
 		if qErr == nil && pErr == nil {
 			var quota, period int64
 			fmt.Sscanf(strings.TrimSpace(string(quotaData)), "%d", &quota)
@@ -2691,7 +2926,7 @@ func getCgroupCPUCount() int {
 		"/sys/fs/cgroup/cpuset.cpus",           // v2 fallback
 	}
 	for _, p := range cpusetPaths {
-		if data, err := ioutil.ReadFile(p); err == nil {
+		if data, err := os.ReadFile(p); err == nil {
 			if n := countCPUList(string(data)); n > 0 {
 				fromCpuset = n
 				break
@@ -2740,7 +2975,7 @@ var (
 // or the cpuacct controller is not mounted.
 func readCgroupCPUNanos() (uint64, bool) {
 	// cgroup v2 — unified hierarchy.
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/cpu.stat"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/cpu.stat"); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			fields := strings.Fields(line)
 			if len(fields) == 2 && fields[0] == "usage_usec" {
@@ -2751,13 +2986,13 @@ func readCgroupCPUNanos() (uint64, bool) {
 		}
 	}
 	// cgroup v1 — cpuacct controller.
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/cpuacct/cpuacct.usage"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/cpuacct/cpuacct.usage"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			return v, true
 		}
 	}
 	// cgroup v1 "legacy" — some distros mount cpuacct under cpu,cpuacct.
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/cpu,cpuacct/cpuacct.usage"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/cpu,cpuacct/cpuacct.usage"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			return v, true
 		}
@@ -2862,7 +3097,7 @@ func getCgroupCPUUsage() (float64, bool) {
 // prefixed with "total_" in hierarchical accounting. Reading them
 // independently lets us tolerate one being absent (older kernels).
 func cgroupMemoryReclaimable(statPath string) uint64 {
-	data, err := ioutil.ReadFile(statPath)
+	data, err := os.ReadFile(statPath)
 	if err != nil {
 		return 0
 	}
@@ -2930,13 +3165,13 @@ func getCgroupMemoryStats() (used, total uint64, ok bool) {
 	}
 
 	// ── cgroup v2 (unified hierarchy) ────────────────────────────────
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.max"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory.max"); err == nil {
 		if t, tok := readUint(string(data)); tok {
 			total = t
 		}
 	}
 	if total > 0 {
-		if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.current"); err == nil {
+		if data, err := os.ReadFile("/sys/fs/cgroup/memory.current"); err == nil {
 			if u, uok := readUint(string(data)); uok {
 				used = u
 			}
@@ -2955,13 +3190,13 @@ func getCgroupMemoryStats() (used, total uint64, ok bool) {
 	// limit_in_bytes reports a very large sentinel (~9223372036854771712, i.e.
 	// PAGE_COUNTER_MAX * PAGE_SIZE) when no limit is set — treat that as
 	// "unlimited" by comparing against host total if available, else ok=false.
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes"); err == nil {
 		if t, tok := readUint(string(data)); tok && t > 0 && t < (1<<62) {
 			total = t
 		}
 	}
 	if total > 0 {
-		if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
+		if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
 			if u, uok := readUint(string(data)); uok {
 				used = u
 			}
@@ -2982,7 +3217,7 @@ func getCgroupMemoryStats() (used, total uint64, ok bool) {
 // containers — useful when combined with a host-level total from sysinfo.
 func readCgroupMemoryCurrent() (uint64, bool) {
 	// cgroup v2
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.current"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory.current"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			used := v
 			if r := cgroupMemoryReclaimable("/sys/fs/cgroup/memory.stat"); r > 0 && r < used {
@@ -2992,7 +3227,7 @@ func readCgroupMemoryCurrent() (uint64, bool) {
 		}
 	}
 	// cgroup v1
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			used := v
 			if r := cgroupMemoryReclaimable("/sys/fs/cgroup/memory/memory.stat"); r > 0 && r < used {
@@ -3064,7 +3299,7 @@ func parseProxmoxSize(s string) uint64 {
 //	swap: 512
 //	unprivileged: 1
 func readProxmoxLXCConfig() (proxmoxLXCConfig, bool) {
-	data, err := ioutil.ReadFile("/etc/vzdump/pct.conf")
+	data, err := os.ReadFile("/etc/vzdump/pct.conf")
 	if err != nil {
 		return proxmoxLXCConfig{}, false
 	}
@@ -3148,13 +3383,13 @@ func proxmoxLXCConfigCached() (proxmoxLXCConfig, bool) {
 // want to see on a rootless/unbounded container.
 func readCgroupMemoryPeak() (uint64, bool) {
 	// cgroup v2
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.peak"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory.peak"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil && v > 0 {
 			return v, true
 		}
 	}
 	// cgroup v1
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.max_usage_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.max_usage_in_bytes"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil && v > 0 {
 			return v, true
 		}
@@ -3321,7 +3556,7 @@ func resolveSwapStats() (used, total uint64, ok bool) {
 	// of limit. Reliable inside LXC when /proc/meminfo is masked.
 	var cgSwapUsed uint64
 	var cgSwapOK bool
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.swap.current"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory.swap.current"); err == nil {
 		if v, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil {
 			cgSwapUsed = v
 			cgSwapOK = true
@@ -3386,13 +3621,13 @@ func getCgroupSwapStats() (used, total uint64, ok bool) {
 	}
 
 	// cgroup v2: memory.swap.max / memory.swap.current
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.swap.max"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory.swap.max"); err == nil {
 		if t, tok := readUint(string(data)); tok {
 			total = t
 		}
 	}
 	if total > 0 {
-		if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory.swap.current"); err == nil {
+		if data, err := os.ReadFile("/sys/fs/cgroup/memory.swap.current"); err == nil {
 			if u, uok := readUint(string(data)); uok {
 				used = u
 			}
@@ -3403,22 +3638,22 @@ func getCgroupSwapStats() (used, total uint64, ok bool) {
 	// cgroup v1: memsw.limit_in_bytes is combined (memory + swap). Swap-only
 	// limit = memsw_limit - memory_limit; swap-only used = memsw_usage - memory_usage.
 	var memswLimit, memswUsage, memLimit, memUsage uint64
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.memsw.limit_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.memsw.limit_in_bytes"); err == nil {
 		if v, ok := readUint(string(data)); ok && v < (1<<62) {
 			memswLimit = v
 		}
 	}
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.memsw.usage_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.memsw.usage_in_bytes"); err == nil {
 		if v, ok := readUint(string(data)); ok {
 			memswUsage = v
 		}
 	}
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes"); err == nil {
 		if v, ok := readUint(string(data)); ok && v < (1<<62) {
 			memLimit = v
 		}
 	}
-	if data, err := ioutil.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
+	if data, err := os.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes"); err == nil {
 		if v, ok := readUint(string(data)); ok {
 			memUsage = v
 		}
@@ -3458,7 +3693,7 @@ func isLinuxContainer() bool {
 	}
 	containerHints := []string{"/docker", "/lxc", "lxc.payload", "/kubepods", "/containerd", "/podman", "libpod"}
 	for _, p := range []string{"/proc/1/cgroup", "/proc/self/cgroup"} {
-		data, err := ioutil.ReadFile(p)
+		data, err := os.ReadFile(p)
 		if err != nil {
 			continue
 		}
@@ -3491,8 +3726,7 @@ func getCPUModel() string {
 		// Windows: Use native WMI command as primary method (faster and more reliable)
 
 		// Step 1: Get CPU model name
-		cmd := exec.Command("wmic", "cpu", "get", "Name", "/format:list")
-		output, err := cmd.Output()
+		output, err := runCommandOutput(slowProbeCommandTimeout, "wmic", "cpu", "get", "Name", "/format:list")
 
 		if err == nil && len(output) > 0 {
 			lines := strings.Split(string(output), "\n")
@@ -3509,8 +3743,7 @@ func getCPUModel() string {
 		}
 
 		// Step 2: Get SYSTEM total logical processors (not per-CPU)
-		cmd = exec.Command("wmic", "computersystem", "get", "NumberOfLogicalProcessors", "/format:list")
-		output, err = cmd.Output()
+		output, err = runCommandOutput(slowProbeCommandTimeout, "wmic", "computersystem", "get", "NumberOfLogicalProcessors", "/format:list")
 
 		if err == nil && len(output) > 0 {
 			lines := strings.Split(string(output), "\n")
@@ -3564,14 +3797,14 @@ func getCPUModel() string {
 		}
 	} else if runtime.GOOS == "darwin" {
 		// Intel Mac: machdep.cpu.brand_string is the most reliable source
-		if out, err := exec.Command("sysctl", "-n", "machdep.cpu.brand_string").Output(); err == nil {
+		if out, err := runCommandOutput(probeCommandTimeout, "sysctl", "-n", "machdep.cpu.brand_string"); err == nil {
 			model = strings.TrimSpace(string(out))
 		}
 		// Apple Silicon: machdep.cpu.brand_string does not exist; use system_profiler.
 		// Result is cached for 5 min so the ~0.5 s latency is only paid once.
 		if model == "" {
-			if out, err := exec.Command("sh", "-c",
-				`system_profiler SPHardwareDataType 2>/dev/null | awk -F': ' '/^ *Chip:/{print $2; exit}'`).Output(); err == nil {
+			if out, err := runCommandOutput(slowProbeCommandTimeout, "sh", "-c",
+				`system_profiler SPHardwareDataType 2>/dev/null | awk -F': ' '/^ *Chip:/{print $2; exit}'`); err == nil {
 				if s := strings.TrimSpace(string(out)); s != "" {
 					model = s
 				}
@@ -3596,7 +3829,7 @@ func getCPUModel() string {
 			coreCount = count
 		}
 		if coreCount == 0 {
-			if out, err := exec.Command("sysctl", "-n", "hw.logicalcpu").Output(); err == nil {
+			if out, err := runCommandOutput(probeCommandTimeout, "sysctl", "-n", "hw.logicalcpu"); err == nil {
 				fmt.Sscanf(strings.TrimSpace(string(out)), "%d", &coreCount)
 			}
 		}
@@ -3652,7 +3885,7 @@ func getCPUModel() string {
 		//      chip so far (M1/M2/M3/M4 families). This gives the user a
 		//      useful nominal-GHz reading even on Apple Silicon.
 		if speed == "" && runtime.GOOS == "darwin" {
-			if out, err := exec.Command("sysctl", "-n", "hw.cpufrequency_max").Output(); err == nil {
+			if out, err := runCommandOutput(probeCommandTimeout, "sysctl", "-n", "hw.cpufrequency_max"); err == nil {
 				var hz uint64
 				if _, se := fmt.Sscanf(strings.TrimSpace(string(out)), "%d", &hz); se == nil && hz > 0 {
 					speed = fmt.Sprintf("%.2f", float64(hz)/1e9)
@@ -3704,15 +3937,13 @@ func getCPUModel() string {
 	//      still produces a non-empty string. An empty cpu_model used to
 	//      cascade in the frontend and suppress Traffic/Total rows, so the
 	//      most important invariant here is: on Linux, NEVER return "".
-	cmd := exec.Command("sh", "-c", "grep -m1 'model name' /proc/cpuinfo | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
-	output, err := cmd.Output()
+	output, err := runCommandOutput(probeCommandTimeout, "sh", "-c", "grep -m1 'model name' /proc/cpuinfo | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
 	if err == nil {
 		model = strings.TrimSpace(string(output))
 	}
 
 	if model == "" {
-		cmd = exec.Command("sh", "-c", "lscpu | grep 'Model name' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
-		output, err = cmd.Output()
+		output, err = runCommandOutput(slowProbeCommandTimeout, "sh", "-c", "lscpu | grep 'Model name' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
 		if err == nil {
 			model = strings.TrimSpace(string(output))
 		}
@@ -3740,7 +3971,7 @@ func getCPUModel() string {
 
 	// Raw ARM-style /proc/cpuinfo probing as a secondary fallback.
 	if model == "" {
-		if data, err := ioutil.ReadFile("/proc/cpuinfo"); err == nil {
+		if data, err := os.ReadFile("/proc/cpuinfo"); err == nil {
 			// Walk the file once, pick the first non-empty match among the
 			// candidate keys in priority order.
 			armKeys := []string{"Hardware", "Model", "Processor", "CPU part"}
@@ -3771,7 +4002,7 @@ func getCPUModel() string {
 	// ARM SBC fallback — Raspberry Pi, Rockchip boards, etc. expose the
 	// board / SoC model as a NUL-terminated string in the device-tree.
 	if model == "" {
-		if data, err := ioutil.ReadFile("/sys/firmware/devicetree/base/model"); err == nil {
+		if data, err := os.ReadFile("/sys/firmware/devicetree/base/model"); err == nil {
 			s := strings.TrimRight(strings.TrimSpace(string(data)), "\x00")
 			if s != "" {
 				model = s
@@ -3790,7 +4021,7 @@ func getCPUModel() string {
 			"/sys/devices/virtual/dmi/id/sys_vendor",
 			"/sys/devices/virtual/dmi/id/board_name",
 		} {
-			if data, err := ioutil.ReadFile(p); err == nil {
+			if data, err := os.ReadFile(p); err == nil {
 				s := strings.TrimSpace(string(data))
 				// Common uninformative placeholders put there by cloud /
 				// virtualisation vendors — reject rather than display.
@@ -3816,7 +4047,7 @@ func getCPUModel() string {
 	// "aarch64 CPU @ 1 Core" instead of a bare "CPU 1 Core".
 	if model == "" {
 		arch := ""
-		if out, err := exec.Command("uname", "-m").Output(); err == nil {
+		if out, err := runCommandOutput(probeCommandTimeout, "uname", "-m"); err == nil {
 			arch = strings.TrimSpace(string(out))
 		}
 		if arch == "" {
@@ -3857,8 +4088,7 @@ func getCPUModel() string {
 	// Get frequency if not in model name (typically AMD CPUs)
 	if !hasFreqLinux {
 		// Get CPU frequency (MHz) and convert to GHz
-		cmd = exec.Command("sh", "-c", "grep -m1 'cpu MHz' /proc/cpuinfo | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
-		output, err = cmd.Output()
+		output, err = runCommandOutput(probeCommandTimeout, "sh", "-c", "grep -m1 'cpu MHz' /proc/cpuinfo | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
 		if err == nil {
 			var mhz float64
 			if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "%f", &mhz); err == nil && mhz > 0 {
@@ -3868,8 +4098,7 @@ func getCPUModel() string {
 
 		// If speed not found, try lscpu
 		if speedLinux == "" {
-			cmd = exec.Command("sh", "-c", "lscpu | grep 'CPU MHz' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
-			output, err = cmd.Output()
+			output, err = runCommandOutput(slowProbeCommandTimeout, "sh", "-c", "lscpu | grep 'CPU MHz' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
 			if err == nil {
 				var mhz float64
 				if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "%f", &mhz); err == nil && mhz > 0 {
@@ -3885,7 +4114,7 @@ func getCPUModel() string {
 				"/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_cur_freq",
 				"/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq",
 			} {
-				if data, err := ioutil.ReadFile(p); err == nil {
+				if data, err := os.ReadFile(p); err == nil {
 					if khz, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64); err == nil && khz > 0 {
 						speedLinux = fmt.Sprintf("%.2f", float64(khz)/1e6)
 						break
@@ -3908,16 +4137,14 @@ func getCPUModel() string {
 	// Get physical cores and virtual cores from lscpu (note: inside an LXC
 	// container without lxcfs, lscpu reflects the HOST, not the container —
 	// we correct for that below using the cgroup limit).
-	cmd = exec.Command("sh", "-c", "lscpu | grep '^Core(s) per socket:' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
-	output, err = cmd.Output()
+	output, err = runCommandOutput(slowProbeCommandTimeout, "sh", "-c", "lscpu | grep '^Core(s) per socket:' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
 	physicalCores := 0
 	if err == nil {
 		var sockets, coresPerSocket int
 		fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &coresPerSocket)
 
 		// Get number of sockets
-		cmd = exec.Command("sh", "-c", "lscpu | grep '^Socket(s):' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
-		output, err = cmd.Output()
+		output, err = runCommandOutput(slowProbeCommandTimeout, "sh", "-c", "lscpu | grep '^Socket(s):' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
 		if err == nil {
 			fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &sockets)
 		}
@@ -3927,8 +4154,7 @@ func getCPUModel() string {
 
 	// Get total logical CPU count reported by lscpu (host-wide when inside
 	// a container without lxcfs — see cgroup override below).
-	cmd = exec.Command("sh", "-c", "lscpu | grep '^CPU(s):' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
-	output, err = cmd.Output()
+	output, err = runCommandOutput(slowProbeCommandTimeout, "sh", "-c", "lscpu | grep '^CPU(s):' | cut -d':' -f2 | sed 's/^[[:space:]]*//'")
 	virtualCores := 0
 	if err == nil {
 		fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &virtualCores)
@@ -3967,8 +4193,7 @@ func getCPUModel() string {
 	} else if physicalCores > 0 {
 		coreCount = physicalCores
 	} else {
-		cmd = exec.Command("sh", "-c", "grep -c '^processor' /proc/cpuinfo")
-		output, err = cmd.Output()
+		output, err = runCommandOutput(probeCommandTimeout, "sh", "-c", "grep -c '^processor' /proc/cpuinfo")
 		if err == nil {
 			fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &coreCount)
 		}
@@ -4017,8 +4242,7 @@ func getVirtualizationType() string {
 
 		// Method 1: Check ComputerSystem Model (most reliable for VM detection)
 		// Virtual machines have specific model names that physical servers never have
-		cmd := exec.Command("wmic", "computersystem", "get", "model", "/format:list")
-		output, err := cmd.Output()
+		output, err := runCommandOutput(slowProbeCommandTimeout, "wmic", "computersystem", "get", "model", "/format:list")
 		if err == nil {
 			outputStr := strings.ToLower(string(output))
 			// Exact VM model names - these are ONLY used by virtual machines
@@ -4048,8 +4272,7 @@ func getVirtualizationType() string {
 		}
 
 		// Method 2: Check BIOS Manufacturer (not SerialNumber)
-		cmd = exec.Command("wmic", "bios", "get", "manufacturer", "/format:list")
-		output, err = cmd.Output()
+		output, err = runCommandOutput(slowProbeCommandTimeout, "wmic", "bios", "get", "manufacturer", "/format:list")
 		if err == nil {
 			outputStr := strings.ToLower(string(output))
 			// BIOS manufacturers that are VM-specific
@@ -4074,8 +4297,7 @@ func getVirtualizationType() string {
 		}
 
 		// Method 3: Check BaseBoard (motherboard) Manufacturer
-		cmd = exec.Command("wmic", "baseboard", "get", "manufacturer", "/format:list")
-		output, err = cmd.Output()
+		output, err = runCommandOutput(slowProbeCommandTimeout, "wmic", "baseboard", "get", "manufacturer", "/format:list")
 		if err == nil {
 			outputStr := strings.ToLower(string(output))
 			// Motherboard manufacturers that are VM-specific
@@ -4149,8 +4371,7 @@ func getVirtualizationType() string {
 	// Method 1: systemd-detect-virt (most reliable on modern Linux).
 	// Handles both hypervisor-based VMs ("kvm", "qemu", "xen", ...) and
 	// container runtimes ("lxc", "docker", "podman", "systemd-nspawn").
-	cmd := exec.Command("systemd-detect-virt")
-	output, err := cmd.Output()
+	output, err := runCommandOutput(probeCommandTimeout, "systemd-detect-virt")
 	if err == nil {
 		virtType := strings.TrimSpace(string(output))
 		// "none" means physical machine, anything else means virtualized
@@ -4188,8 +4409,7 @@ func getVirtualizationType() string {
 	}
 
 	// Method 2: Check for hypervisor vendor in lscpu (fallback if systemd-detect-virt not available)
-	cmd = exec.Command("sh", "-c", "lscpu 2>/dev/null | grep -i 'Hypervisor vendor' | cut -d':' -f2")
-	output, err = cmd.Output()
+	output, err = runCommandOutput(slowProbeCommandTimeout, "sh", "-c", "lscpu 2>/dev/null | grep -i 'Hypervisor vendor' | cut -d':' -f2")
 	if err == nil {
 		hypervisor := strings.TrimSpace(string(output))
 		if hypervisor != "" {
@@ -4203,8 +4423,7 @@ func getVirtualizationType() string {
 	}
 
 	// Method 3: Check /proc/cpuinfo for hypervisor flag
-	cmd = exec.Command("sh", "-c", "grep -w 'hypervisor' /proc/cpuinfo 2>/dev/null")
-	output, err = cmd.Output()
+	output, err = runCommandOutput(probeCommandTimeout, "sh", "-c", "grep -w 'hypervisor' /proc/cpuinfo 2>/dev/null")
 	if err == nil && len(strings.TrimSpace(string(output))) > 0 {
 		result := "VPS"
 		cacheMutex.Lock()
@@ -4215,8 +4434,7 @@ func getVirtualizationType() string {
 	}
 
 	// Method 4: Check DMI for known virtualization products
-	cmd = exec.Command("sh", "-c", "cat /sys/class/dmi/id/product_name 2>/dev/null")
-	output, err = cmd.Output()
+	output, err = runCommandOutput(probeCommandTimeout, "sh", "-c", "cat /sys/class/dmi/id/product_name 2>/dev/null")
 	if err == nil {
 		productName := strings.ToLower(strings.TrimSpace(string(output)))
 		// Only check for definite VM indicators (not "cloud" which could be physical cloud servers)
@@ -4279,7 +4497,7 @@ func getMemoryInfo() string {
 
 	// Step 2 — /proc/meminfo. Works for bare metal and for containers
 	// where lxcfs is alive and properly virtualising meminfo.
-	data, err := ioutil.ReadFile("/proc/meminfo")
+	data, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		// Step 3a — /proc/meminfo unreadable (lxcfs ENOTCONN). Fall back
 		// to cgroup.current + sysinfo host total. This is the best we
@@ -4369,7 +4587,7 @@ func getSwapInfo() string {
 	// /proc is unreadable (lxcfs ENOTCONN). We always return something
 	// ("0 B / 0 B" at worst) so the frontend can distinguish "no swap
 	// configured" from "no data yet".
-	data, err := ioutil.ReadFile("/proc/meminfo")
+	data, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		if u, t, ok := resolveSwapStats(); ok {
 			if t > 0 {
@@ -4496,7 +4714,7 @@ func computeDiskInfo() string {
 	// Exclude: nfs, nfs4, cifs, smb, smbfs, fuse, sshfs (network)
 	// Exclude: proc, sysfs, debugfs, securityfs, cgroup, etc. (virtual)
 	// Also filter to only include /dev/* devices to avoid duplicates
-	cmd := exec.Command("sh", "-c", `df -B1 -T 2>/dev/null | tail -n +2 | awk '
+	output, err := runCommandOutput(probeCommandTimeout, "sh", "-c", `df -B1 -T 2>/dev/null | tail -n +2 | awk '
 		$1 ~ /^\/dev\// && 
 		$2 !~ /^(tmpfs|devtmpfs|squashfs|overlay|aufs|nfs|nfs4|cifs|smb|smbfs|fuse|sshfs|proc|sysfs|debugfs|securityfs|cgroup|cgroup2|pstore|bpf|tracefs|hugetlbfs|mqueue|configfs|fusectl|efivarfs|binfmt_misc|devpts|ramfs)$/ {
 			# Track unique devices to avoid double counting
@@ -4509,7 +4727,6 @@ func computeDiskInfo() string {
 			if (total > 0) printf "%.0f %.0f\n", used+0.0, total+0.0
 			else print "0 0"
 		}'`)
-	output, err := cmd.Output()
 	if err == nil {
 		outputStr := strings.TrimSpace(string(output))
 		if outputStr != "" && outputStr != "0 0" {
@@ -4536,8 +4753,7 @@ func computeDiskInfo() string {
 	}
 
 	// Fallback: use df -h for root partition only
-	cmd = exec.Command("sh", "-c", "df -h / | tail -1 | awk '{print $3 \"/\" $2}'")
-	output, err = cmd.Output()
+	output, err = runCommandOutput(probeCommandTimeout, "sh", "-c", "df -h / | tail -1 | awk '{print $3 \"/\" $2}'")
 	if err == nil {
 		info := strings.TrimSpace(string(output))
 		if info != "" {
