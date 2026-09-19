@@ -579,6 +579,11 @@ func (s *Store) MarkOffline(id string) error {
 // Get + full-record Upsert outside any transaction, which could clobber a
 // poll result or an admin edit that landed in between. Unknown systems and
 // samples older than the stored one are ignored.
+//
+// Ordering is by Timestamp alone, so a "skipped" marker (see
+// TCPingTargetData: the host cannot attempt this target at all, no latency
+// measured) merges exactly like a measurement — it replaces an older entry
+// and never overwrites a newer one.
 func (s *Store) SetTCPingLatest(id, target string, sample TCPingTargetData) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(bucketName))
@@ -613,7 +618,9 @@ func (s *Store) SetTCPingLatest(id, target string, sample TCPingTargetData) erro
 // copied from an earlier read never overrides a newer stored one (a
 // concurrent server-side tcping write is not lost), whereas a target this
 // write carries a fresh sample for (dst.TCPingFresh) always wins, so a
-// stored stamp that ended up in the future cannot freeze the card. Entries
+// stored stamp that ended up in the future cannot freeze the card. Such a
+// fresh entry may be a "skipped" marker (see TCPingTargetData) instead of a
+// measurement; the merge treats both the same way. Entries
 // for targets that are no longer configured are dropped when the current
 // target set (allowed) is known, so a write composed from a stale copy
 // cannot resurrect a target the admin removed.

@@ -130,10 +130,19 @@ type SystemMetric struct {
 	HideTCPing bool `json:"hide_tcping,omitempty"`
 }
 
-// TCPingTargetData represents the latest tcping data for a specific target
+// TCPingTargetData represents the latest tcping data for a specific target.
+//
+// Skipped marks an entry the probing host could not even attempt (e.g. an
+// IPv6 target on a machine without IPv6 connectivity): the dial failed
+// instantly with ENETUNREACH instead of measuring anything. Such an entry is
+// a *marker*, not a measurement — Latency is 0 and means "unknown", never
+// "0 ms" — and no matching row exists in the tcping history bucket, so the
+// packet-loss statistics ignore it as well. A later real sample for the same
+// target (successful or genuinely failed) replaces the marker.
 type TCPingTargetData struct {
-	Latency   float64   `json:"latency"`   // Latest tcping latency in ms
-	Timestamp time.Time `json:"timestamp"` // Latest tcping timestamp
+	Latency   float64   `json:"latency"`           // Latest tcping latency in ms (0 and meaningless when Skipped)
+	Timestamp time.Time `json:"timestamp"`         // Latest tcping timestamp
+	Skipped   bool      `json:"skipped,omitempty"` // Probe not attempted on this host (no measurement, no history row)
 }
 
 // TCPing statistics
@@ -877,10 +886,18 @@ type ClientInfo struct {
 // the saved history reflects the real measurement time, not "whenever the next 3 s
 // push cycle happened to arrive". Older clients that do not send this field leave it
 // at the zero value and the server falls back to its own clock.
+//
+// Skipped (newer agents only, sent with Success=false and Latency=0) says the
+// host could not attempt this probe at all — typically an IPv6 target on a
+// machine without IPv6, where every dial fails instantly with ENETUNREACH.
+// That is not packet loss, so the sample is kept out of the history bucket
+// (and therefore out of the loss statistics) and only refreshes the "latest"
+// entry with a marker. Absent or false means the usual semantics.
 type ClientTCPingResult struct {
 	Target     string    `json:"target"`  // e.g. "8.8.8.8:53"
 	Latency    float64   `json:"latency"` // milliseconds; 0 if failed
 	Success    bool      `json:"success"`
+	Skipped    bool      `json:"skipped,omitempty"` // probe not attempted on this host
 	MeasuredAt time.Time `json:"measured_at,omitempty"`
 }
 
@@ -2906,8 +2923,11 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	// whose stamp happens to be newer.
 	freshTCPing := make(map[string]struct{}, len(payload.TCPingResults))
 	for _, tr := range payload.TCPingResults {
-		// Only a successful probe writes a new "latest" entry below; a
+		// Only a successful probe writes a new "latest" entry here; a
 		// failed one must not let a stale copy of the map win the merge.
+		// Skipped probes also write one (a marker), but only when they are
+		// not older than what we already hold, so they are marked fresh in
+		// the loop below, where that is decided.
 		if tr.Success && targetAllowed(tr.Target) {
 			freshTCPing[tr.Target] = struct{}{}
 		}
@@ -2935,6 +2955,14 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 		// newer sample may replace the entry; the persisted entry is always
 		// replaced by the first sample, so a stale future-dated value can never
 		// freeze the card.
+		//
+		// A skipped sample (the host cannot attempt this target at all, e.g.
+		// an IPv6 address on an IPv4-only machine) is not a measurement: it
+		// never becomes a history row — counting it as a lost packet is
+		// exactly the 50 % loss bug this flag exists to fix — and it only
+		// leaves a marker in the "latest" map, and only when it is at least
+		// as new as the entry already there, so a backfilled marker cannot
+		// hide a newer real latency.
 		latestWritten := make(map[string]struct{})
 		for _, tr := range payload.TCPingResults {
 			if tr.Target == "" || !targetAllowed(tr.Target) {
@@ -2942,6 +2970,19 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 			}
 			ts, exact, keep := sanitize(tr.MeasuredAt)
 			if !keep {
+				continue
+			}
+			// Success wins over a contradictory Skipped: a probe that
+			// produced a latency was evidently attempted.
+			if tr.Skipped && !tr.Success {
+				if tcpingData == nil {
+					tcpingData = make(map[string]TCPingTargetData)
+				}
+				if cur, ok := tcpingData[tr.Target]; !ok || !ts.Before(cur.Timestamp) {
+					tcpingData[tr.Target] = TCPingTargetData{Timestamp: ts, Skipped: true}
+					latestWritten[tr.Target] = struct{}{}
+					freshTCPing[tr.Target] = struct{}{}
+				}
 				continue
 			}
 			var latencyPtr *float64
@@ -4239,19 +4280,28 @@ func formatUptime(seconds int64) string {
 	return fmt.Sprintf("%dd", days)
 }
 
-// TCPingResultPayload represents the payload from client
+// TCPingResultPayload represents the payload from client.
+//
+// Skipped (with Success=false) means the host could not attempt the probe at
+// all — see ClientTCPingResult. Such a report stores no history row.
 type TCPingResultPayload struct {
 	ClientID string  `json:"client_id"`
 	Target   string  `json:"target"` // Target address (e.g., "8.8.8.8:53")
 	Latency  float64 `json:"latency"`
 	Success  bool    `json:"success"`
+	Skipped  bool    `json:"skipped,omitempty"` // probe not attempted on this host
 	Error    string  `json:"error,omitempty"`
 }
 
-// TCPingResponse represents the response from client
+// TCPingResponse represents the response from client.
+//
+// Skipped (with Success=false) means the agent did not attempt the dial
+// because this host cannot reach the target's address family at all; it is
+// recorded as a marker instead of a lost packet.
 type TCPingResponse struct {
 	Latency float64 `json:"latency"`
 	Success bool    `json:"success"`
+	Skipped bool    `json:"skipped,omitempty"`
 	Error   string  `json:"error,omitempty"`
 }
 
@@ -4319,6 +4369,24 @@ func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 	}
 	if !tcpingTargetConfigured(store, target) {
 		http.Error(w, "target is not configured", http.StatusBadRequest)
+		return
+	}
+
+	// A probe the host could not attempt at all (skipped, e.g. an IPv6
+	// target on a machine without IPv6) is not a lost packet: it must stay
+	// out of the history bucket, which feeds the packet-loss statistics.
+	// Only the "latest" entry is refreshed, with a marker carrying no
+	// latency. A contradictory success+skipped is treated as a success.
+	if payload.Skipped && !payload.Success {
+		if err := store.SetTCPingLatest(payload.ClientID, target, TCPingTargetData{
+			Timestamp: time.Now().UTC(),
+			Skipped:   true,
+		}); err != nil {
+			http.Error(w, "failed to save result", http.StatusInternalServerError)
+			return
+		}
+		invalidateTCPingCache(payload.ClientID)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return
 	}
 
@@ -4977,7 +5045,7 @@ func tcpingBatchSignature(results []ClientTCPingResult) string {
 		if r.MeasuredAt.IsZero() {
 			return ""
 		}
-		parts = append(parts, fmt.Sprintf("%s|%d|%t|%.3f", r.Target, r.MeasuredAt.UnixNano(), r.Success, r.Latency))
+		parts = append(parts, fmt.Sprintf("%s|%d|%t|%t|%.3f", r.Target, r.MeasuredAt.UnixNano(), r.Success, r.Skipped, r.Latency))
 	}
 	sort.Strings(parts)
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\n")))
@@ -5318,6 +5386,22 @@ func startTCPingPolling(ctx context.Context, registry *ClientRegistry, store *St
 					tcpingBody := io.LimitReader(resp.Body, 64<<10)
 					var tcpingResp TCPingResponse
 					if err := json.NewDecoder(tcpingBody).Decode(&tcpingResp); err != nil {
+						return
+					}
+
+					// A probe the agent could not attempt at all (skipped: the
+					// host has no route to this target's address family, so
+					// every dial fails instantly) is not packet loss. Keep it
+					// out of the history bucket — that is what the statistics
+					// are computed from — and only leave a marker in the
+					// "latest" map. SetTCPingLatest orders purely by
+					// timestamp, so a marker merges like any other sample and
+					// an older one never replaces a newer entry.
+					if tcpingResp.Skipped && !tcpingResp.Success {
+						store.SetTCPingLatest(clientID, tgt.Address, TCPingTargetData{ //nolint:errcheck
+							Timestamp: time.Now().UTC(),
+							Skipped:   true,
+						})
 						return
 					}
 
