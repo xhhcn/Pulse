@@ -139,14 +139,14 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} fixes the packet-loss figure for nodes that cannot reach one of the tcping targets at all (issue #7: a node without IPv6 given an IPv6 target showed 50% loss). Existing clients and databases stay compatible; upgrading both the server and the agents is recommended.
+            v${{ steps.version.outputs.version }} is a hardening release from a final whole-project review of v1.3.25 (server, agent, web pages, installers and workflows). Existing clients and databases stay compatible; upgrading both the server and the agents is recommended.
 
             ### Highlights
 
-            - Agent 1.3.25 tells "this host cannot attempt the probe" (no route or address family for the target: ENETUNREACH / EAFNOSUPPORT / EADDRNOTAVAIL, or the Windows equivalents) apart from "target down". Such probes are reported as `skipped` instead of as a failure; timeouts, refused connections and DNS failures still count as loss.
-            - Server: skipped probes are not written to the history and therefore no longer inflate the loss rate; the node's `tcping_data` carries a `skipped: true` marker for that target until a successful probe replaces it. Works for push mode, pull mode and the legacy `/api/tcping` endpoint.
-            - Web (both themes): a skipped target shows "此节点无法访问该目标 / This node cannot reach this target" instead of an empty chart, and N/A instead of 0 ms / 100 % in the summary; the all-targets loss rate excludes it.
-            - Older agents keep reporting such probes as failures; the figure corrects itself once the agent has updated (the installer's daily auto-update does this within a day).
+            - Server: a tcping sample stamped more than two minutes in the future is dropped instead of freezing a target's latest value; bogus latencies count as failures; `/api/tcping/history` only answers configured targets (no cache eviction or full-bucket scans with made-up names); an admin edit updates only name, tags and visibility inside one transaction instead of writing back a stale copy of the record; a write from an agent whose system was just deleted is dropped; registration failures are logged at most once a minute; admin streams no longer consume the public per-address SSE budget.
+            - Agent 1.3.26: at most one background IP detection at a time (a stale cache could previously start one per `/metrics` poll); `/metrics` serves the push loop's latest snapshot so polls no longer disturb the CPU and network deltas; every external command has a timeout; HTTPS echo services are tried before plaintext ones; tcping cycles are anchored on the cycle start; the installer downloads to a temp file, validates the binary and moves it into place (an HTTP error page can no longer be installed as the binary, re-running over a live agent works), and writes the unit/plist under `umask 077`. Dependencies updated (gopsutil v3.24.5, x/sys, go-ole); windows/arm64 now builds.
+            - Web: modal reopen race, drag-and-drop listener stacking, traffic row mix-up, add-service id fallback and error-banner cache poisoning fixed in the admin page; SVG logo sanitiser aligned with the shared one; SSE reconnects are coalesced and the stream reopens after a back/forward-cache restore; ids are CSS-escaped; the skipped-target notice is readable on phones and meets contrast guidelines; a network failure on the session check no longer clears the admin token.
+            - Installer (`install-pulse-server.sh`): uses curl when present (HTTPS only, including redirects) and falls back to wget; helper scripts are staged and only replaced when all downloaded. README: manual run uses `PORT=8008`; the IPv6 compose snippet keeps the 45 s grace period and log caps.
 
             ### Compatibility
 
