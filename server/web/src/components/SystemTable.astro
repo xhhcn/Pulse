@@ -363,7 +363,7 @@ const apiBase = apiBaseProp ?? '';
     try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return ''; }
     const root = doc.documentElement;
     if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return '';
-    const banned = /^(script|foreignobject|iframe|object|embed|use)$/i;
+    const banned = /^(script|foreignobject|iframe|object|embed|use|style|animate|set|animatetransform|animatemotion)$/i;
     const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
     const toRemove = [];
     let node = walker.currentNode;
