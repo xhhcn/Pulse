@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -132,6 +134,27 @@ var (
 
 const maxPendingTCPingResults = 500
 
+// maxResponseBodyBytes caps how much of any HTTP response from the server (or
+// from the public-IP detection services) the agent is willing to read. A
+// malicious or misbehaving peer must not be able to make the agent allocate
+// unbounded memory; every ReadAll/Decode on a response body goes through an
+// io.LimitReader with this cap, including the drain-for-keepalive reads.
+const maxResponseBodyBytes = 1 << 20 // 1 MiB
+
+// Bounds for the TCPing configuration handed to the agent by the server.
+// The server is trusted-ish, but a corrupted or hostile response must not be
+// able to make the agent dial thousands of hosts or spin at a 0-second interval.
+const (
+	maxPushTCPingTargets     = 64
+	minPushTCPingIntervalSec = 1
+	maxPushTCPingIntervalSec = 86400 // 24 h
+)
+
+// tcpingHostRegex validates the host part of a TCPing target. Hostnames, IPv4
+// literals and unbracketed IPv6 literals all fit this set (colons for IPv6,
+// dots, hyphens, alphanumerics); anything else looks like injection.
+var tcpingHostRegex = regexp.MustCompile(`^[a-zA-Z0-9.\-:]+$`)
+
 var (
 
 	// Cache for disk stats (changes slowly; refreshed every 30 s to avoid spawning
@@ -149,8 +172,23 @@ var (
 // fresh config from the server (initial register, periodic register, push response)
 // so they can't drift apart.
 func applyPushTCPingConfig(targets []string, intervalSecs int) {
+	sanitized := sanitizePushTCPingTargets(targets)
+
+	// A non-positive interval means "server did not specify one"; keep whatever
+	// the loop is already using. Anything else is clamped into a sane range so
+	// a corrupted response cannot make the TCPing loop spin (0 s) or stall for
+	// years.
+	if intervalSecs > 0 {
+		if intervalSecs < minPushTCPingIntervalSec {
+			intervalSecs = minPushTCPingIntervalSec
+		}
+		if intervalSecs > maxPushTCPingIntervalSec {
+			intervalSecs = maxPushTCPingIntervalSec
+		}
+	}
+
 	pushTCPingMu.Lock()
-	pushTCPingTargets = targets
+	pushTCPingTargets = sanitized
 	changed := false
 	if intervalSecs > 0 && intervalSecs != pushTCPingIntervalSec {
 		pushTCPingIntervalSec = intervalSecs
@@ -163,6 +201,50 @@ func applyPushTCPingConfig(targets []string, intervalSecs int) {
 		default:
 		}
 	}
+}
+
+// sanitizePushTCPingTargets filters a target list received from the server
+// through the same rules /tcping enforces: invalid or over-long targets are
+// dropped, duplicates collapsed, and the list capped at maxPushTCPingTargets so
+// one bad config cannot turn the agent into a port scanner.
+//
+// Entries are stored as the server sent them (whitespace-trimmed) rather than
+// in normalised form, so the Target echoed back in ClientTCPingResult still
+// matches the server's own configuration string. De-duplication uses the
+// normalised form, which is also what validation is performed on.
+func sanitizePushTCPingTargets(targets []string) []string {
+	if len(targets) == 0 {
+		return nil
+	}
+
+	sanitized := make([]string, 0, len(targets))
+	seen := make(map[string]struct{}, len(targets))
+	truncated := false
+
+	for _, target := range targets {
+		normalized, err := validateTCPingTarget(target)
+		if err != nil {
+			continue
+		}
+		if _, dup := seen[normalized]; dup {
+			continue
+		}
+		if len(sanitized) >= maxPushTCPingTargets {
+			truncated = true
+			break
+		}
+		seen[normalized] = struct{}{}
+		sanitized = append(sanitized, strings.TrimSpace(target))
+	}
+
+	if truncated {
+		logOncePerMinute(fmt.Sprintf("⚠️  Server sent more than %d TCPing targets; extra targets ignored.", maxPushTCPingTargets))
+	}
+
+	if len(sanitized) == 0 {
+		return nil
+	}
+	return sanitized
 }
 
 // ── macOS: background CPU sampler ────────────────────────────────────────────
@@ -600,7 +682,7 @@ func registerWithServer() {
 		if resp.StatusCode == http.StatusOK {
 			// Parse registration response to get initial TCPing targets for push mode
 			var regResp RegisterResponse
-			if body, readErr := ioutil.ReadAll(resp.Body); readErr == nil {
+			if body, readErr := ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)); readErr == nil {
 				if jsonErr := json.Unmarshal(body, &regResp); jsonErr == nil {
 					applyPushTCPingConfig(regResp.TCPingTargets, regResp.TCPingIntervalSecs)
 				}
@@ -611,7 +693,7 @@ func registerWithServer() {
 			return
 		} else {
 			// Read error response body for debugging
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
 			resp.Body.Close()
 			cancel()
 			log.Printf("❌ Registration failed (attempt %d/%d): HTTP %d - %s", i+1, maxRetries, resp.StatusCode, string(body))
@@ -692,13 +774,13 @@ func startPeriodicRegistration() {
 		// connection reuse. For 200, parse TCPing config; for other statuses, discard.
 		if resp.StatusCode == http.StatusOK {
 			var regResp RegisterResponse
-			if body, readErr := ioutil.ReadAll(resp.Body); readErr == nil {
+			if body, readErr := ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)); readErr == nil {
 				if jsonErr := json.Unmarshal(body, &regResp); jsonErr == nil {
 					applyPushTCPingConfig(regResp.TCPingTargets, regResp.TCPingIntervalSecs)
 				}
 			}
 		} else {
-			ioutil.ReadAll(resp.Body) //nolint:errcheck
+			ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck
 		}
 		resp.Body.Close()
 		cancel()
@@ -772,6 +854,69 @@ type TCPingRequest struct {
 	Target string `json:"target"`
 }
 
+// validateTCPingTarget validates a TCPing target and returns a dial-ready
+// "host:port" form of it.
+//
+// It is the single source of truth for what the agent is willing to dial, used
+// both for targets pushed in by the backend over /tcping and for the target
+// list the server hands back in register/push responses:
+//   - length capped at 255 (RFC 1035 domain-name limit) to bound the work,
+//   - host/port split via net.SplitHostPort so IPv6 literals in brackets
+//     ("[::1]:443" → "::1", "443") survive; a target without a port defaults
+//     to port 80 on the bare host,
+//   - port must parse and fall in 1-65535,
+//   - host must match tcpingHostRegex, which rejects whitespace and anything
+//     that looks like shell/URL injection.
+//
+// The returned string is net.JoinHostPort(host, port), i.e. IPv6 literals come
+// back bracketed, which is what net.DialTimeout expects.
+func validateTCPingTarget(target string) (string, error) {
+	if target == "" {
+		return "", errors.New("target is required")
+	}
+
+	target = strings.TrimSpace(target)
+	if len(target) > 255 {
+		return "", errors.New("target address too long")
+	}
+
+	// Parse host/port. Prefer net.SplitHostPort because it correctly handles
+	// IPv6 literals wrapped in brackets ("[::1]:443" → "::1", "443"), which a
+	// naive strings.SplitN(":", 2) would mangle into ("[", ":1]:443") and
+	// silently reject every IPv6 TCPing target with a 400 error.
+	var host, portStr string
+	if h, p, splitErr := net.SplitHostPort(target); splitErr == nil {
+		host = strings.TrimSpace(h)
+		portStr = strings.TrimSpace(p)
+	} else {
+		// No port in target (or malformed). Default to port 80 on the bare
+		// host. This matches the previous behaviour for ":"-free inputs; for
+		// bracketed IPv6 literals without a port ("[::1]") we strip brackets.
+		host = strings.TrimSpace(target)
+		host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
+		portStr = "80"
+	}
+
+	if host == "" {
+		return "", errors.New("target host cannot be empty")
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port < 1 || port > 65535 {
+		return "", errors.New("invalid port number (must be 1-65535)")
+	}
+
+	// Validate host characters BEFORE reconstructing the dial target so we
+	// still reject injection-looking inputs.
+	if !tcpingHostRegex.MatchString(host) {
+		return "", errors.New("invalid target host format")
+	}
+
+	// net.JoinHostPort wraps IPv6 literals in brackets automatically
+	// ("::1" + "443" → "[::1]:443"), the format net.DialTimeout expects.
+	return net.JoinHostPort(host, strconv.Itoa(port)), nil
+}
+
 // Handle tcping request from backend
 func handleTCPingRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -800,10 +945,13 @@ func handleTCPingRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// SECURITY WARNING: No secret configured - allowing access for backward compatibility
-		// This is insecure and should be fixed by configuring SECRET environment variable
-		// Log warning only once per minute to avoid log spam
-		logOncePerMinute("⚠️  SECURITY WARNING: /tcping endpoint is accessible without authentication. Please configure SECRET environment variable for security.")
+		// SECURITY: No secret configured - refuse to run TCPing at all.
+		// /tcping turns the agent into an arbitrary TCP connect scanner, so
+		// unlike /metrics (read-only, kept open for backward compatibility) it
+		// is disabled outright until SECRET is configured.
+		logOncePerMinute("⚠️  SECURITY WARNING: /tcping endpoint is disabled because no SECRET environment variable is configured.")
+		http.Error(w, "tcping disabled: no SECRET configured", http.StatusForbidden)
+		return
 	}
 
 	// Parse target from request body
@@ -813,66 +961,14 @@ func handleTCPingRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Target must be provided by backend - no default fallback
-	if tcpingReq.Target == "" {
-		http.Error(w, "target is required", http.StatusBadRequest)
+	// SECURITY: Validate and normalize target address (length, format,
+	// port range, host charset). Target must be provided by backend - no
+	// default fallback.
+	target, err := validateTCPingTarget(tcpingReq.Target)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	// SECURITY: Validate and normalize target address
-	// - Check length to prevent DoS attacks
-	// - Validate format (host:port or host)
-	// - Validate port range (1-65535)
-	target := strings.TrimSpace(tcpingReq.Target)
-	if len(target) > 255 {
-		// RFC 1035: Domain names are limited to 255 characters
-		http.Error(w, "target address too long", http.StatusBadRequest)
-		return
-	}
-
-	// Parse host/port. Prefer net.SplitHostPort because it correctly handles
-	// IPv6 literals wrapped in brackets ("[::1]:443" → "::1", "443"), which a
-	// naive strings.SplitN(":", 2) would mangle into ("[", ":1]:443") and
-	// silently reject every IPv6 TCPing target with a 400 error.
-	var host, portStr string
-	if h, p, splitErr := net.SplitHostPort(target); splitErr == nil {
-		host = strings.TrimSpace(h)
-		portStr = strings.TrimSpace(p)
-	} else {
-		// No port in target (or malformed). Default to port 80 on the bare
-		// host. This matches the previous behaviour for ":"-free inputs; for
-		// bracketed IPv6 literals without a port ("[::1]") we strip brackets.
-		host = strings.TrimSpace(target)
-		host = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
-		portStr = "80"
-	}
-
-	// Validate host is not empty
-	if host == "" {
-		http.Error(w, "target host cannot be empty", http.StatusBadRequest)
-		return
-	}
-
-	// Validate port is a number and in valid range (1-65535)
-	port, err := strconv.Atoi(portStr)
-	if err != nil || port < 1 || port > 65535 {
-		http.Error(w, "invalid port number (must be 1-65535)", http.StatusBadRequest)
-		return
-	}
-
-	// Validate host characters BEFORE reconstructing the dial target so we
-	// still reject injection-looking inputs. Hostnames/IPv4/unbracketed IPv6
-	// all fit this set (colons in IPv6, dots, hyphens, alphanumerics).
-	hostnameRegex := regexp.MustCompile(`^[a-zA-Z0-9.\-:]+$`)
-	if !hostnameRegex.MatchString(host) {
-		http.Error(w, "invalid target host format", http.StatusBadRequest)
-		return
-	}
-
-	// Reconstruct a dial-ready target. net.JoinHostPort wraps IPv6 literals
-	// in brackets automatically ("::1" + "443" → "[::1]:443"), which is the
-	// format net.DialTimeout expects.
-	target = net.JoinHostPort(host, strconv.Itoa(port))
 
 	// Execute tcping to target specified by backend
 	latency, err := executeTCPing(target)
@@ -1029,24 +1125,25 @@ func startPushLoop() {
 		}
 
 		if resp.StatusCode == http.StatusOK {
-			// Parse updated TCPing config from server response.
+			// Parse updated TCPing config from server response (bounded to
+			// maxResponseBodyBytes like every other response the agent reads).
 			// json.NewDecoder reads the full small body into its buffer in one
 			// syscall, so resp.Body is at EOF after Decode; no extra drain needed.
 			var pushResp ClientPushResponse
-			if decErr := json.NewDecoder(resp.Body).Decode(&pushResp); decErr == nil {
+			if decErr := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBodyBytes)).Decode(&pushResp); decErr == nil {
 				applyPushTCPingConfig(pushResp.TCPingTargets, pushResp.TCPingIntervalSecs)
 			} else {
 				// Decode failed — drain remainder to enable connection reuse
-				ioutil.ReadAll(resp.Body) //nolint:errcheck
+				ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck
 			}
 		} else if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized {
 			// Server doesn't know this client ID or secret is wrong.
 			// TCPing results are genuinely not needed if the server rejects us.
 			// Don't put them back to avoid infinite accumulation.
-			ioutil.ReadAll(resp.Body) //nolint:errcheck // drain to enable connection reuse
+			ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck // drain to enable connection reuse
 		} else {
 			// Transient server error — preserve TCPing results for next cycle
-			ioutil.ReadAll(resp.Body) //nolint:errcheck // drain to enable connection reuse
+			ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck // drain to enable connection reuse
 			if len(tcpingResults) > 0 {
 				pendingTCPingResultsMu.Lock()
 				combined := append(tcpingResults, pendingTCPingResults...)
@@ -1214,7 +1311,7 @@ func collectSystemMetrics() metricPayload {
 		NetOutMBps:         netOut,
 		TotalNetInBytes:    totalNetInBytes,
 		TotalNetOutBytes:   totalNetOutBytes,
-		AgentVersion:       "1.3.22",
+		AgentVersion:       "1.3.23",
 		Alert:              false, // Can be enhanced with actual alert logic
 	}
 }
@@ -1714,7 +1811,7 @@ func getPublicIPv4() string {
 			if resp.StatusCode != http.StatusOK {
 				return
 			}
-			body, err := ioutil.ReadAll(resp.Body)
+			body, err := ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
 			if err != nil {
 				return
 			}
@@ -1788,7 +1885,7 @@ func getPublicIPv6() string {
 			if resp.StatusCode != http.StatusOK {
 				return
 			}
-			body, err := ioutil.ReadAll(resp.Body)
+			body, err := ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
 			if err != nil {
 				return
 			}

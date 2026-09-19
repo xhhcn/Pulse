@@ -250,9 +250,9 @@ download_binary() {
     local download_url="${GITHUB_REPO}/${BINARY_NAME}"
 
     if command -v curl &>/dev/null; then
-        curl -sSL "$download_url" -o "$INSTALL_DIR/probe-client" || error "Failed to download binary"
+        curl -sSL --proto '=https' "$download_url" -o "$INSTALL_DIR/probe-client" || error "Failed to download binary"
     elif command -v wget &>/dev/null; then
-        wget -q "$download_url" -O "$INSTALL_DIR/probe-client" || error "Failed to download binary"
+        wget -q --https-only "$download_url" -O "$INSTALL_DIR/probe-client" || error "Failed to download binary"
     else
         error "Neither curl nor wget found. Please install one of them."
     fi
@@ -293,6 +293,8 @@ LogRateLimitBurst=50
 [Install]
 WantedBy=multi-user.target
 EOF
+    # The unit carries the agent secret; keep it readable by root only.
+    chmod 600 /etc/systemd/system/${SERVICE_NAME}.service
 
     systemctl daemon-reload
     systemctl enable ${SERVICE_NAME}
@@ -543,12 +545,12 @@ main() {
     log_msg "[INFO] Checking for updates (${binary_name})..."
 
     if command -v curl &>/dev/null; then
-        if ! curl -sSL --connect-timeout 15 --max-time 120 "$download_url" -o "$TEMP_BINARY" 2>/dev/null; then
+        if ! curl -sSL --proto '=https' --connect-timeout 15 --max-time 120 "$download_url" -o "$TEMP_BINARY" 2>/dev/null; then
             log_msg "[WARN] Download failed, will retry next cycle"
             exit 0
         fi
     elif command -v wget &>/dev/null; then
-        if ! wget -q --timeout=120 "$download_url" -O "$TEMP_BINARY" 2>/dev/null; then
+        if ! wget -q --https-only --timeout=120 "$download_url" -O "$TEMP_BINARY" 2>/dev/null; then
             log_msg "[WARN] Download failed, will retry next cycle"
             exit 0
         fi
