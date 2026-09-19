@@ -135,23 +135,24 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} fixes wrong country flags. Existing clients and databases stay compatible.
+            v${{ steps.version.outputs.version }} is a privacy fix plus follow-ups from a final review. Existing clients and databases stay compatible; upgrading is recommended.
 
             ### Highlights
 
-            - A stored country is reused only while it was resolved for an address the agent still has (new `location_ip` field). Previously, after one address change the fallback country was persisted together with the new address and then reused forever, restart after restart; a cached lookup answer now always wins.
-            - Cloudflare's published ranges are trusted proxies by default, so deployments behind Cloudflare get real client addresses without setting `TRUSTED_PROXIES`.
-            - When an agent reports no address, the server never records a trusted proxy's own address as the agent's (that put systems in the CDN's country); an agent reaching the server over IPv6 gets its IPv6 recorded.
-            - Agent: a public-address refresh that finds nothing keeps the last known addresses. Reports version 1.3.21.
+            - The public view (anonymous /api/metrics and the public event stream) no longer includes the `location_ip` field introduced in v1.3.21, which exposed each agent's public address.
+            - A private reported address is never persisted; an agent that reaches the server over IPv6 gets its IPv6 recorded independently of the IPv4 rule; `TRUSTED_PROXIES=none` disables the built-in Cloudflare trust.
+            - `/admin/` and `/login/` carry an ETag like the homepage; If-None-Match accepts weak validators and `*`; a connect-time prime never drops a `tcping_config_updated` signal queued for the subscriber.
+            - Agent: a previously detected address is kept for at most ten minutes of failed refreshes. Reports version 1.3.22.
+            - README: Cloudflare ranges are trusted by default; Go 1.22; client install examples use port 8008.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format changed.
-            - Existing `metrics.db` files remain readable; countries stored by older versions are re-checked once and corrected where needed.
+            - Existing `metrics.db` files remain readable.
 
             ### Verified
 
-            - Server vet, race-enabled tests and build; client vet and cross-compilation; browser end-to-end runs; Docker image smoke tests.
+            - Server vet, race-enabled tests and build; client vet and cross-compilation; browser end-to-end runs on both pages; Docker image smoke tests.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
