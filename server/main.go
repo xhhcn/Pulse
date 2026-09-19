@@ -205,10 +205,6 @@ func getCachedTCPingResultsJSON(clientID, target string) ([]byte, bool) {
 // cache-miss responses are byte-identical on the wire, which simplifies
 // downstream tooling (e.g. ETag generation, log diffs, conformance tests).
 func cacheTCPingResults(clientID, target string, response TCPingHistoryResponse) {
-	if target == "" {
-		return
-	}
-
 	body, err := json.Marshal(response)
 	if err != nil {
 		return
@@ -375,6 +371,105 @@ type metricPayload struct {
 	// pushes, older admin UIs) is distinguishable from an explicit false.
 	HideOnHome *bool `json:"hide_on_home,omitempty"`
 	HideTCPing *bool `json:"hide_tcping,omitempty"`
+}
+
+// Agent-supplied display strings are stored verbatim and re-broadcast to
+// every viewer every 3 s, so they are bounded and stripped of characters
+// that have no place in a hardware or OS label: control characters and the
+// HTML-significant set. Every renderer escapes as well; this is defence in
+// depth against any future markup path and against payload amplification.
+const (
+	agentStringMaxLen  = 128
+	agentInfoMaxLen    = 256
+	agentVersionMaxLen = 32
+	agentIconMaxLen    = 64
+	// maxTCPingResultsPerPush bounds one push's backlog. Agents queue at most
+	// 500 samples while the server is unreachable; anything beyond that is a
+	// rogue client, and the newest samples are the ones worth keeping.
+	maxTCPingResultsPerPush = 600
+)
+
+// iconNameRe is the iconify "set:name" form the agent emits (e.g.
+// "logos:ubuntu"). Anything else is dropped rather than stored.
+var iconNameRe = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$`)
+
+func sanitizeAgentString(s string, max int) string {
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	n := 0
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f || r == '\uFFFD' {
+			continue
+		}
+		switch r {
+		case '<', '>', '"', '&', '`':
+			continue
+		}
+		if n >= max {
+			break
+		}
+		b.WriteRune(r)
+		n++
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func sanitizeIconName(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if len(s) > agentIconMaxLen || !iconNameRe.MatchString(s) {
+		return ""
+	}
+	return s
+}
+
+func clampPercent(v float64) float64 {
+	if v != v || v < 0 {
+		return 0
+	}
+	if v > 100 {
+		return 100
+	}
+	return v
+}
+
+func canonicalIP(s string, want4 bool) string {
+	ip := net.ParseIP(strings.TrimSpace(s))
+	if ip == nil || (ip.To4() != nil) != want4 {
+		return ""
+	}
+	return ip.String()
+}
+
+// sanitizeMetricPayload normalises every agent-controlled field in place.
+// Admin-owned fields (name, tags, order, visibility) are not touched here;
+// the store re-pins them from the existing record for agent writes.
+func sanitizeMetricPayload(p *metricPayload) {
+	p.IPv4 = canonicalIP(p.IPv4, true)
+	p.IPv6 = canonicalIP(p.IPv6, false)
+	p.Location = sanitizeAgentString(p.Location, agentStringMaxLen)
+	p.VirtualizationType = sanitizeAgentString(p.VirtualizationType, agentStringMaxLen)
+	p.OS = sanitizeAgentString(p.OS, agentStringMaxLen)
+	p.OSIcon = sanitizeIconName(p.OSIcon)
+	p.CPUModel = sanitizeAgentString(p.CPUModel, agentStringMaxLen)
+	p.MemoryInfo = sanitizeAgentString(p.MemoryInfo, agentInfoMaxLen)
+	p.SwapInfo = sanitizeAgentString(p.SwapInfo, agentInfoMaxLen)
+	p.DiskInfo = sanitizeAgentString(p.DiskInfo, agentInfoMaxLen)
+	p.AgentVersion = sanitizeAgentString(p.AgentVersion, agentVersionMaxLen)
+	p.CPU = clampPercent(p.CPU)
+	p.Memory = clampPercent(p.Memory)
+	p.Disk = clampPercent(p.Disk)
+	if p.NetInMBps < 0 || p.NetInMBps != p.NetInMBps {
+		p.NetInMBps = 0
+	}
+	if p.NetOutMBps < 0 || p.NetOutMBps != p.NetOutMBps {
+		p.NetOutMBps = 0
+	}
+	if p.Uptime < 0 {
+		p.Uptime = 0
+	}
 }
 
 // SSE Broker for broadcasting updates.
@@ -832,9 +927,33 @@ func (c *IPCountryCache) Get(ip string) (string, bool) {
 	return entry.Country, true
 }
 
+// ipCountryCacheMax bounds the cache: an agent may report a fresh public
+// address on every push and each one would otherwise live here for 24 h.
+const ipCountryCacheMax = 10000
+
+// makeRoomLocked evicts one entry when a new key would exceed the bound:
+// an expired entry if there is one, otherwise an arbitrary one.
+func (c *IPCountryCache) makeRoomLocked(ip string) {
+	if _, exists := c.cache[ip]; exists || len(c.cache) < ipCountryCacheMax {
+		return
+	}
+	now := time.Now()
+	for k, e := range c.cache {
+		if now.After(e.ExpiresAt) {
+			delete(c.cache, k)
+			return
+		}
+	}
+	for k := range c.cache {
+		delete(c.cache, k)
+		return
+	}
+}
+
 func (c *IPCountryCache) Set(ip, country string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.makeRoomLocked(ip)
 	// Cache for 24 hours
 	c.cache[ip] = IPCountryCacheEntry{
 		Country:   country,
@@ -846,6 +965,7 @@ func (c *IPCountryCache) Set(ip, country string) {
 func (c *IPCountryCache) SetFailed(ip string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.makeRoomLocked(ip)
 	// Cache failed lookups for 1 hour (shorter than successful lookups)
 	c.cache[ip] = IPCountryCacheEntry{
 		Country:   "FAILED",
@@ -881,14 +1001,9 @@ func buildURL(ip, port string) string {
 	if ip == "" {
 		return ""
 	}
-	// Use net.ParseIP to accurately detect IPv6 addresses
-	parsedIP := net.ParseIP(ip)
-	if parsedIP != nil && parsedIP.To4() == nil {
-		// IPv6 address - wrap in square brackets
-		return fmt.Sprintf("http://[%s]:%s", ip, port)
-	}
-	// IPv4 address - use as is
-	return fmt.Sprintf("http://%s:%s", ip, port)
+	// net.JoinHostPort brackets IPv6 literals. The port was validated at
+	// registration, so the result is always "http://host:port".
+	return "http://" + net.JoinHostPort(ip, port)
 }
 
 func (r *ClientRegistry) Register(id, name, port, ip, ipv6 string) {
@@ -1332,6 +1447,13 @@ func main() {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			handleAuthLogout(w, r)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 	mux.HandleFunc("/api/auth/change-password", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			handleAuthChangePassword(store, w, r)
@@ -1577,11 +1699,11 @@ func main() {
 			http.NotFound(w, r)
 		})
 
-		handler = corsMiddleware(cdnFriendlyMiddleware(finalHandler))
+		handler = corsMiddleware(readDeadlineMiddleware(cdnFriendlyMiddleware(finalHandler)))
 	} else {
 		// Docker mode: only serve API (Nginx handles static files)
 		log.Printf("🌐 Backend listening on %s (Docker mode - Nginx serves frontend)", addr)
-		handler = corsMiddleware(cdnFriendlyMiddleware(mux))
+		handler = corsMiddleware(readDeadlineMiddleware(cdnFriendlyMiddleware(mux)))
 	}
 
 	srv := &http.Server{
@@ -1681,7 +1803,8 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 	// cannot retroactively be used to escalate privilege — the browser will
 	// ultimately have to reconnect, and the new connection will be
 	// re-authorised from scratch.
-	isAdmin := isAuthenticated(r)
+	sessionToken := bearerToken(r)
+	isAdmin := authTokenValid(sessionToken)
 	if !isAdmin {
 		// EventSource cannot send an Authorization header, so admin sessions
 		// identify themselves to SSE via the admin_token query parameter.
@@ -1698,23 +1821,19 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 		// expired mid-session — any mutation they attempt will fail at the
 		// mutation endpoint and redirect them to /login via the page's
 		// existing wrapped-fetch logic.
-		if adminToken := r.URL.Query().Get("admin_token"); adminToken != "" {
-			authTokensMu.Lock()
-			expiry, exists := authTokens[adminToken]
-			authTokensMu.Unlock()
-			if exists && time.Now().Before(expiry) {
-				isAdmin = true
-			}
+		if adminToken := r.URL.Query().Get("admin_token"); adminToken != "" && authTokenValid(adminToken) {
+			isAdmin = true
+			sessionToken = adminToken
 		}
 	}
 
 	// Check privacy mode - if enabled, require authentication or valid share token
+	shareToken := r.URL.Query().Get("token")
 	privacyConfig, err := store.GetPrivacyConfig()
 	if err == nil && privacyConfig.Enabled {
 		authorised := isAdmin
 
 		if !authorised {
-			shareToken := r.URL.Query().Get("token")
 			if shareToken != "" {
 				if privacyConfig.ShareToken != "" && secretEqual(shareToken, privacyConfig.ShareToken) && !privacyConfig.TokenExpires.IsZero() && time.Now().Before(privacyConfig.TokenExpires) {
 					// Share token grants access but NOT admin privileges.
@@ -1828,6 +1947,13 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 	keepalive := time.NewTicker(15 * time.Second)
 	defer keepalive.Stop()
 
+	// Admission was decided once, above, and a stream can stay open for
+	// hours: re-check it periodically so a revoked session, a revoked or
+	// expired share link, or privacy mode being switched on ends the stream
+	// instead of feeding it until the tab is closed.
+	reauth := time.NewTicker(sseReauthInterval)
+	defer reauth.Stop()
+
 	// Listen for client disconnect and broker messages
 	ctx := r.Context()
 	for {
@@ -1849,8 +1975,32 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 			if !writeEvent(": ping\n\n") {
 				return
 			}
+		case <-reauth.C:
+			if !sseStillAuthorised(store, isAdmin, sessionToken, shareToken) {
+				return
+			}
 		}
 	}
+}
+
+// sseReauthInterval is how often an open stream re-checks the session or
+// share token it was admitted with. A variable so tests can shorten it.
+var sseReauthInterval = 30 * time.Second
+
+// sseStillAuthorised re-evaluates a live stream's admission: an admin stream
+// ends when its session is revoked or expires; a public stream ends when
+// privacy mode is on and its share token is absent, changed or expired. The
+// browser reconnects and is authorised from scratch.
+func sseStillAuthorised(store *Store, isAdmin bool, sessionToken, shareToken string) bool {
+	if isAdmin {
+		return authTokenValid(sessionToken)
+	}
+	cfg, err := store.GetPrivacyConfig()
+	if err != nil || cfg == nil || !cfg.Enabled {
+		return true
+	}
+	return shareToken != "" && cfg.ShareToken != "" && secretEqual(shareToken, cfg.ShareToken) &&
+		!cfg.TokenExpires.IsZero() && time.Now().Before(cfg.TokenExpires)
 }
 
 // buildMetricsSnapshot assembles the same enriched metrics list that
@@ -2094,6 +2244,7 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 		return
 	}
+	sanitizeMetricPayload(&payload)
 	if strings.TrimSpace(payload.ID) == "" || strings.TrimSpace(payload.Name) == "" {
 		http.Error(w, "id and name are required", http.StatusBadRequest)
 		return
@@ -2328,8 +2479,13 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 	responseMetric := metric
 	authenticated := isAuthenticated(r)
 	if !authenticated {
-		// Unauthenticated users should never see secret
+		// An agent caller (per-system secret) never sees the secret or any
+		// address field. The fleet secret is shared by every agent, so the
+		// echo must not become a way to read another system's addresses.
 		responseMetric.Secret = ""
+		responseMetric.IPv4 = ""
+		responseMetric.IPv6 = ""
+		responseMetric.LocationIP = ""
 	}
 	// Authenticated admin users can see secret for generating install commands
 
@@ -2421,6 +2577,18 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 		log.Printf("❌ Client registration failed: missing ID")
 		http.Error(w, "id is required", http.StatusBadRequest)
 		return
+	}
+
+	// The port is spliced into the URL the server polls. Anything but a
+	// plain port number ("1@10.0.0.1:80", "80/x?a=") would point the poll,
+	// and the secret it carries, at a host of the caller's choosing.
+	payload.Port = strings.TrimSpace(payload.Port)
+	if payload.Port != "" {
+		if p, convErr := strconv.Atoi(payload.Port); convErr != nil || p < 1 || p > 65535 {
+			log.Printf("❌ Client registration failed: invalid port %q for ID '%s'", payload.Port, payload.ID)
+			http.Error(w, "port must be a number between 1 and 65535", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Verify that the server ID exists in the database
@@ -2562,6 +2730,10 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 		return
+	}
+	sanitizeMetricPayload(&payload.metricPayload)
+	if len(payload.TCPingResults) > maxTCPingResultsPerPush {
+		payload.TCPingResults = payload.TCPingResults[len(payload.TCPingResults)-maxTCPingResultsPerPush:]
 	}
 
 	clientID := strings.TrimSpace(payload.ID)
@@ -3375,6 +3547,7 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	if err := json.NewDecoder(bodyReader).Decode(&payload); err != nil {
 		return false
 	}
+	sanitizeMetricPayload(&payload)
 
 	// Load the stored record first: it carries the admin-owned fields we must
 	// preserve and the persisted Location that lets us skip the geo lookup.
@@ -3972,6 +4145,22 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// readDeadlineMiddleware bounds how long a request body may take to arrive.
+// The server's ReadTimeout is deliberately unset because /api/events is a
+// long-lived GET, so a client that sends valid headers and then dribbles a
+// POST body one byte a minute would otherwise hold its goroutine forever;
+// MaxBytesReader caps size, not rate. Only body-carrying methods get the
+// deadline: for a GET the response may legitimately take longer (backups).
+func readDeadlineMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(30 * time.Second))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // cdnFriendlyMiddleware adds CDN-friendly headers to prevent caching of dynamic API responses
 // This is critical when the server is behind a CDN (e.g., Cloudflare, CloudFront)
 func cdnFriendlyMiddleware(next http.Handler) http.Handler {
@@ -4062,6 +4251,21 @@ type TCPingResponse struct {
 	Error   string  `json:"error,omitempty"`
 }
 
+// tcpingTargetConfigured mirrors the push path's allow-list: an unreadable
+// config keeps legacy behaviour (accept), a readable one must list the target.
+func tcpingTargetConfigured(store *Store, target string) bool {
+	cfg, err := store.GetTCPingConfig()
+	if err != nil || cfg == nil {
+		return true
+	}
+	for _, t := range cfg.Targets {
+		if t.Address == target {
+			return true
+		}
+	}
+	return false
+}
+
 // Handle tcping result from client
 func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
@@ -4102,6 +4306,18 @@ func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Only configured targets are recorded, as on the push path: anything
+	// else would sit in the history bucket under a key nothing ever prunes.
+	target := strings.TrimSpace(payload.Target)
+	if target == "" {
+		http.Error(w, "target is required", http.StatusBadRequest)
+		return
+	}
+	if !tcpingTargetConfigured(store, target) {
+		http.Error(w, "target is not configured", http.StatusBadRequest)
+		return
+	}
+
 	// Save result regardless of success/failure (nil latency for failures)
 	var latency *float64
 	if payload.Success {
@@ -4112,7 +4328,7 @@ func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 
 	result := TCPingResult{
 		ClientID:  payload.ClientID,
-		Target:    payload.Target,
+		Target:    target,
 		Latency:   latency,
 		Timestamp: time.Now().UTC(),
 	}
@@ -4193,6 +4409,14 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 
 	if clientID == "" {
 		http.Error(w, "client_id is required", http.StatusBadRequest)
+		return
+	}
+
+	// Unknown ids are answered before touching the history bucket. It is
+	// keyed by time, so a lookup for a non-existent client would otherwise
+	// scan the whole 24 h window on every anonymous request.
+	if sys, getErr := store.Get(clientID); getErr != nil || sys == nil {
+		http.Error(w, "client not found", http.StatusNotFound)
 		return
 	}
 
@@ -4452,6 +4676,13 @@ func handleSetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request
 }
 
 func handleVerifyShareToken(store *Store, w http.ResponseWriter, r *http.Request) {
+	// Same throttle as /api/auth/verify: this endpoint is a yes/no oracle
+	// for the share token.
+	if verifyRateLimited("share", getClientIP(r)) {
+		http.Error(w, "too many requests", http.StatusTooManyRequests)
+		return
+	}
+
 	defer r.Body.Close()
 	// A token is a short string; anything more than a few KB is abuse.
 	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
@@ -4481,8 +4712,9 @@ func handleVerifyShareToken(store *Store, w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Check if token is expired
-	if !config.TokenExpires.IsZero() && time.Now().After(config.TokenExpires) {
+	// A token without an expiry is refused by every data endpoint, so it
+	// must not verify either.
+	if config.TokenExpires.IsZero() || time.Now().After(config.TokenExpires) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "reason": "token_expired"})
 		return
 	}
@@ -5268,8 +5500,16 @@ func handleAuthSetup(store *Store, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := store.SetPassword(payload.Password); err != nil {
+	// The "already set" check above is only a fast path: the write itself is
+	// conditional inside one transaction, so two concurrent first-run calls
+	// cannot both report success with the last writer winning.
+	created, err := store.SetPasswordIfUnset(payload.Password)
+	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !created {
+		http.Error(w, "password already set", http.StatusBadRequest)
 		return
 	}
 
@@ -5506,32 +5746,42 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleAuthVerify verifies an auth token
-func handleAuthVerify(store *Store, w http.ResponseWriter, r *http.Request) {
-	// SECURITY: Rate limiting to prevent token enumeration attacks
-	clientIP := getClientIP(r)
+// verifyRateLimited counts a token-verification attempt for clientIP and
+// reports whether the caller has exceeded 30 attempts per minute. Shared by
+// /api/auth/verify and /api/privacy/verify-token so both yes/no oracles are
+// throttled the same way.
+//
+// Each oracle has its own bucket per address, so a burst against one cannot
+// starve the other (visitors behind a shared CDN edge share an address).
+func verifyRateLimited(kind, clientIP string) bool {
+	key := kind + "|" + clientIP
 	verifyAttemptsMu.Lock()
-	attempt, exists := verifyAttempts[clientIP]
+	defer verifyAttemptsMu.Unlock()
+	attempt, exists := verifyAttempts[key]
 	if !exists {
 		attempt = &verifyAttempt{count: 0, lastAttempt: time.Now()}
-		verifyAttempts[clientIP] = attempt
+		verifyAttempts[key] = attempt
 	}
-
 	// Reset count if last attempt was more than 1 minute ago
 	if time.Since(attempt.lastAttempt) > 1*time.Minute {
 		attempt.count = 0
 	}
-
 	// Limit to 30 attempts per minute per IP
 	if attempt.count >= 30 {
-		verifyAttemptsMu.Unlock()
+		return true
+	}
+	attempt.count++
+	attempt.lastAttempt = time.Now()
+	return false
+}
+
+// handleAuthVerify verifies an auth token
+func handleAuthVerify(store *Store, w http.ResponseWriter, r *http.Request) {
+	// SECURITY: Rate limiting to prevent token enumeration attacks
+	if verifyRateLimited("auth", getClientIP(r)) {
 		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return
 	}
-
-	attempt.count++
-	attempt.lastAttempt = time.Now()
-	verifyAttemptsMu.Unlock()
 
 	defer r.Body.Close()
 	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
@@ -5556,6 +5806,14 @@ func handleAuthVerify(store *Store, w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAuthChangePassword changes the admin password (requires authentication)
+// handleAuthLogout ends the session presented in the Authorization header.
+// It always answers 200: a token that is already gone is the desired end
+// state, and a distinct answer would only serve token enumeration.
+func handleAuthLogout(w http.ResponseWriter, r *http.Request) {
+	revokeAuthToken(bearerToken(r))
+	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+}
+
 func handleAuthChangePassword(store *Store, w http.ResponseWriter, r *http.Request) {
 	// Require authentication
 	if !isAuthenticated(r) {
@@ -5600,6 +5858,11 @@ func handleAuthChangePassword(store *Store, w http.ResponseWriter, r *http.Reque
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	// Every other session was minted from the old credential; end them so a
+	// leaked token cannot outlive the password change. The caller's own
+	// session stays valid.
+	revokeAuthTokensExcept(bearerToken(r))
 
 	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
@@ -5695,41 +5958,55 @@ func handleAdminBackup(store *Store, w http.ResponseWriter, r *http.Request) {
 
 // isAuthenticated checks if request is authenticated
 func isAuthenticated(r *http.Request) bool {
-	// SECURITY: Prefer Authorization header over query parameter
-	// Query parameters can leak tokens via logs, referer headers, etc.
+	// Admin tokens are accepted from the Authorization header only. A token
+	// in the query string ends up in CDN/proxy logs, Referer headers and
+	// browser history; the one client that cannot send a header
+	// (EventSource) uses the dedicated admin_token parameter in handleSSE.
+	return authTokenValid(bearerToken(r))
+}
 
-	// Check Authorization header (preferred method)
+// bearerToken returns the token carried by an "Authorization: Bearer"
+// header, or "" when the request has none.
+func bearerToken(r *http.Request) string {
 	authHeader := r.Header.Get("Authorization")
-	if authHeader != "" {
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			token := strings.TrimPrefix(authHeader, "Bearer ")
-			authTokensMu.Lock()
-			expiry, exists := authTokens[token]
-			authTokensMu.Unlock()
-			if exists && time.Now().Before(expiry) {
-				return true
-			}
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return ""
+	}
+	return strings.TrimPrefix(authHeader, "Bearer ")
+}
+
+// authTokenValid reports whether token is a live admin session.
+func authTokenValid(token string) bool {
+	if token == "" {
+		return false
+	}
+	authTokensMu.Lock()
+	expiry, exists := authTokens[token]
+	authTokensMu.Unlock()
+	return exists && time.Now().Before(expiry)
+}
+
+// revokeAuthToken ends one admin session.
+func revokeAuthToken(token string) {
+	if token == "" {
+		return
+	}
+	authTokensMu.Lock()
+	delete(authTokens, token)
+	authTokensMu.Unlock()
+}
+
+// revokeAuthTokensExcept ends every admin session other than keep (the
+// session that made the request). Used after a password change so a leaked
+// or forgotten token cannot outlive the credential it was minted from.
+func revokeAuthTokensExcept(keep string) {
+	authTokensMu.Lock()
+	defer authTokensMu.Unlock()
+	for token := range authTokens {
+		if token != keep {
+			delete(authTokens, token)
 		}
 	}
-
-	// SECURITY: Query parameter support is kept for backward compatibility
-	// but should be deprecated. Tokens in query parameters can be leaked via:
-	// - Server access logs
-	// - Referer headers
-	// - Browser history
-	// - Proxy logs
-	// Consider removing this in future versions
-	token := r.URL.Query().Get("token")
-	if token != "" {
-		authTokensMu.Lock()
-		expiry, exists := authTokens[token]
-		authTokensMu.Unlock()
-		if exists && time.Now().Before(expiry) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // existingLocationIP returns the address a stored location was resolved

@@ -914,14 +914,31 @@ func tcpingResultKey(result TCPingResult, seq int) []byte {
 }
 
 func putTCPingResult(bucket *bolt.Bucket, result TCPingResult) error {
+	return putTCPingResultFrom(bucket, result, nil)
+}
+
+// putTCPingResultFrom is putTCPingResult with an optional per-transaction
+// memo of the next free sequence number per (timestamp, client, target).
+// A batch whose samples all carry one server-side stamp then costs one
+// probe per sample instead of one probe per sample already written, which
+// kept the single bbolt writer busy for minutes on a 1 MB push.
+func putTCPingResultFrom(bucket *bolt.Bucket, result TCPingResult, memo map[string]int) error {
 	data, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("failed to marshal tcping result: %w", err)
 	}
 
-	for seq := 0; seq < 1_000_000; seq++ {
+	memoKey := tcpingResultKeyPrefix(result) + result.Target
+	start := 0
+	if memo != nil {
+		start = memo[memoKey]
+	}
+	for seq := start; seq < 1_000_000; seq++ {
 		key := tcpingResultKey(result, seq)
 		if bucket.Get(key) == nil {
+			if memo != nil {
+				memo[memoKey] = seq + 1
+			}
 			return bucket.Put(key, data)
 		}
 	}
@@ -979,6 +996,7 @@ func (s *Store) SaveClientPushBatch(metric SystemMetric, tcpingResults []TCPingR
 		if tcping == nil {
 			return fmt.Errorf("tcping bucket not found")
 		}
+		seqMemo := make(map[string]int)
 		for _, r := range tcpingResults {
 			if r.Target == "" {
 				continue
@@ -987,7 +1005,7 @@ func (s *Store) SaveClientPushBatch(metric SystemMetric, tcpingResults []TCPingR
 			if r.ExactTimestamp {
 				err = putTCPingResultIdempotent(tcping, r)
 			} else {
-				err = putTCPingResult(tcping, r)
+				err = putTCPingResultFrom(tcping, r, seqMemo)
 			}
 			if err != nil {
 				return fmt.Errorf("put tcping result: %w", err)
@@ -1379,6 +1397,32 @@ func (s *Store) SetPassword(password string) error {
 		}
 		return bucket.Put([]byte(passwordKey), hashedPassword)
 	})
+}
+
+// SetPasswordIfUnset stores the first admin password. The existence check
+// and the write happen in one transaction, so concurrent first-run calls
+// yield exactly one success; created is false when a password already
+// exists and nothing was written.
+func (s *Store) SetPasswordIfUnset(password string) (created bool, err error) {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return false, fmt.Errorf("failed to hash password: %w", err)
+	}
+	err = s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(authBucket))
+		if bucket == nil {
+			return fmt.Errorf("auth bucket not found")
+		}
+		if bucket.Get([]byte(passwordKey)) != nil {
+			return nil
+		}
+		created = true
+		return bucket.Put([]byte(passwordKey), hashedPassword)
+	})
+	if err != nil {
+		created = false
+	}
+	return created, err
 }
 
 // VerifyPassword verifies the admin password

@@ -136,13 +136,20 @@ func TestTCPingCacheIsTargetScoped(t *testing.T) {
 	}
 }
 
-func TestTCPingCacheSkipsAllTargetHistory(t *testing.T) {
+func TestTCPingCacheKeepsAllTargetHistory(t *testing.T) {
 	resetTCPingCacheForTest(t)
 
+	// The homepage fetches the all-target history once per row, so it is
+	// cached like any other response (and invalidated per client like any
+	// other); leaving it uncached made it a free full-bucket scan.
 	cacheTCPingResults("client-a", "", TCPingHistoryResponse{})
 
+	if _, ok := getCachedTCPingResultsJSON("client-a", ""); !ok {
+		t.Fatal("all-target history responses should be cached")
+	}
+	invalidateTCPingCache("client-a")
 	if _, ok := getCachedTCPingResultsJSON("client-a", ""); ok {
-		t.Fatal("all-target history responses should not be cached")
+		t.Fatal("all-target history should be dropped with the client's other entries")
 	}
 }
 
