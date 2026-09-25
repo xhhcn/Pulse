@@ -139,22 +139,21 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} fixes the page getting sluggish while it stays open and the server's disk-write load. (It is v1.3.27 plus a fix to the standalone-binary build, which failed for v1.3.27.) Existing clients and databases stay compatible; agents do not need an update (they report 1.3.26).
+            v${{ steps.version.outputs.version }} makes the dashboard much lighter on the network and a little lighter to keep open. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.26).
 
             ### Highlights
 
-            - Server: the database no longer rewrites bbolt's free-page list on every commit (`NoFreelistSync`). On a 110-agent deployment that list had grown to ~130 KB and was written ~40 times a second (5 MB/s), and the contiguous block it needed kept extending the file. The list is now rebuilt when the file is opened; older files open as before, and older builds can still open files written by this one. A bloated file is compacted by the existing startup vacuum. Because bbolt now checks the whole tree when it rebuilds that list, the server first opens the file in a short-lived child process: if bbolt stops on a damaged tree there, the file is salvaged (every readable bucket and key copied into a fresh file, the original kept as `metrics.db.damaged-<time>`) instead of the server failing on every start.
-            - Web: a collapsing row keeps its TCPing chart drawn until the section has closed (it used to go blank at the start of the animation); leaving an unreachable target for one without samples no longer keeps the N/A summary or an empty chart box.
-            - Web: the default navbar logo pulses with one composited CSS animation instead of looping SVG SMIL, which re-rendered the whole page on every frame for as long as it was open.
+            - Server: responses are gzip-compressed by the server itself, so a CDN that does not compress (or no CDN at all) no longer means full-size transfers. Static files are compressed once and kept; API responses of 1 KiB or more are compressed on the fly; the live event stream is compressed too, with every event compressed once and the same bytes sent to all viewers, so an open dashboard costs no extra CPU per viewer. With 110 servers the stream drops from ~35 KB/s to ~6 KB/s per open tab, the first page load from ~240 KB to ~65 KB, and a 24-hour TCPing history from ~180 KB to ~22 KB. Clients that do not ask for compression get exactly what they got before. `HTTP_GZIP=off` and `SSE_GZIP=off` turn it off.
+            - Web: resource bars follow whole percents. A tenth of a percent is a sub-pixel step, yet each one restarted the bar's 0.5 s transition on nearly every update.
 
             ### Compatibility
 
-            - Existing clients continue to work; no wire format changed.
+            - Existing clients continue to work; no wire format changed (compression is negotiated per request).
             - Existing `metrics.db` files remain readable.
 
             ### Verified
 
-            - Server vet, race-enabled tests and build; client vet and cross-compilation; browser end-to-end runs on both pages; Docker image smoke tests.
+            - Server vet, race-enabled tests and build; browser end-to-end runs on both pages, including the compressed live stream; Docker-mode smoke test through nginx.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`

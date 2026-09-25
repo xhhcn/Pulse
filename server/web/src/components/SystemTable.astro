@@ -717,6 +717,10 @@ const apiBase = apiBaseProp ?? '';
   updateSortUI();
 
   const pct = (val) => Math.min(Math.max(val || 0, 0), 100);
+  // Bars follow whole percents (the label keeps one decimal): a tenth of a
+  // percent is a sub-pixel step, yet each one restarted the 0.5 s width
+  // transition of that bar on nearly every update.
+  const barWidth = (val) => `${Math.round(pct(val))}%`;
 
   // Pre-calculate server name column width from data (before rendering DOM)
   // This prevents visual jitter by setting the correct width from the start
@@ -818,7 +822,7 @@ const apiBase = apiBaseProp ?? '';
     <div class="flex items-center gap-0.5 pr-2 sm:pr-3 min-w-0 w-full">
       <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] w-8 sm:w-10 shrink-0">${value.toFixed(1)}%</span>
       <div class="progress-track relative h-2.5 sm:h-3 flex-1 min-w-[60px] max-w-[100px] sm:max-w-[120px] overflow-hidden rounded-full bg-[#111] dark:bg-[#111] bg-[#e5e5e5]">
-        <div class="absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getProgressColor(value, isOffline)}" style="width:${pct(value)}%"></div>
+        <div class="absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getProgressColor(value, isOffline)}" style="width:${barWidth(value)}"></div>
     </div>
     </div>
   `;
@@ -1616,9 +1620,11 @@ const apiBase = apiBaseProp ?? '';
           textSpan.textContent = `${value.toFixed(1)}%`;
         }
         if (progressBar) {
-          progressBar.style.width = `${pct(value)}%`;
+          const width = barWidth(value);
+          if (progressBar.style.width !== width) progressBar.style.width = width;
           // Update color based on threshold
-          progressBar.className = `absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          const barClass = `absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          if (progressBar.className !== barClass) progressBar.className = barClass;
         }
       }
     }
@@ -1637,9 +1643,11 @@ const apiBase = apiBaseProp ?? '';
           textSpan.textContent = `${value.toFixed(1)}%`;
         }
         if (progressBar) {
-          progressBar.style.width = `${pct(value)}%`;
+          const width = barWidth(value);
+          if (progressBar.style.width !== width) progressBar.style.width = width;
           // Update color based on threshold
-          progressBar.className = `absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          const barClass = `absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          if (progressBar.className !== barClass) progressBar.className = barClass;
         }
       }
     }
@@ -1658,9 +1666,11 @@ const apiBase = apiBaseProp ?? '';
           textSpan.textContent = `${value.toFixed(1)}%`;
         }
         if (progressBar) {
-          progressBar.style.width = `${pct(value)}%`;
+          const width = barWidth(value);
+          if (progressBar.style.width !== width) progressBar.style.width = width;
           // Update color based on threshold
-          progressBar.className = `absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          const barClass = `absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          if (progressBar.className !== barClass) progressBar.className = barClass;
         }
       }
     }
