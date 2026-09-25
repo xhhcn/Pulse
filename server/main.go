@@ -1271,10 +1271,17 @@ func (r *ClientRegistry) Remove(id string) {
 }
 
 func main() {
+	// In the database probe child (see dbprobe.go) this opens the file and
+	// exits; in the server it returns immediately.
+	runDBOpenProbeIfRequested()
+
 	log.Println("🚀 Starting Probe Server...")
 
-	// Initialize database with persistence
+	// Initialize database with persistence. The probe first checks, in a
+	// child process, that bbolt can open the file, and salvages it if bbolt
+	// dies on a damaged tree (which would otherwise repeat on every start).
 	dbPath := DBPath()
+	preflightDB(dbPath)
 	store, err := NewStore(dbPath)
 	if err != nil {
 		log.Fatalf("❌ Failed to initialize database: %v", err)

@@ -90,7 +90,11 @@ func isDBCorruptionError(err error) bool {
 
 // quarantineCorruptDB renames the broken file aside with a timestamp suffix so
 // that the service can start with a fresh database while still preserving the
-// evidence for post-mortem inspection / manual recovery via `bbolt` CLI.
+// evidence for post-mortem inspection. For manual recovery use
+// `bbolt compact -o out.db <file>`: it copies every readable bucket and
+// key/value into a fresh file. `bbolt check` is no help on a file written with
+// NoFreelistSync — it rebuilds the freelist the same way an open does and
+// panics on the damage instead of listing it (see dbprobe.go).
 func quarantineCorruptDB(dbPath string, cause error) (string, error) {
 	suffix := time.Now().UTC().Format("20060102T150405Z")
 	backupPath := fmt.Sprintf("%s.corrupt-%s", dbPath, suffix)
