@@ -143,7 +143,7 @@ jobs:
 
             ### Highlights
 
-            - Server: the database no longer rewrites bbolt's free-page list on every commit (`NoFreelistSync`). On a 110-agent deployment that list had grown to ~130 KB and was written ~40 times a second (5 MB/s), and the contiguous block it needed kept extending the file. The list is now rebuilt when the file is opened; older files open as before, and older builds can still open files written by this one. A bloated file is compacted by the existing startup vacuum.
+            - Server: the database no longer rewrites bbolt's free-page list on every commit (`NoFreelistSync`). On a 110-agent deployment that list had grown to ~130 KB and was written ~40 times a second (5 MB/s), and the contiguous block it needed kept extending the file. The list is now rebuilt when the file is opened; older files open as before, and older builds can still open files written by this one. A bloated file is compacted by the existing startup vacuum. Because bbolt now checks the whole tree when it rebuilds that list, the server first opens the file in a short-lived child process: if bbolt stops on a damaged tree there, the file is salvaged (every readable bucket and key copied into a fresh file, the original kept as `metrics.db.damaged-<time>`) instead of the server failing on every start.
             - Web: a collapsing row keeps its TCPing chart drawn until the section has closed (it used to go blank at the start of the animation); leaving an unreachable target for one without samples no longer keeps the N/A summary or an empty chart box.
             - Web: the default navbar logo pulses with one composited CSS animation instead of looping SVG SMIL, which re-rendered the whole page on every frame for as long as it was open.
 
