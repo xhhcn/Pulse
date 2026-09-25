@@ -42,10 +42,20 @@ type Store struct {
 // against the freelist-corruption bugs present in older bbolt versions and
 // drastically reduces the probability of "invalid freelist page" panics after
 // an ungraceful shutdown.
+//
+// NoFreelistSync: the free-page list is not written on every commit; bbolt
+// rebuilds it by scanning the tree when the file is opened. With it synced,
+// every agent push (~40 commits/s on a 110-node deployment) rewrote the
+// whole list as one contiguous block — about 130 KB per commit (5 MB/s) once
+// bulk history deletes had left ~16k free pages behind — and failing to find
+// a contiguous run for that block is what kept extending the file. It also
+// removes the persisted freelist page, the structure behind the historical
+// "invalid freelist page" corruption after unclean shutdowns.
 func openBolt(dbPath string) (*bolt.DB, error) {
 	return bolt.Open(dbPath, 0600, &bolt.Options{
-		Timeout:      5 * time.Second,
-		FreelistType: bolt.FreelistMapType,
+		Timeout:        5 * time.Second,
+		FreelistType:   bolt.FreelistMapType,
+		NoFreelistSync: true,
 	})
 }
 
@@ -319,8 +329,9 @@ func (s *Store) maybeCompact(dbPath string) (string, int64, int64, error) {
 	_ = os.Remove(tmpPath)
 
 	dst, err := bolt.Open(tmpPath, 0600, &bolt.Options{
-		Timeout:      5 * time.Second,
-		FreelistType: bolt.FreelistMapType,
+		Timeout:        5 * time.Second,
+		FreelistType:   bolt.FreelistMapType,
+		NoFreelistSync: true,
 	})
 	if err != nil {
 		_ = os.Remove(tmpPath)
@@ -448,8 +459,9 @@ func CompactBoltFileAfterClose(dbPath string) (beforeOut, afterOut int64, err er
 	_ = os.Remove(tmpPath)
 
 	dst, err := bolt.Open(tmpPath, 0600, &bolt.Options{
-		Timeout:      5 * time.Second,
-		FreelistType: bolt.FreelistMapType,
+		Timeout:        5 * time.Second,
+		FreelistType:   bolt.FreelistMapType,
+		NoFreelistSync: true,
 	})
 	if err != nil {
 		_ = src.Close()

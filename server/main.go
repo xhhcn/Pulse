@@ -183,8 +183,8 @@ var (
 	tcpingCache           = make(map[tcpingCacheKey]*tcpingCacheEntry)
 	tcpingCacheMu         sync.RWMutex
 	tcpingCacheTTL        = 2 * time.Minute // Cache results for 2 minutes
-	tcpingCacheMaxEntries = 4096 // 64 targets × many systems; bytes are capped separately
-	tcpingCacheMaxBytes   = 32 << 20 // 32 MiB hard cap for cached response bodies
+	tcpingCacheMaxEntries = 4096            // 64 targets × many systems; bytes are capped separately
+	tcpingCacheMaxBytes   = 32 << 20        // 32 MiB hard cap for cached response bodies
 	tcpingCacheBytes      int
 )
 
