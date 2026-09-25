@@ -3480,14 +3480,31 @@ const apiBase = apiBaseProp ?? '';
         }
       }
       setTCPingStatsNotApplicable(systemId);
-    } else if (noticeElement && !noticeElement.classList.contains('hidden')) {
-      noticeElement.classList.add('hidden');
-      noticeElement.style.display = 'none';
-      // Only un-fade the canvas if there is actually a chart behind it;
-      // otherwise the "No data" overlay owns the box and we leave it alone.
-      if (canvas && tcpingCharts.has(`${systemId}_all`)) {
-        canvas.style.display = 'block';
-        canvas.classList.remove('opacity-0');
+    } else {
+      if (noticeElement && !noticeElement.classList.contains('hidden')) {
+        noticeElement.classList.add('hidden');
+        noticeElement.style.display = 'none';
+        // Only un-fade the canvas if there is actually a chart behind it;
+        // otherwise the "No data" overlay owns the box — and it has to be
+        // put back, because showing the notice hid it (the two never
+        // stack), which left an empty box after leaving a skipped target.
+        if (canvas && tcpingCharts.has(`${systemId}_all`)) {
+          canvas.style.display = 'block';
+          canvas.classList.remove('opacity-0');
+        } else {
+          const noDataElement = container.querySelector(`[data-tcping-no-data="${cssEscape(String(systemId))}"]`);
+          if (noDataElement) {
+            noDataElement.classList.remove('hidden');
+            noDataElement.style.display = 'flex';
+          }
+        }
+      }
+      // Leaving a skipped target for one that merely has no samples: real
+      // numbers would replace the N/A summary, but with nothing to count it
+      // stuck. Fall back to the no-data rendering ("-").
+      const statsContainer = document.querySelector(`[data-tcping-stats="${cssEscape(String(systemId))}"]`);
+      if (statsContainer && statsContainer.querySelector('[data-translate-detail="notApplicable"]')) {
+        updateTCPingStats(systemId, 0, 0);
       }
     }
 
@@ -3647,11 +3664,6 @@ const apiBase = apiBaseProp ?? '';
               const otherRowElement = sectionSystemRow.querySelector('[data-system-id]');
               const otherSystemId = otherRowElement ? otherRowElement.dataset.systemId : null;
               
-              // Cleanup tcping chart for this system
-              if (otherSystemId) {
-                cleanupTCPingChart(otherSystemId);
-              }
-              
               // Collapse this section
               section.style.maxHeight = section.scrollHeight + 'px';
               section.style.opacity = '1';
@@ -3666,6 +3678,12 @@ const apiBase = apiBaseProp ?? '';
                 section.style.maxHeight = '';
                 section.style.opacity = '';
                 section.style.transition = '';
+                // Tear the chart down only once the section is hidden:
+                // destroying it at click time blanked the chart while the
+                // close animation was still showing it.
+                if (otherSystemId) {
+                  cleanupTCPingChart(otherSystemId);
+                }
               }, 250);
               
               // Update aria-expanded attribute
@@ -3721,10 +3739,10 @@ const apiBase = apiBaseProp ?? '';
           
           rowElement.setAttribute('aria-expanded', 'true');
         } else {
-          // Collapsing - animate out then hide
-          // Cleanup tcping chart for this system
-          cleanupTCPingChart(systemId);
-          
+          // Collapsing - animate out then hide. The chart is torn down
+          // after the animation (below), not before it: destroying it at
+          // click time blanked the chart while the section was still
+          // visibly closing.
           detailsSection.style.maxHeight = detailsSection.scrollHeight + 'px';
           detailsSection.style.opacity = '1';
           
@@ -3736,12 +3754,13 @@ const apiBase = apiBaseProp ?? '';
           detailsSection.style.maxHeight = '0';
           detailsSection.style.opacity = '0';
           
-          // Hide after animation
+          // Hide after animation, then release the chart
           setTimeout(() => {
             detailsSection.classList.add('hidden');
             detailsSection.style.maxHeight = '';
             detailsSection.style.opacity = '';
             detailsSection.style.transition = '';
+            cleanupTCPingChart(systemId);
           }, 250);
           
           rowElement.setAttribute('aria-expanded', 'false');
