@@ -789,6 +789,183 @@ func isSnapshotEvent(ev string) bool {
 	return strings.Contains(ev, `"type":"metric_updated"`)
 }
 
+// newStandaloneHandler serves the API (api) and the embedded frontend (distFS)
+// for the standalone binary.
+func newStandaloneHandler(distFS fs.FS, api http.Handler) http.Handler {
+	// Compressible files are also served gzipped (compress.go).
+	gzStatic := &staticGzipper{fsys: distFS}
+
+	// setStaticCacheHeaders mirrors the two-tier caching strategy the
+	// nginx config uses in Docker mode (see docker/nginx.conf). Without
+	// this, the standalone binary would serve /admin/index.html with
+	// whatever Go's http.FileServer produces by default — Last-Modified
+	// only, no Cache-Control — and browsers would happily keep the
+	// stale HTML in their disk cache across deployments, so newly
+	// added UI elements (e.g. the Download Backup button) would
+	// silently fail to appear after an upgrade. The two rules are:
+	//
+	//   1. HTML entrypoints (*.html and the directory-less SPA
+	//      routes like /admin, /login) → Cache-Control: no-cache,
+	//      must-revalidate. The ETag we still get from http.FileServer
+	//      means a revalidation costs a cheap 304 when the file really
+	//      hasn't changed, while guaranteeing we notice when it has.
+	//
+	//   2. Content-addressed bundle assets under /_astro/ (Astro
+	//      fingerprints every filename with an 8-char content hash, so
+	//      a changed asset is always served under a new URL) →
+	//      Cache-Control: public, max-age=31536000, s-maxage=31536000,
+	//      immutable. "immutable" tells the browser not even to revalidate;
+	//      s-maxage makes the CDN policy explicit.
+	//
+	//   3. Non-fingerprinted static files such as favicon.svg / robots.txt
+	//      get a short browser TTL and a modest CDN TTL. They are cacheable,
+	//      but not immutable because their URL does not change on deploy.
+	isStaticAssetPath := func(urlPath string) bool {
+		switch strings.ToLower(filepath.Ext(urlPath)) {
+		case ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2":
+			return true
+		default:
+			return false
+		}
+	}
+
+	setStaticCacheHeaders := func(w http.ResponseWriter, urlPath string) {
+		switch {
+		case strings.HasSuffix(urlPath, ".html") || urlPath == "/" || filepath.Ext(urlPath) == "":
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		case strings.HasPrefix(urlPath, "/_astro/"):
+			w.Header().Set("Cache-Control", "public, max-age=31536000, s-maxage=31536000, immutable")
+		case urlPath == "/favicon.svg" || urlPath == "/robots.txt":
+			w.Header().Set("Cache-Control", "public, max-age=3600, s-maxage=86400")
+		case isStaticAssetPath(urlPath):
+			w.Header().Set("Cache-Control", "public, max-age=86400, s-maxage=604800")
+		}
+	}
+
+	// Strong validators for embedded files: html is served with
+	// no-cache, so without an ETag every revalidation (browser and both
+	// CDNs) re-downloaded the whole document; net/http generates none
+	// for an embed.FS (its ModTime is zero). Hashes are computed once
+	// per path and kept for the life of the process.
+	var staticETags sync.Map
+	staticETag := func(path string) string {
+		if v, ok := staticETags.Load(path); ok {
+			return v.(string)
+		}
+		tag := computeStaticETag(distFS, path)
+		if tag != "" {
+			staticETags.Store(path, tag)
+		}
+		return tag
+	}
+	notModified := func(w http.ResponseWriter, r *http.Request, tag string) bool {
+		if tag == "" {
+			return false
+		}
+		w.Header().Set("ETag", tag)
+		if etagMatches(r.Header.Get("If-None-Match"), tag) {
+			w.WriteHeader(http.StatusNotModified)
+			return true
+		}
+		return false
+	}
+
+	// Create a handler that combines API routes and static files
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Try API routes first
+		if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/healthz" {
+			api.ServeHTTP(w, r)
+			return
+		}
+
+		// Handle static files. Reject invalid filesystem paths before
+		// any embedded-FS lookup or SPA fallback so traversal probes such
+		// as /../admin never turn into a successful index.html response.
+		path, ok := staticFilePathFromURL(r.URL.Path)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Try to open the file from embedded FS
+		if f, err := distFS.Open(path); err == nil {
+			st, serr := f.Stat()
+			f.Close()
+			// Directories (/admin/, /login/) take the index branch below,
+			// which sets the validator; FileServer would serve their
+			// index.html without one.
+			if serr == nil && !st.IsDir() {
+				setStaticCacheHeaders(w, r.URL.Path)
+				tag := staticETag(path)
+				if gzStatic.serve(w, r, path, tag) {
+					return
+				}
+				// FileServer honours If-None-Match against the ETag we set.
+				if tag != "" {
+					w.Header().Set("ETag", tag)
+				}
+				http.FileServer(http.FS(distFS)).ServeHTTP(w, r)
+				return
+			}
+		}
+
+		// File doesn't exist - try directory index.html
+		// For paths like /admin, /login, try opening admin/index.html, login/index.html
+		if filepath.Ext(path) == "" {
+			// Remove trailing slash if present
+			cleanPath := strings.TrimSuffix(path, "/")
+			indexPath := cleanPath + "/index.html"
+
+			if f, err := distFS.Open(indexPath); err == nil {
+				defer f.Close()
+				content, err := io.ReadAll(f)
+				if err != nil {
+					http.Error(w, "failed to read file", http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				setStaticCacheHeaders(w, r.URL.Path)
+				if gzStatic.serve(w, r, indexPath, staticETag(indexPath)) {
+					return
+				}
+				if notModified(w, r, staticETag(indexPath)) {
+					return
+				}
+				w.Write(content)
+				return
+			}
+
+			// No directory index, serve root index.html for SPA routing
+			indexFile, err := distFS.Open("index.html")
+			if err != nil {
+				http.Error(w, "index.html not found", http.StatusNotFound)
+				return
+			}
+			defer indexFile.Close()
+
+			content, err := io.ReadAll(indexFile)
+			if err != nil {
+				http.Error(w, "failed to read index.html", http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			setStaticCacheHeaders(w, r.URL.Path)
+			if gzStatic.serve(w, r, "index.html", staticETag("index.html")) {
+				return
+			}
+			if notModified(w, r, staticETag("index.html")) {
+				return
+			}
+			w.Write(content)
+			return
+		}
+
+		// File with extension not found
+		http.NotFound(w, r)
+	})
+}
+
 // computeStaticETag hashes an embedded file; "" for directories and errors.
 func computeStaticETag(fsys fs.FS, path string) string {
 	f, err := fsys.Open(path)
@@ -1569,171 +1746,11 @@ func main() {
 			log.Fatalf("❌ Failed to access embedded files: %v", err)
 		}
 
-		// setStaticCacheHeaders mirrors the two-tier caching strategy the
-		// nginx config uses in Docker mode (see docker/nginx.conf). Without
-		// this, the standalone binary would serve /admin/index.html with
-		// whatever Go's http.FileServer produces by default — Last-Modified
-		// only, no Cache-Control — and browsers would happily keep the
-		// stale HTML in their disk cache across deployments, so newly
-		// added UI elements (e.g. the Download Backup button) would
-		// silently fail to appear after an upgrade. The two rules are:
-		//
-		//   1. HTML entrypoints (*.html and the directory-less SPA
-		//      routes like /admin, /login) → Cache-Control: no-cache,
-		//      must-revalidate. The ETag we still get from http.FileServer
-		//      means a revalidation costs a cheap 304 when the file really
-		//      hasn't changed, while guaranteeing we notice when it has.
-		//
-		//   2. Content-addressed bundle assets under /_astro/ (Astro
-		//      fingerprints every filename with an 8-char content hash, so
-		//      a changed asset is always served under a new URL) →
-		//      Cache-Control: public, max-age=31536000, s-maxage=31536000,
-		//      immutable. "immutable" tells the browser not even to revalidate;
-		//      s-maxage makes the CDN policy explicit.
-		//
-		//   3. Non-fingerprinted static files such as favicon.svg / robots.txt
-		//      get a short browser TTL and a modest CDN TTL. They are cacheable,
-		//      but not immutable because their URL does not change on deploy.
-		isStaticAssetPath := func(urlPath string) bool {
-			switch strings.ToLower(filepath.Ext(urlPath)) {
-			case ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2":
-				return true
-			default:
-				return false
-			}
-		}
-
-		setStaticCacheHeaders := func(w http.ResponseWriter, urlPath string) {
-			switch {
-			case strings.HasSuffix(urlPath, ".html") || urlPath == "/" || filepath.Ext(urlPath) == "":
-				w.Header().Set("Cache-Control", "no-cache, must-revalidate")
-			case strings.HasPrefix(urlPath, "/_astro/"):
-				w.Header().Set("Cache-Control", "public, max-age=31536000, s-maxage=31536000, immutable")
-			case urlPath == "/favicon.svg" || urlPath == "/robots.txt":
-				w.Header().Set("Cache-Control", "public, max-age=3600, s-maxage=86400")
-			case isStaticAssetPath(urlPath):
-				w.Header().Set("Cache-Control", "public, max-age=86400, s-maxage=604800")
-			}
-		}
-
-		// Strong validators for embedded files: html is served with
-		// no-cache, so without an ETag every revalidation (browser and both
-		// CDNs) re-downloaded the whole document; net/http generates none
-		// for an embed.FS (its ModTime is zero). Hashes are computed once
-		// per path and kept for the life of the process.
-		var staticETags sync.Map
-		staticETag := func(path string) string {
-			if v, ok := staticETags.Load(path); ok {
-				return v.(string)
-			}
-			tag := computeStaticETag(distFS, path)
-			if tag != "" {
-				staticETags.Store(path, tag)
-			}
-			return tag
-		}
-		notModified := func(w http.ResponseWriter, r *http.Request, tag string) bool {
-			if tag == "" {
-				return false
-			}
-			w.Header().Set("ETag", tag)
-			if etagMatches(r.Header.Get("If-None-Match"), tag) {
-				w.WriteHeader(http.StatusNotModified)
-				return true
-			}
-			return false
-		}
-
-		// Create a handler that combines API routes and static files
-		finalHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Try API routes first
-			if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/healthz" {
-				mux.ServeHTTP(w, r)
-				return
-			}
-
-			// Handle static files. Reject invalid filesystem paths before
-			// any embedded-FS lookup or SPA fallback so traversal probes such
-			// as /../admin never turn into a successful index.html response.
-			path, ok := staticFilePathFromURL(r.URL.Path)
-			if !ok {
-				http.NotFound(w, r)
-				return
-			}
-
-			// Try to open the file from embedded FS
-			if f, err := distFS.Open(path); err == nil {
-				st, serr := f.Stat()
-				f.Close()
-				// Directories (/admin/, /login/) take the index branch below,
-				// which sets the validator; FileServer would serve their
-				// index.html without one.
-				if serr == nil && !st.IsDir() {
-					setStaticCacheHeaders(w, r.URL.Path)
-					// FileServer honours If-None-Match against the ETag we set.
-					if tag := staticETag(path); tag != "" {
-						w.Header().Set("ETag", tag)
-					}
-					http.FileServer(http.FS(distFS)).ServeHTTP(w, r)
-					return
-				}
-			}
-
-			// File doesn't exist - try directory index.html
-			// For paths like /admin, /login, try opening admin/index.html, login/index.html
-			if filepath.Ext(path) == "" {
-				// Remove trailing slash if present
-				cleanPath := strings.TrimSuffix(path, "/")
-				indexPath := cleanPath + "/index.html"
-
-				if f, err := distFS.Open(indexPath); err == nil {
-					defer f.Close()
-					content, err := io.ReadAll(f)
-					if err != nil {
-						http.Error(w, "failed to read file", http.StatusInternalServerError)
-						return
-					}
-					w.Header().Set("Content-Type", "text/html; charset=utf-8")
-					setStaticCacheHeaders(w, r.URL.Path)
-					if notModified(w, r, staticETag(indexPath)) {
-						return
-					}
-					w.Write(content)
-					return
-				}
-
-				// No directory index, serve root index.html for SPA routing
-				indexFile, err := distFS.Open("index.html")
-				if err != nil {
-					http.Error(w, "index.html not found", http.StatusNotFound)
-					return
-				}
-				defer indexFile.Close()
-
-				content, err := io.ReadAll(indexFile)
-				if err != nil {
-					http.Error(w, "failed to read index.html", http.StatusInternalServerError)
-					return
-				}
-
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				setStaticCacheHeaders(w, r.URL.Path)
-				if notModified(w, r, staticETag("index.html")) {
-					return
-				}
-				w.Write(content)
-				return
-			}
-
-			// File with extension not found
-			http.NotFound(w, r)
-		})
-
-		handler = corsMiddleware(readDeadlineMiddleware(cdnFriendlyMiddleware(finalHandler)))
+		handler = corsMiddleware(readDeadlineMiddleware(cdnFriendlyMiddleware(newStandaloneHandler(distFS, gzipAPIMiddleware(mux)))))
 	} else {
 		// Docker mode: only serve API (Nginx handles static files)
 		log.Printf("🌐 Backend listening on %s (Docker mode - Nginx serves frontend)", addr)
-		handler = corsMiddleware(readDeadlineMiddleware(cdnFriendlyMiddleware(mux)))
+		handler = corsMiddleware(readDeadlineMiddleware(cdnFriendlyMiddleware(gzipAPIMiddleware(mux))))
 	}
 
 	srv := &http.Server{
@@ -1892,8 +1909,8 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 	}
 	defer broker.Unsubscribe(sub)
 
-	// Every write goes through writeEvent: it arms a fresh write deadline
-	// and flushes, returning false as soon as the peer stops draining so the
+	// Every write goes through emit: it arms a fresh write deadline and
+	// flushes, returning false as soon as the peer stops draining so the
 	// handler exits instead of blocking forever (see sseWriteTimeout).
 	rc := http.NewResponseController(w)
 	// The deadline is absolute and net/http only re-arms it per request when
@@ -1901,19 +1918,51 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 	// a keep-alive connection reused for a later request is not left with a
 	// stale, already-expired write deadline.
 	defer rc.SetWriteDeadline(time.Time{})
-	// parts are written back to back so a multi-hundred-KB snapshot is never
-	// copied into a fresh string per subscriber just to add the SSE framing.
-	writeEvent := func(parts ...string) bool {
+
+	// A client that accepts gzip gets the stream as one gzip member built
+	// from runs that are compressed once per event and shared by every
+	// subscriber (compress.go), so compression costs nothing per connection.
+	var gz *sseGzipStream
+	if sseGzipEnabled && acceptsGzip(r) {
+		gz = &sseGzipStream{w: w}
+		// A stream the server ends on purpose (revoked session, shutdown)
+		// closes its gzip member properly; after a disconnect the write just
+		// fails. Runs before the deadline is cleared above.
+		defer func() {
+			_ = rc.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			if gz.finish() == nil {
+				_ = rc.Flush()
+			}
+		}()
+	}
+	// emit writes one event or comment: its text in parts, or on a gzip
+	// stream the deflated run that run returns. parts are written back to
+	// back so a multi-hundred-KB snapshot is never copied into a fresh string
+	// per subscriber just to add the SSE framing.
+	emit := func(run func() *deflatedRun, parts ...string) bool {
 		_ = rc.SetWriteDeadline(time.Now().Add(sseWriteTimeout))
-		for _, part := range parts {
-			if _, werr := io.WriteString(w, part); werr != nil {
+		if gz != nil {
+			if gz.writeRun(run()) != nil {
 				return false
+			}
+		} else {
+			for _, part := range parts {
+				if _, werr := io.WriteString(w, part); werr != nil {
+					return false
+				}
 			}
 		}
 		return rc.Flush() == nil
 	}
+	emitUpdate := func(payload string) bool {
+		return emit(func() *deflatedRun { return sseUpdateRun(payload) }, "event: update\ndata: ", payload, "\n\n")
+	}
 
 	// Set headers for SSE with CDN support
+	if gz != nil {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Add("Vary", "Accept-Encoding")
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
 	w.Header().Set("Pragma", "no-cache")
@@ -1929,7 +1978,7 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 	// This overrides the default (3–5 s, browser dependent) with a deterministic
 	// value so all browsers behave the same. Must be the first SSE line.
 	// Then send the initial connection message.
-	if !writeEvent("retry: 3000\n\nevent: connected\ndata: {\"message\":\"Connected to updates stream\"}\n\n") {
+	if !emit(sseConnectedRun, sseConnectedEvent) {
 		return
 	}
 
@@ -1960,7 +2009,7 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 		payload, havePayload = broker.PrimeSnapshot(sub)
 	}
 	if havePayload {
-		if !writeEvent("event: update\ndata: ", payload, "\n\n") {
+		if !emitUpdate(payload) {
 			return
 		}
 	}
@@ -1996,13 +2045,13 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 				// Channel closed by Unsubscribe — stream is being torn down.
 				return
 			}
-			if !writeEvent("event: update\ndata: ", msg, "\n\n") {
+			if !emitUpdate(msg) {
 				return
 			}
 		case <-keepalive.C:
 			// Comment-line heartbeat; ignored by EventSource but keeps the
 			// proxy/CDN connection alive.
-			if !writeEvent(": ping\n\n") {
+			if !emit(sseKeepaliveRun, sseKeepalive) {
 				return
 			}
 		case <-reauth.C:
