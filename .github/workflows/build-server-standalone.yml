@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g., v1.3.26)'
+        description: 'Tag to build (e.g., v1.3.28)'
         required: true
         type: string
 
@@ -78,14 +78,16 @@ jobs:
         run: |
           cd server
           echo "Building standalone server binaries with embedded frontend..."
+          # Build the package (.), never a file list: a list silently goes
+          # stale when a new .go file is added (v1.3.27 failed that way).
           
           # Linux amd64
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o pulse-server-standalone-linux-amd64 main.go store.go
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o pulse-server-standalone-linux-amd64 .
           chmod +x pulse-server-standalone-linux-amd64
           echo "Built: pulse-server-standalone-linux-amd64 ($(du -h pulse-server-standalone-linux-amd64 | cut -f1))"
           
           # Linux arm64
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o pulse-server-standalone-linux-arm64 main.go store.go
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o pulse-server-standalone-linux-arm64 .
           chmod +x pulse-server-standalone-linux-arm64
           echo "Built: pulse-server-standalone-linux-arm64 ($(du -h pulse-server-standalone-linux-arm64 | cut -f1))"
 

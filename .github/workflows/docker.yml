@@ -139,7 +139,7 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} fixes the page getting sluggish while it stays open and the server's disk-write load. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.26).
+            v${{ steps.version.outputs.version }} fixes the page getting sluggish while it stays open and the server's disk-write load. (It is v1.3.27 plus a fix to the standalone-binary build, which failed for v1.3.27.) Existing clients and databases stay compatible; agents do not need an update (they report 1.3.26).
 
             ### Highlights
 
