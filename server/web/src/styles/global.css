@@ -1083,3 +1083,21 @@ html.light.glass-enabled #columns-dropdown label:hover {
     background: rgba(255, 255, 255, 0.96) !important;
   }
 }
+/* Default "monitor" navbar logo heartbeat.
+   One opacity animation on the whole icon instead of five SMIL <animate>
+   children: SMIL cannot run on the compositor, so the looping logo made the
+   browser re-render the page on every frame for as long as it stayed open
+   (~30 % of the main thread on a dashboard), while an element-level
+   opacity animation is composited. The elements carry their peak opacity
+   and the icon fades between 40 % and 100 % of it, linearly over 2 s like
+   the SMIL values it replaces (all five were in phase). */
+.monitor-icon.default-logo {
+  animation: pulse-logo-beat 2s linear infinite;
+}
+@keyframes pulse-logo-beat {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .monitor-icon.default-logo { animation: none; }
+}
