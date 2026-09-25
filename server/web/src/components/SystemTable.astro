@@ -3340,8 +3340,12 @@ const apiBase = apiBaseProp ?? '';
       }
     });
 
-    // Final check if loading was cancelled before storing chart
-    if ((loadingState && loadingState.cancelled) || !container.isConnected) {
+    // Final check if loading was cancelled before storing chart. A section
+    // that has been collapsed (hidden) meanwhile gets no chart either: its
+    // teardown already ran, so nothing would ever destroy this one.
+    const detailsSection = container.closest('.system-details');
+    if ((loadingState && loadingState.cancelled) || !container.isConnected
+        || (detailsSection && detailsSection.classList.contains('hidden'))) {
       // Destroy the chart we just created since loading was cancelled
       try {
         chart.destroy();
@@ -3352,6 +3356,14 @@ const apiBase = apiBaseProp ?? '';
     }
 
     tcpingCharts.set(chartKey, { chart, target: 'all' });
+
+    // The summary for a selected target is computed from the chart's
+    // datasets, which did not exist yet when the stats were calculated
+    // above on a first load: recompute it now that the chart is registered.
+    const activeNow = tcpingActiveTargets.get(systemId);
+    if (activeNow && activeNow.target) {
+      calculateAndUpdateStats(systemId, activeNow.target);
+    }
     
     // Hide loading state and show chart (for full reload or new chart creation)
     // If incremental update created a new chart (no-data to has-data transition), also show it
@@ -3491,6 +3503,11 @@ const apiBase = apiBaseProp ?? '';
         if (canvas && tcpingCharts.has(`${systemId}_all`)) {
           canvas.style.display = 'block';
           canvas.classList.remove('opacity-0');
+        } else if (tcpingLoadingStates.has(systemId)) {
+          // Still loading: showing the notice hid the spinner, bring it back
+          // (the load decides between chart and "No data" when it lands).
+          const loadingElement = container.querySelector(`[data-tcping-loading="${cssEscape(String(systemId))}"]`);
+          if (loadingElement) loadingElement.style.display = 'flex';
         } else {
           const noDataElement = container.querySelector(`[data-tcping-no-data="${cssEscape(String(systemId))}"]`);
           if (noDataElement) {
@@ -3657,6 +3674,9 @@ const apiBase = apiBaseProp ?? '';
           // Only keep one section expanded at a time
           const allExpandedSections = container.querySelectorAll('.system-details:not(.hidden)');
           allExpandedSections.forEach(section => {
+            // A section that is already closing has its own timer; a second
+            // one would hide it again later even if it is reopened meanwhile.
+            if (section._closeTimer) return;
             // Skip the current section we're about to expand
             const sectionSystemRow = section.closest('.system-row');
             if (sectionSystemRow && sectionSystemRow.querySelector('[data-system-id]') !== rowElement) {
@@ -3673,7 +3693,8 @@ const apiBase = apiBaseProp ?? '';
               section.style.maxHeight = '0';
               section.style.opacity = '0';
               
-              setTimeout(() => {
+              section._closeTimer = setTimeout(() => {
+                section._closeTimer = null;
                 section.classList.add('hidden');
                 section.style.maxHeight = '';
                 section.style.opacity = '';
@@ -3693,7 +3714,12 @@ const apiBase = apiBaseProp ?? '';
             }
           });
           
-          // Expanding - show and animate in
+          // Expanding - show and animate in. A close still pending for this
+          // section (scheduled before it was hidden) must not hide it again.
+          if (detailsSection._closeTimer) {
+            clearTimeout(detailsSection._closeTimer);
+            detailsSection._closeTimer = null;
+          }
           detailsSection.classList.remove('hidden');
           detailsSection.style.maxHeight = '0';
           detailsSection.style.opacity = '0';
@@ -3755,7 +3781,9 @@ const apiBase = apiBaseProp ?? '';
           detailsSection.style.opacity = '0';
           
           // Hide after animation, then release the chart
-          setTimeout(() => {
+          if (detailsSection._closeTimer) clearTimeout(detailsSection._closeTimer);
+          detailsSection._closeTimer = setTimeout(() => {
+            detailsSection._closeTimer = null;
             detailsSection.classList.add('hidden');
             detailsSection.style.maxHeight = '';
             detailsSection.style.opacity = '';

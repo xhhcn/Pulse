@@ -1089,8 +1089,9 @@ html.light.glass-enabled #columns-dropdown label:hover {
    browser re-render the page on every frame for as long as it stayed open
    (~30 % of the main thread on a dashboard), while an element-level
    opacity animation is composited. The elements carry their peak opacity
-   and the icon fades between 40 % and 100 % of it, linearly over 2 s like
-   the SMIL values it replaces (all five were in phase). */
+   and the icon fades between 40 % and 100 % of it, linearly over 2 s: the
+   five SMIL animations were in phase, so this closely approximates them
+   (same peaks; the troughs differ by at most 0.1). */
 .monitor-icon.default-logo {
   animation: pulse-logo-beat 2s linear infinite;
 }
