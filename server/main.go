@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -230,6 +231,16 @@ func getCachedTCPingEntry(clientID, target string) (*tcpingCacheEntry, bool) {
 // API sends and are requested by every open chart), so a cache hit costs no
 // compression. It returns the stored entry, or nil when nothing was cached.
 func cacheTCPingResults(clientID, target string, response TCPingHistoryResponse) *tcpingCacheEntry {
+	entry := buildTCPingCacheEntry(response)
+	if entry == nil || !storeTCPingCacheEntry(clientID, target, entry, tcpingCacheStampFor(clientID)) {
+		return nil
+	}
+	return entry
+}
+
+// buildTCPingCacheEntry encodes a history response (and its gzip copy), or
+// returns nil when it cannot be encoded or exceeds the cache budget.
+func buildTCPingCacheEntry(response TCPingHistoryResponse) *tcpingCacheEntry {
 	body, err := json.Marshal(response)
 	if err != nil {
 		return nil
@@ -247,22 +258,25 @@ func cacheTCPingResults(clientID, target string, response TCPingHistoryResponse)
 	if len(body)+len(gz) > tcpingCacheMaxBytes {
 		gz = nil
 	}
+	return &tcpingCacheEntry{JSON: body, GZ: gz, Size: len(body) + len(gz)}
+}
 
+// storeTCPingCacheEntry caches entry unless the client (or the whole cache)
+// was invalidated since stamp was taken; it reports whether it stored it.
+func storeTCPingCacheEntry(clientID, target string, entry *tcpingCacheEntry, stamp tcpingCacheStamp) bool {
 	key := tcpingCacheKey{ClientID: clientID, Target: target}
 	tcpingCacheMu.Lock()
 	defer tcpingCacheMu.Unlock()
 
-	tcpingCacheDeleteLocked(key)
-	entry := &tcpingCacheEntry{
-		JSON:     body,
-		GZ:       gz,
-		CachedAt: time.Now(),
-		Size:     len(body) + len(gz),
+	if tcpingCacheEpoch != stamp.epoch || tcpingClientGen[clientID] != stamp.gen {
+		return false
 	}
+	tcpingCacheDeleteLocked(key)
+	entry.CachedAt = time.Now()
 	tcpingCache[key] = entry
 	tcpingCacheBytes += entry.Size
 	tcpingCacheEnforceBudgetLocked(time.Now())
-	return entry
+	return true
 }
 
 func tcpingCacheDeleteLocked(key tcpingCacheKey) {
@@ -342,6 +356,7 @@ func invalidateTCPingCache(clientID string) {
 	tcpingCacheMu.Lock()
 	defer tcpingCacheMu.Unlock()
 
+	tcpingClientGen[clientID]++
 	for key := range tcpingCache {
 		if key.ClientID == clientID {
 			tcpingCacheDeleteLocked(key)
@@ -358,6 +373,25 @@ func clearAllTCPingCache() {
 	// Clear the entire cache by creating a new map
 	tcpingCache = make(map[tcpingCacheKey]*tcpingCacheEntry)
 	tcpingCacheBytes = 0
+	tcpingCacheEpoch++
+	tcpingClientGen = make(map[string]uint64)
+}
+
+// Invalidation stamps. A history response is built from a database read that
+// can race an invalidation (an agent push landing between the read and the
+// insert); it is cached only if nothing invalidated that client — or the
+// whole cache — since the stamp was taken before the read.
+var (
+	tcpingCacheEpoch uint64                    // bumped by clearAllTCPingCache
+	tcpingClientGen  = make(map[string]uint64) // bumped per client by invalidateTCPingCache
+)
+
+type tcpingCacheStamp struct{ epoch, gen uint64 }
+
+func tcpingCacheStampFor(clientID string) tcpingCacheStamp {
+	tcpingCacheMu.RLock()
+	defer tcpingCacheMu.RUnlock()
+	return tcpingCacheStamp{tcpingCacheEpoch, tcpingClientGen[clientID]}
 }
 
 // Cleanup expired cache entries periodically
@@ -2359,30 +2393,46 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 // (the 3 s tick and each admin change) drops it.
 const publicMetricsTTL = time.Second
 
-var publicMetricsCache struct {
-	mu    sync.Mutex
+type publicMetricsCacheState struct {
+	// gen is bumped by every broadcast; a body built before the latest bump
+	// is stale. The broadcaster touches nothing else here, so it never waits.
+	gen   atomic.Uint64
+	build sync.Mutex // one rebuild at a time
+	mu    sync.Mutex // guards the fields below; held only to read or swap them
 	store *Store
 	at    time.Time
+	stamp uint64
 	json  []byte
 	gz    []byte
 }
 
-func invalidatePublicMetricsCache() {
-	publicMetricsCache.mu.Lock()
-	publicMetricsCache.json, publicMetricsCache.gz = nil, nil
-	publicMetricsCache.mu.Unlock()
+var publicMetricsCache publicMetricsCacheState
+
+func invalidatePublicMetricsCache() { publicMetricsCache.gen.Add(1) }
+
+func (c *publicMetricsCacheState) fresh(store *Store) ([]byte, []byte, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.json != nil && c.store == store && c.stamp == c.gen.Load() && time.Since(c.at) < publicMetricsTTL {
+		return c.json, c.gz, true
+	}
+	return nil, nil, false
 }
 
 // publicMetricsBody returns the anonymous /api/metrics body (the bytes
 // writeJSON would send) and its gzip copy (nil when not worth it), rebuilt
-// when older than publicMetricsTTL.
+// when older than publicMetricsTTL or than the last broadcast.
 func publicMetricsBody(store *Store) ([]byte, []byte, error) {
 	c := &publicMetricsCache
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.json != nil && c.store == store && time.Since(c.at) < publicMetricsTTL {
-		return c.json, c.gz, nil
+	if body, gz, ok := c.fresh(store); ok {
+		return body, gz, nil
 	}
+	c.build.Lock()
+	defer c.build.Unlock()
+	if body, gz, ok := c.fresh(store); ok { // rebuilt while this one waited
+		return body, gz, nil
+	}
+	stamp := c.gen.Load()
 	metrics, err := buildMetricsSnapshot(store, globalClientRegistry, false)
 	if err != nil {
 		return nil, nil, err
@@ -2396,7 +2446,9 @@ func publicMetricsBody(store *Store) ([]byte, []byte, error) {
 	if httpGzipEnabled && len(body) >= apiGzipMinSize {
 		gz = gzipBytes(body)
 	}
-	c.store, c.at, c.json, c.gz = store, time.Now(), body, gz
+	c.mu.Lock()
+	c.store, c.at, c.stamp, c.json, c.gz = store, time.Now(), stamp, body, gz
+	c.mu.Unlock()
 	return body, gz, nil
 }
 
@@ -4743,6 +4795,9 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Taken before the database read: see tcpingCacheStamp.
+	stamp := tcpingCacheStampFor(clientID)
+
 	// Unknown ids are answered before touching the history bucket. It is
 	// keyed by time, so a lookup for a non-existent client would otherwise
 	// scan the whole 24 h window on every anonymous request. (Cache hits
@@ -4773,7 +4828,10 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 		Stats:   stats,
 	}
 
-	if entry := cacheTCPingResults(clientID, target, response); entry != nil {
+	if entry := buildTCPingCacheEntry(response); entry != nil {
+		// Served from the entry (and its gzip copy) whether or not it could
+		// be stored: a push since the read only makes it too old to keep.
+		storeTCPingCacheEntry(clientID, target, entry, stamp)
 		writeCachedTCPingEntry(w, r, entry)
 		return
 	}

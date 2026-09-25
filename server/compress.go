@@ -218,19 +218,30 @@ var gzipWriterPool = sync.Pool{New: func() any {
 
 // gzipSlots bounds how many response bodies are compressed at once: each
 // compressor holds ~0.8 MB of state, and a flood of requests for different
-// uncached bodies would otherwise hold one each. A request that finds every
-// slot busy waits for one. Compression happens in memory, so a slot is only
-// held while compressing, never while a client reads. Nothing may wait for a
-// slot while holding one: handlers call gzipBytes before they write, and the
-// middleware takes its slot at the first large write.
-var gzipSlots = make(chan struct{}, max(4, runtime.GOMAXPROCS(0)))
+// uncached bodies would otherwise hold one each. A body that finds every slot
+// busy is sent uncompressed rather than queued, so nothing ever waits for a
+// slot. Compression happens in memory, so a slot is only held while
+// compressing, never while a client reads.
+var gzipSlots = make(chan struct{}, max(4, 2*runtime.GOMAXPROCS(0)))
+
+func tryGzipSlot() bool {
+	select {
+	case gzipSlots <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
 
 // gzipAllowed reports whether a response to r may be gzipped: compression is
 // on, the client accepts gzip, and the request is not a signed-in admin's.
 // Admin responses carry other servers' addresses and secrets next to text an
-// agent can choose; compressed together, their sizes on the wire would let
+// agent can choose; compressed together, their sizes on the wire could let
 // someone who watches the admin's traffic and holds the fleet secret test
-// guesses about them (a CRIME/BREACH-style side channel).
+// guesses about them (a CRIME/BREACH-style side channel). This only keeps the
+// server from adding that: a proxy in front may still compress admin JSON
+// (Cloudflare does, and so does the Docker image's nginx), where the fetch
+// rate — about once per admin page load — keeps such guessing impractical.
 func gzipAllowed(r *http.Request) bool {
 	return httpGzipEnabled && r.Header.Get("Authorization") == "" && acceptsGzip(r)
 }
@@ -248,8 +259,16 @@ func gzipAPIMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		gw := &gzipResponseWriter{ResponseWriter: w, rc: http.NewResponseController(w)}
-		defer gw.finish()
+		returned := false
+		defer func() {
+			if returned {
+				gw.finish()
+			} else {
+				gw.abort() // the handler panicked
+			}
+		}()
 		next.ServeHTTP(gw, r)
+		returned = true
 	})
 }
 
@@ -330,10 +349,9 @@ func (g *gzipResponseWriter) commit(large bool, next []byte) error {
 	if compressible {
 		h.Add("Vary", "Accept-Encoding")
 	}
-	if compressible && large {
+	if compressible && large && tryGzipSlot() { // slot released in finish or abort
 		h.Set("Content-Encoding", "gzip")
 		h.Del("Content-Length")
-		gzipSlots <- struct{}{} // released in finish
 		zw := gzipWriterPool.Get().(*gzip.Writer)
 		zw.Reset(&g.out)
 		g.zw = zw
@@ -374,6 +392,20 @@ func (g *gzipResponseWriter) finish() {
 	// The deadline is absolute; do not leave it on a keep-alive connection
 	// that serves another request next.
 	_ = g.rc.SetWriteDeadline(time.Time{})
+}
+
+// abort releases what a response in progress holds without completing it:
+// after a panic the client must see a broken response, not a cut-off body
+// with valid framing and a matching Content-Length.
+func (g *gzipResponseWriter) abort() {
+	if g.zw != nil {
+		g.zw.Reset(io.Discard)
+		gzipWriterPool.Put(g.zw)
+		g.zw = nil
+		<-gzipSlots
+	}
+	g.out.Reset()
+	g.buf = nil
 }
 
 // sendOut writes the compressed bytes built so far, under a write deadline so
@@ -425,7 +457,9 @@ func (g *gzipResponseWriter) Unwrap() http.ResponseWriter { return g.ResponseWri
 // shrink by at least 10 %. For bodies that are compressed once and served
 // many times (the tcping history cache).
 func gzipBytes(b []byte) []byte {
-	gzipSlots <- struct{}{}
+	if !tryGzipSlot() {
+		return nil // every compressor busy: the body is compressed on the way out instead
+	}
 	defer func() { <-gzipSlots }()
 	var buf bytes.Buffer
 	zw := gzipWriterPool.Get().(*gzip.Writer)

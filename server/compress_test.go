@@ -662,3 +662,107 @@ func TestPublicMetricsBodyIsSharedAndDroppedOnBroadcast(t *testing.T) {
 		t.Fatalf("a different store must not be served the cached body: %q", rr.Body.String())
 	}
 }
+
+func TestGzipMiddlewareSendsPlainWhenEveryCompressorIsBusy(t *testing.T) {
+	big := bytes.Repeat([]byte(`{"k":"value"},`), 400)
+	h := gzipAPIMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(big)
+	}))
+	for i := 0; i < cap(gzipSlots); i++ {
+		gzipSlots <- struct{}{}
+	}
+	r := httptest.NewRequest(http.MethodGet, "/api/x", nil)
+	r.Header.Set("Accept-Encoding", "gzip")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, r)
+	if gzipBytes(big) != nil {
+		t.Error("gzipBytes must not wait for a slot")
+	}
+	for i := 0; i < cap(gzipSlots); i++ {
+		<-gzipSlots
+	}
+	if rr.Header().Get("Content-Encoding") != "" || !bytes.Equal(rr.Body.Bytes(), big) {
+		t.Fatalf("busy compressors must mean a plain body: %v", rr.Header())
+	}
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, r)
+	if rr.Header().Get("Content-Encoding") != "gzip" || len(gzipSlots) != 0 {
+		t.Fatalf("free compressors: %v, %d slots held", rr.Header(), len(gzipSlots))
+	}
+}
+
+func TestGzipMiddlewareSendsNothingAfterAPanic(t *testing.T) {
+	h := gzipAPIMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(bytes.Repeat([]byte("x"), 5000))
+		panic(http.ErrAbortHandler)
+	}))
+	r := httptest.NewRequest(http.MethodGet, "/api/x", nil)
+	r.Header.Set("Accept-Encoding", "gzip")
+	rr := httptest.NewRecorder()
+	func() {
+		defer func() { _ = recover() }()
+		h.ServeHTTP(rr, r)
+	}()
+	if rr.Body.Len() != 0 || rr.Result().Header.Get("Content-Length") != "" || len(gzipSlots) != 0 {
+		t.Fatalf("a panicking handler must not produce a complete response: %d bytes, %v, %d slots held", rr.Body.Len(), rr.Result().Header, len(gzipSlots))
+	}
+}
+
+func TestPublicMetricsInvalidationNeverWaits(t *testing.T) {
+	publicMetricsCache.build.Lock() // a rebuild in progress
+	done := make(chan struct{})
+	go func() { invalidatePublicMetricsCache(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		publicMetricsCache.build.Unlock()
+		t.Fatal("the broadcaster's invalidation must not wait for a rebuild")
+	}
+	publicMetricsCache.build.Unlock()
+
+	// A body built before a broadcast is not served after it.
+	if globalClientRegistry == nil {
+		globalClientRegistry = NewClientRegistry()
+	}
+	store := newTestStore(t)
+	if err := store.Upsert(SystemMetric{ID: "before", Name: "Before"}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, _, err := publicMetricsBody(store); err != nil {
+		t.Fatalf("publicMetricsBody: %v", err)
+	}
+	if err := store.Upsert(SystemMetric{ID: "after", Name: "After"}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	invalidatePublicMetricsCache()
+	body, _, err := publicMetricsBody(store)
+	if err != nil || !bytes.Contains(body, []byte(`"after"`)) {
+		t.Fatalf("after an invalidation the body must be rebuilt: %s (%v)", body, err)
+	}
+}
+
+func TestTCPingCacheSkipsAnEntryInvalidatedWhileItWasBuilt(t *testing.T) {
+	resetTCPingCacheForTest(t)
+	resp := TCPingHistoryResponse{Results: []TCPingResult{{ClientID: "c1", Target: "t", Timestamp: time.Now().UTC()}}}
+
+	stamp := tcpingCacheStampFor("c1")
+	invalidateTCPingCache("c1") // an agent push lands during the build
+	if storeTCPingCacheEntry("c1", "t", buildTCPingCacheEntry(resp), stamp) {
+		t.Fatal("an entry built before the client's invalidation must not be stored")
+	}
+	stamp = tcpingCacheStampFor("c1")
+	invalidateTCPingCache("c2") // another client's push does not matter
+	if !storeTCPingCacheEntry("c1", "t", buildTCPingCacheEntry(resp), stamp) {
+		t.Fatal("another client's invalidation must not block caching")
+	}
+	stamp = tcpingCacheStampFor("c1")
+	clearAllTCPingCache()
+	if storeTCPingCacheEntry("c1", "t", buildTCPingCacheEntry(resp), stamp) {
+		t.Fatal("an entry built before a full clear must not be stored")
+	}
+	if _, ok := getCachedTCPingEntry("c1", "t"); ok {
+		t.Fatal("the full clear must have emptied the cache")
+	}
+}
