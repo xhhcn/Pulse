@@ -12,9 +12,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Response compression.
@@ -206,38 +208,68 @@ func (z *staticGzipper) serve(w http.ResponseWriter, r *http.Request, path, etag
 // apiGzipMinSize: bodies smaller than this are sent as they are.
 const apiGzipMinSize = 1024
 
+// apiWriteTimeout bounds each write of a compressed response to the client.
+const apiWriteTimeout = 30 * time.Second
+
 var gzipWriterPool = sync.Pool{New: func() any {
 	zw, _ := gzip.NewWriterLevel(io.Discard, gzip.DefaultCompression)
 	return zw
 }}
 
-// gzipAPIMiddleware gzips API responses for clients that accept it. The event
-// stream compresses itself; HEAD requests and bodies the handler encodes on
-// its own pass through.
+// gzipSlots bounds how many response bodies are compressed at once: each
+// compressor holds ~0.8 MB of state, and a flood of requests for different
+// uncached bodies would otherwise hold one each. A request that finds every
+// slot busy waits for one. Compression happens in memory, so a slot is only
+// held while compressing, never while a client reads. Nothing may wait for a
+// slot while holding one: handlers call gzipBytes before they write, and the
+// middleware takes its slot at the first large write.
+var gzipSlots = make(chan struct{}, max(4, runtime.GOMAXPROCS(0)))
+
+// gzipAllowed reports whether a response to r may be gzipped: compression is
+// on, the client accepts gzip, and the request is not a signed-in admin's.
+// Admin responses carry other servers' addresses and secrets next to text an
+// agent can choose; compressed together, their sizes on the wire would let
+// someone who watches the admin's traffic and holds the fleet secret test
+// guesses about them (a CRIME/BREACH-style side channel).
+func gzipAllowed(r *http.Request) bool {
+	return httpGzipEnabled && r.Header.Get("Authorization") == "" && acceptsGzip(r)
+}
+
+// gzipAPIMiddleware gzips API responses where gzipAllowed. The event stream
+// compresses itself; HEAD requests and bodies the handler encodes on its own
+// pass through.
 func gzipAPIMiddleware(next http.Handler) http.Handler {
 	if !httpGzipEnabled {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/events" || r.Method == http.MethodHead || !acceptsGzip(r) {
+		if r.URL.Path == "/api/events" || r.Method == http.MethodHead || !gzipAllowed(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		gw := &gzipResponseWriter{ResponseWriter: w}
+		gw := &gzipResponseWriter{ResponseWriter: w, rc: http.NewResponseController(w)}
 		defer gw.finish()
 		next.ServeHTTP(gw, r)
 	})
 }
 
-// gzipResponseWriter holds back the status and the first apiGzipMinSize body
-// bytes, then commits: compressed when the body reached that size and its
-// type is compressible, unchanged otherwise.
+// gzipResponseWriter holds back the status and the start of the body (less
+// than apiGzipMinSize bytes), then commits: compressed once the body reaches
+// that size and its type is compressible, unchanged otherwise.
+//
+// A compressed body is built in memory and sent when the handler returns
+// (API bodies are complete JSON documents), with its Content-Length. The
+// compressor (~0.8 MB of state) goes back to the pool as soon as the body is
+// compressed, so a client that reads slowly holds only the compressed bytes.
 type gzipResponseWriter struct {
 	http.ResponseWriter
-	status    int
-	buf       []byte
-	committed bool
-	zw        *gzip.Writer
+	rc         *http.ResponseController
+	status     int
+	buf        []byte // held-back start of the body
+	committed  bool
+	zw         *gzip.Writer // set while compressing into out
+	out        bytes.Buffer // compressed bytes not yet sent
+	headerSent bool         // compressed header already written (after a Flush)
 }
 
 func (g *gzipResponseWriter) WriteHeader(code int) {
@@ -251,7 +283,7 @@ func (g *gzipResponseWriter) WriteHeader(code int) {
 	}
 	g.status = code
 	if code == http.StatusNoContent || code == http.StatusNotModified {
-		g.commit(false)
+		_ = g.commit(false, nil)
 	}
 }
 
@@ -259,28 +291,39 @@ func (g *gzipResponseWriter) Write(p []byte) (int, error) {
 	if g.status == 0 {
 		g.status = http.StatusOK
 	}
-	if g.committed {
-		if g.zw != nil {
-			return g.zw.Write(p)
+	if !g.committed {
+		if len(g.buf)+len(p) < apiGzipMinSize {
+			g.buf = append(g.buf, p...)
+			return len(p), nil
 		}
-		return g.ResponseWriter.Write(p)
-	}
-	g.buf = append(g.buf, p...)
-	if len(g.buf) >= apiGzipMinSize {
-		if err := g.commit(true); err != nil {
+		// Large enough: commit with what is held back, then take p through
+		// the chosen path without copying it.
+		if err := g.commit(true, p); err != nil {
 			return 0, err
 		}
 	}
-	return len(p), nil
+	if g.zw != nil {
+		return g.zw.Write(p)
+	}
+	return g.ResponseWriter.Write(p)
 }
 
-// commit writes the header and the held-back bytes. large tells whether the
-// body reached apiGzipMinSize.
-func (g *gzipResponseWriter) commit(large bool) error {
+// commit decides how the body goes out. large tells whether it reached
+// apiGzipMinSize; next is the write about to follow (only looked at to sniff
+// a missing Content-Type). An uncompressed body is sent from here on; a
+// compressed one is built in out.
+func (g *gzipResponseWriter) commit(large bool, next []byte) error {
 	g.committed = true
 	h := g.Header()
-	if h.Get("Content-Type") == "" && len(g.buf) > 0 {
-		h.Set("Content-Type", http.DetectContentType(g.buf))
+	if h.Get("Content-Type") == "" && len(g.buf)+len(next) > 0 {
+		sniff := append([]byte(nil), g.buf...)
+		if room := 512 - len(sniff); room > 0 {
+			if len(next) < room {
+				room = len(next)
+			}
+			sniff = append(sniff, next[:room]...)
+		}
+		h.Set("Content-Type", http.DetectContentType(sniff))
 	}
 	compressible := g.status != http.StatusNoContent && g.status != http.StatusNotModified &&
 		h.Get("Content-Encoding") == "" && compressibleType(h.Get("Content-Type"))
@@ -290,9 +333,9 @@ func (g *gzipResponseWriter) commit(large bool) error {
 	if compressible && large {
 		h.Set("Content-Encoding", "gzip")
 		h.Del("Content-Length")
-		g.ResponseWriter.WriteHeader(g.status)
+		gzipSlots <- struct{}{} // released in finish
 		zw := gzipWriterPool.Get().(*gzip.Writer)
-		zw.Reset(g.ResponseWriter)
+		zw.Reset(&g.out)
 		g.zw = zw
 		_, err := zw.Write(g.buf)
 		g.buf = nil
@@ -307,36 +350,98 @@ func (g *gzipResponseWriter) commit(large bool) error {
 	return err
 }
 
-// finish commits a response that never reached the threshold and closes the
-// gzip stream of one that did.
+// finish commits a response that never reached the threshold, or completes
+// a compressed one: closes the gzip stream, returns the compressor to the
+// pool and sends the compressed body.
 func (g *gzipResponseWriter) finish() {
 	if !g.committed && g.status != 0 {
-		_ = g.commit(false)
+		_ = g.commit(false, nil)
 	}
-	if g.zw != nil {
-		_ = g.zw.Close()
-		g.zw.Reset(io.Discard)
-		gzipWriterPool.Put(g.zw)
-		g.zw = nil
+	if g.zw == nil {
+		return
 	}
+	_ = g.zw.Close()
+	g.zw.Reset(io.Discard)
+	gzipWriterPool.Put(g.zw)
+	g.zw = nil
+	<-gzipSlots
+	if !g.headerSent {
+		g.Header().Set("Content-Length", strconv.Itoa(g.out.Len()))
+		g.ResponseWriter.WriteHeader(g.status)
+		g.headerSent = true
+	}
+	_ = g.sendOut()
+	// The deadline is absolute; do not leave it on a keep-alive connection
+	// that serves another request next.
+	_ = g.rc.SetWriteDeadline(time.Time{})
 }
 
-// Flush commits what is held back (compressed only if it already reached the
-// threshold) and pushes it to the client.
-func (g *gzipResponseWriter) Flush() {
-	if !g.committed && g.status != 0 {
-		_ = g.commit(len(g.buf) >= apiGzipMinSize)
+// sendOut writes the compressed bytes built so far, under a write deadline so
+// a client that stops reading does not hold the handler.
+func (g *gzipResponseWriter) sendOut() error {
+	if g.out.Len() == 0 {
+		return nil
+	}
+	_ = g.rc.SetWriteDeadline(time.Now().Add(apiWriteTimeout))
+	_, err := g.ResponseWriter.Write(g.out.Bytes())
+	g.out.Reset()
+	return err
+}
+
+// Flush pushes what the handler has written to the client: held-back bytes
+// uncompressed (they are below the threshold), a compressed body so far.
+func (g *gzipResponseWriter) Flush() { _ = g.FlushError() }
+
+// FlushError is Flush reporting a failed write, as http.ResponseController
+// expects of writers that can flush.
+func (g *gzipResponseWriter) FlushError() error {
+	if !g.committed {
+		if g.status == 0 {
+			g.status = http.StatusOK
+		}
+		if err := g.commit(false, nil); err != nil {
+			return err
+		}
 	}
 	if g.zw != nil {
-		_ = g.zw.Flush()
+		if err := g.zw.Flush(); err != nil {
+			return err
+		}
+		if !g.headerSent {
+			g.ResponseWriter.WriteHeader(g.status)
+			g.headerSent = true
+		}
+		if err := g.sendOut(); err != nil {
+			return err
+		}
 	}
-	if f, ok := g.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
+	return g.rc.Flush()
 }
 
 // Unwrap lets http.ResponseController reach the underlying writer.
 func (g *gzipResponseWriter) Unwrap() http.ResponseWriter { return g.ResponseWriter }
+
+// gzipBytes returns b gzipped at the default level, or nil when it does not
+// shrink by at least 10 %. For bodies that are compressed once and served
+// many times (the tcping history cache).
+func gzipBytes(b []byte) []byte {
+	gzipSlots <- struct{}{}
+	defer func() { <-gzipSlots }()
+	var buf bytes.Buffer
+	zw := gzipWriterPool.Get().(*gzip.Writer)
+	defer func() {
+		zw.Reset(io.Discard)
+		gzipWriterPool.Put(zw)
+	}()
+	zw.Reset(&buf)
+	if _, err := zw.Write(b); err != nil || zw.Close() != nil {
+		return nil
+	}
+	if buf.Len() >= len(b)*9/10 {
+		return nil
+	}
+	return buf.Bytes()
+}
 
 // ---------------------------------------------------------------------------
 // Event stream

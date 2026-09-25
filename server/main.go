@@ -170,8 +170,9 @@ type TCPingHistoryResponse struct {
 // touching shared state.
 type tcpingCacheEntry struct {
 	JSON     []byte // marshaled body of TCPingHistoryResponse, ready to ship
+	GZ       []byte // gzip of JSON, made once when cached; nil if not worth it
 	CachedAt time.Time
-	Size     int
+	Size     int // len(JSON) + len(GZ), counted against tcpingCacheMaxBytes
 }
 
 type tcpingCacheKey struct {
@@ -192,6 +193,16 @@ var (
 // The returned slice is owned by the cache and MUST NOT be mutated by the
 // caller; the writer only reads from it.
 func getCachedTCPingResultsJSON(clientID, target string) ([]byte, bool) {
+	entry, ok := getCachedTCPingEntry(clientID, target)
+	if !ok {
+		return nil, false
+	}
+	return entry.JSON, true
+}
+
+// getCachedTCPingEntry returns the live cache entry for client+target. The
+// entry is never modified after it is stored.
+func getCachedTCPingEntry(clientID, target string) (*tcpingCacheEntry, bool) {
 	tcpingCacheMu.RLock()
 	defer tcpingCacheMu.RUnlock()
 
@@ -204,7 +215,7 @@ func getCachedTCPingResultsJSON(clientID, target string) ([]byte, bool) {
 		return nil, false
 	}
 
-	return entry.JSON, true
+	return entry, true
 }
 
 // Cache the pre-encoded TCPing response body. Marshal failures fall back to
@@ -214,16 +225,27 @@ func getCachedTCPingResultsJSON(clientID, target string) ([]byte, bool) {
 // JSON value followed by a single trailing '\n'. That way cache-hit and
 // cache-miss responses are byte-identical on the wire, which simplifies
 // downstream tooling (e.g. ETag generation, log diffs, conformance tests).
-func cacheTCPingResults(clientID, target string, response TCPingHistoryResponse) {
+//
+// The body is also gzipped once here (history responses are the largest the
+// API sends and are requested by every open chart), so a cache hit costs no
+// compression. It returns the stored entry, or nil when nothing was cached.
+func cacheTCPingResults(clientID, target string, response TCPingHistoryResponse) *tcpingCacheEntry {
 	body, err := json.Marshal(response)
 	if err != nil {
-		return
+		return nil
 	}
 	body = append(body, '\n')
 	if len(body) > tcpingCacheMaxBytes {
 		// Preserve data completeness: over-budget responses are still sent to
 		// the caller by handleGetTCPingHistory; we only skip keeping a copy.
-		return
+		return nil
+	}
+	var gz []byte
+	if httpGzipEnabled && len(body) >= apiGzipMinSize {
+		gz = gzipBytes(body)
+	}
+	if len(body)+len(gz) > tcpingCacheMaxBytes {
+		gz = nil
 	}
 
 	key := tcpingCacheKey{ClientID: clientID, Target: target}
@@ -231,13 +253,16 @@ func cacheTCPingResults(clientID, target string, response TCPingHistoryResponse)
 	defer tcpingCacheMu.Unlock()
 
 	tcpingCacheDeleteLocked(key)
-	tcpingCache[key] = &tcpingCacheEntry{
+	entry := &tcpingCacheEntry{
 		JSON:     body,
+		GZ:       gz,
 		CachedAt: time.Now(),
-		Size:     len(body),
+		Size:     len(body) + len(gz),
 	}
-	tcpingCacheBytes += len(body)
+	tcpingCache[key] = entry
+	tcpingCacheBytes += entry.Size
 	tcpingCacheEnforceBudgetLocked(time.Now())
+	return entry
 }
 
 func tcpingCacheDeleteLocked(key tcpingCacheKey) {
@@ -897,7 +922,12 @@ func newStandaloneHandler(distFS fs.FS, api http.Handler) http.Handler {
 			if serr == nil && !st.IsDir() {
 				setStaticCacheHeaders(w, r.URL.Path)
 				tag := staticETag(path)
-				if gzStatic.serve(w, r, path, tag) {
+				// FileServer answers .../index.html, and a file URL with a trailing
+				// slash, with a redirect; leave those to it. ("/" is the root
+				// directory to FileServer and is served, not redirected.)
+				redirects := strings.HasSuffix(r.URL.Path, "/index.html") ||
+					(r.URL.Path != "/" && strings.HasSuffix(r.URL.Path, "/"))
+				if !redirects && gzStatic.serve(w, r, path, tag) {
 					return
 				}
 				// FileServer honours If-None-Match against the ETag we set.
@@ -1919,11 +1949,13 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 	// stale, already-expired write deadline.
 	defer rc.SetWriteDeadline(time.Time{})
 
-	// A client that accepts gzip gets the stream as one gzip member built
-	// from runs that are compressed once per event and shared by every
-	// subscriber (compress.go), so compression costs nothing per connection.
+	// A public-view client that accepts gzip gets the stream as one gzip
+	// member built from runs that are compressed once per event and shared
+	// by every subscriber (compress.go), so compression costs nothing per
+	// connection. Admin streams stay uncompressed: they carry addresses and
+	// secrets next to text an agent can choose (see gzipAllowed).
 	var gz *sseGzipStream
-	if sseGzipEnabled && acceptsGzip(r) {
+	if sseGzipEnabled && view == SSEViewPublic && acceptsGzip(r) {
 		gz = &sseGzipStream{w: w}
 		// A stream the server ends on purpose (revoked session, shutdown)
 		// closes its gzip member properly; after a disconnect the write just
@@ -2261,6 +2293,9 @@ func broadcastMetricsSnapshotLocked(store *Store, registry *ClientRegistry, brok
 		SSEViewPublic: string(publicJSON),
 		SSEViewAdmin:  string(adminJSON),
 	}, builtAt)
+	// New state (or an admin change) went out: /api/metrics must not serve an
+	// older anonymous body after it.
+	invalidatePublicMetricsCache()
 }
 
 func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
@@ -2299,13 +2334,70 @@ func handleListMetrics(store *Store, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	metrics, err := buildMetricsSnapshot(store, globalClientRegistry, isAuthenticated(r))
+	if !isAuthenticated(r) {
+		body, gz, err := publicMetricsBody(store)
+		if err != nil {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		writeCachedBody(w, r, body, gz)
+		return
+	}
+	metrics, err := buildMetricsSnapshot(store, globalClientRegistry, true)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, metrics)
+}
+
+// publicMetricsTTL is how long an anonymous /api/metrics body is reused. It
+// is the same for every anonymous caller, so a burst of requests (page loads,
+// or someone hammering the endpoint) costs one snapshot build, one encoding
+// and one compression per second instead of one per request. Every broadcast
+// (the 3 s tick and each admin change) drops it.
+const publicMetricsTTL = time.Second
+
+var publicMetricsCache struct {
+	mu    sync.Mutex
+	store *Store
+	at    time.Time
+	json  []byte
+	gz    []byte
+}
+
+func invalidatePublicMetricsCache() {
+	publicMetricsCache.mu.Lock()
+	publicMetricsCache.json, publicMetricsCache.gz = nil, nil
+	publicMetricsCache.mu.Unlock()
+}
+
+// publicMetricsBody returns the anonymous /api/metrics body (the bytes
+// writeJSON would send) and its gzip copy (nil when not worth it), rebuilt
+// when older than publicMetricsTTL.
+func publicMetricsBody(store *Store) ([]byte, []byte, error) {
+	c := &publicMetricsCache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.json != nil && c.store == store && time.Since(c.at) < publicMetricsTTL {
+		return c.json, c.gz, nil
+	}
+	metrics, err := buildMetricsSnapshot(store, globalClientRegistry, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	body, err := json.Marshal(metrics)
+	if err != nil {
+		return nil, nil, err
+	}
+	body = append(body, '\n')
+	var gz []byte
+	if httpGzipEnabled && len(body) >= apiGzipMinSize {
+		gz = gzipBytes(body)
+	}
+	c.store, c.at, c.json, c.gz = store, time.Now(), body, gz
+	return body, gz, nil
 }
 
 func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.Request) {
@@ -4646,8 +4738,8 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 	// Try to get the exact client+target history response from cache first.
 	// Cache stores the already-encoded JSON body, so a hit can be served
 	// without re-running json.Marshal — measurably reduces CPU under load.
-	if body, found := getCachedTCPingResultsJSON(clientID, target); found {
-		writeCachedJSON(w, http.StatusOK, body)
+	if entry, found := getCachedTCPingEntry(clientID, target); found {
+		writeCachedTCPingEntry(w, r, entry)
 		return
 	}
 
@@ -4681,9 +4773,30 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 		Stats:   stats,
 	}
 
-	cacheTCPingResults(clientID, target, response)
-
+	if entry := cacheTCPingResults(clientID, target, response); entry != nil {
+		writeCachedTCPingEntry(w, r, entry)
+		return
+	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+// writeCachedTCPingEntry ships a cached history body.
+func writeCachedTCPingEntry(w http.ResponseWriter, r *http.Request, entry *tcpingCacheEntry) {
+	writeCachedBody(w, r, entry.JSON, entry.GZ)
+}
+
+// writeCachedBody ships a cached JSON body: its gzip copy when there is one
+// and the response may be compressed (gzipAllowed), the JSON otherwise.
+func writeCachedBody(w http.ResponseWriter, r *http.Request, jsonBody, gzBody []byte) {
+	if gzBody != nil && gzipAllowed(r) {
+		h := w.Header()
+		h.Set("Content-Encoding", "gzip")
+		h.Add("Vary", "Accept-Encoding")
+		h.Set("Content-Length", strconv.Itoa(len(gzBody)))
+		writeCachedJSON(w, http.StatusOK, gzBody)
+		return
+	}
+	writeCachedJSON(w, http.StatusOK, jsonBody)
 }
 
 // Handle get navbar config
