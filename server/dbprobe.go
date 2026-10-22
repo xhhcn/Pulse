@@ -22,11 +22,12 @@ import (
 // out of order, a page referenced twice, a broken stored freelist) it panics
 // from a goroutine of its own, beyond any recover. Without a guard the server
 // would die the same way on every start. So before the real open, the same
-// open runs once in a short-lived child process (this binary, re-executed
-// with dbOpenProbeEnv set). If that child dies inside bbolt, the file is
-// salvaged: every bucket and key/value is copied from a read-only open (which
-// does not rebuild the freelist) into a fresh file, the damaged original is
-// kept next to it as <path>.damaged-<timestamp>, and the copy takes its place.
+// open, followed by a full tree check, runs once in a short-lived child
+// process (this binary, re-executed with dbOpenProbeEnv set). If that child
+// finds damage or dies inside bbolt, the file is salvaged: every bucket and
+// key/value is copied from a read-only open (which does not rebuild the
+// freelist) into a fresh file, the damaged original is kept next to it as
+// <path>.damaged-<timestamp>, and the copy takes its place.
 // Damage the copy cannot get past (an unreadable page) is left alone and
 // reported, exactly as before this probe existed.
 
@@ -37,10 +38,20 @@ const dbOpenProbeEnv = "PULSE_DB_OPEN_PROBE"
 // same, so this is only a guard against a stuck child.
 const dbProbeTimeout = 10 * time.Minute
 
+// dbProbeDamagedExit is the probe child's exit status when its own check of
+// the tree finds damage.
+const dbProbeDamagedExit = 4
+
 // runDBOpenProbeIfRequested must run first thing in main (and TestMain). In
-// the probe child it opens the database exactly as the server does and
-// exits: 0 when the open succeeds, 3 when it returns an error. A panic inside
-// bbolt ends the process with Go's exit code 2 and a stack trace on stderr.
+// the probe child it opens the database exactly as the server does, checks
+// the tree and exits: 0 when both pass, 3 when the open returns an error,
+// dbProbeDamagedExit when the check reports damage. A panic inside bbolt
+// ends the process with Go's exit code 2 and a stack trace on stderr.
+//
+// The check is needed because bbolt reports damage it meets while rebuilding
+// the freelist from a goroutine of its own: an exit right after the open can
+// beat that panic, and the probe then passed a file the server would crash
+// on later.
 func runDBOpenProbeIfRequested() {
 	path := os.Getenv(dbOpenProbeEnv)
 	if path == "" {
@@ -51,8 +62,32 @@ func runDBOpenProbeIfRequested() {
 		fmt.Fprintf(os.Stderr, "probe open: %v\n", err)
 		os.Exit(3)
 	}
+	if problem := firstTreeProblem(db); problem != "" {
+		fmt.Fprintf(os.Stderr, "probe check: %s\n", problem)
+		os.Exit(dbProbeDamagedExit)
+	}
 	_ = db.Close()
 	os.Exit(0)
+}
+
+// firstTreeProblem runs bbolt's consistency check (key order, page
+// references, freelist) and returns its first finding, or "".
+func firstTreeProblem(db *bolt.DB) (problem string) {
+	_ = db.View(func(tx *bolt.Tx) error {
+		for err := range tx.Check() { // drained to the end so the checker can finish
+			if problem == "" {
+				problem = err.Error()
+			}
+		}
+		return nil
+	})
+	return problem
+}
+
+// probeFoundDamage tells whether a probe child's exit status and stderr mean
+// a damaged tree: its own check failed, or bbolt panicked.
+func probeFoundDamage(code int, stderr string) bool {
+	return code == dbProbeDamagedExit || (code == 2 && strings.Contains(stderr, "go.etcd.io/bbolt"))
 }
 
 // boundedBuffer keeps the first max bytes written to it and drops the rest.
@@ -103,7 +138,7 @@ func preflightDB(path string) {
 	}
 	var exitErr *exec.ExitError
 	out := stderr.buf.String()
-	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 2 || !strings.Contains(out, "go.etcd.io/bbolt") {
+	if !errors.As(err, &exitErr) || !probeFoundDamage(exitErr.ExitCode(), out) {
 		log.Printf("⚠️  database probe failed (%v); opening normally", err)
 		return
 	}

@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -175,6 +175,49 @@ func TestPreflightLeavesAHealthyDatabaseAlone(t *testing.T) {
 	}
 }
 
+// A file written by an older build (freelist synced on every commit) is
+// healthy for the probe's tree check too.
+func TestPreflightLeavesALegacyDatabaseAlone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "metrics.db")
+	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: time.Second, FreelistType: bolt.FreelistMapType})
+	if err != nil {
+		t.Fatalf("open legacy: %v", err)
+	}
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(tcpingBucket))
+		if err != nil {
+			return err
+		}
+		for i := 0; i < 5000; i++ {
+			if err := b.Put([]byte(fmt.Sprintf("%010d_legacy", i)), bytes.Repeat([]byte{'v'}, 40)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fill: %v", err)
+	}
+	if err := db.Update(func(tx *bolt.Tx) error { // leave free pages behind
+		c := tx.Bucket([]byte(tcpingBucket)).Cursor()
+		for k, _ := c.First(); k != nil && k[0] < '3'; k, _ = c.Next() {
+			if err := c.Delete(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	db.Close()
+	if code, out := runProbeChild(t, path); code != 0 {
+		t.Fatalf("a healthy legacy file must pass the probe, exit %d: %.300s", code, out)
+	}
+	preflightDB(path)
+	if m, _ := filepath.Glob(path + ".damaged-*"); len(m) != 0 {
+		t.Fatalf("unexpected salvage artefacts: %v", m)
+	}
+}
+
 func TestPreflightSalvagesADamagedTree(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "metrics.db")
@@ -185,10 +228,12 @@ func TestPreflightSalvagesADamagedTree(t *testing.T) {
 	if !swapTwoHistoryKeys(t, path) {
 		t.Fatal("no history leaf page found to damage")
 	}
-	// The damage is real: opening the file the way the server does kills
-	// the process from inside bbolt.
-	if code, out := runProbeChild(t, path); code != 2 || !strings.Contains(out, "go.etcd.io/bbolt") {
-		t.Fatalf("expected the probe child to die in bbolt, got exit %d: %.300s", code, out)
+	// The damage is real, and the probe sees it every time: its own tree
+	// check reports it, or bbolt's freelist rebuild panics first.
+	for i := 0; i < 5; i++ {
+		if code, out := runProbeChild(t, path); !probeFoundDamage(code, out) {
+			t.Fatalf("probe %d passed a damaged file: exit %d: %.300s", i, code, out)
+		}
 	}
 
 	preflightDB(path)
