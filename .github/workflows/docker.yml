@@ -139,21 +139,21 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} makes the dashboard much lighter on the network and a little lighter to keep open. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.26).
+            v${{ steps.version.outputs.version }} brings the flags and logos back and closes a gap in the startup database check. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.26).
 
             ### Highlights
 
-            - Server: responses are gzip-compressed by the server itself, so a CDN that does not compress (or no CDN at all) no longer means full-size transfers. Static files are compressed once and kept; the TCPing history cache and the anonymous `/api/metrics` response keep a compressed copy; other API responses of 1 KiB or more are compressed on the fly, in memory and a bounded number at a time. The live event stream is compressed too, with every event compressed once and the same bytes sent to all viewers, so an open dashboard costs no extra CPU per viewer. With 110 servers the stream drops from ~35 KB/s to ~6 KB/s per open tab, the first page load from ~240 KB to ~65 KB, and a 24-hour TCPing history from ~180 KB to ~22 KB. Responses to signed-in admins and admin streams stay uncompressed, because they carry addresses and secrets next to agent-supplied text. Clients that do not ask for compression get exactly what they got before. `HTTP_GZIP=off` and `SSE_GZIP=off` turn it off.
-            - Web: resource bars follow whole percents. A tenth of a percent is a sub-pixel step, yet each one restarted the bar's 0.5 s transition on nearly every update.
+            - Web: flags, OS icons and CPU logos are shipped with the dashboard (under `/icons`) instead of being fetched from api.iconify.design, which stopped answering the `prefix:name.svg` URLs the pages requested — every flag and logo had gone missing. The 26 flags too large to ship still come from Iconify, in the URL form it serves. The country → flag table is now generated from Unicode's flag list (the old one had names the icon set never had), an icon that does not exist shows the OS name or location as text instead of an empty box, and on the dark theme the black logos (macOS, Apple and AMD CPUs) are drawn light.
+            - Server: the startup database probe runs bbolt's consistency check itself. bbolt reports damage from a goroutine of its own, and the probe could exit before that report fired, passing a damaged file the server would then crash on.
 
             ### Compatibility
 
-            - Existing clients continue to work; no wire format changed (compression is negotiated per request).
+            - Existing clients continue to work; no wire format changed.
             - Existing `metrics.db` files remain readable.
 
             ### Verified
 
-            - Server vet, race-enabled tests and build; browser end-to-end runs on both pages, including the compressed live stream; Docker-mode smoke test through nginx.
+            - Server vet, race-enabled tests and build; browser runs of both pages (flags, OS icons and CPU logos in light and dark themes, desktop and phone widths) against a local server and against production data.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
