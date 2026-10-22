@@ -1102,3 +1102,12 @@ html.light.glass-enabled #columns-dropdown label:hover {
 @media (prefers-reduced-motion: reduce) {
   .monitor-icon.default-logo { animation: none; }
 }
+
+/* Logos drawn in the SVG default fill (black: devicon:apple for macOS,
+   logos:apple and logos:amd for CPUs) disappear on the dark theme; paths
+   without a fill of their own inherit this one. */
+html.dark .os-icon[data-icon="devicon:apple"] svg,
+html.dark .cpu-brand-icon[data-icon="logos:apple"] svg,
+html.dark .cpu-brand-icon[data-icon="logos:amd"] svg {
+  fill: #e5e5e5;
+}

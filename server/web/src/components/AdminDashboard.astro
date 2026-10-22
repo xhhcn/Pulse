@@ -906,6 +906,17 @@ const customCodePlaceholder = [
     return new XMLSerializer().serializeToString(root);
   }
 
+  // CPU brand logos are shipped with the dashboard (public/icons, see
+  // utils/icons.ts; this inline script cannot import it). Anything else
+  // comes from the Iconify API as `prefix/name.svg`: the `prefix:name`
+  // form this used to request now answers 404.
+  const LOCAL_CPU_ICONS = new Set(['logos:amd', 'logos:apple', 'logos:arm', 'logos:intel']);
+  const cpuIconSvgUrl = (iconName) => {
+    const [prefix, name] = iconName.split(':');
+    return LOCAL_CPU_ICONS.has(iconName)
+      ? `/icons/${prefix}/${name}.svg`
+      : `https://api.iconify.design/${prefix}/${name}.svg?height=32`;
+  };
   const cpuIconSvgCache = new Map();
   const fetchCpuIconSvg = (iconName) => {
     if (!ICONIFY_NAME_RE.test(String(iconName || ''))) return Promise.resolve(null);
@@ -913,10 +924,7 @@ const customCodePlaceholder = [
     if (pending) return pending;
     pending = (async () => {
       try {
-        // encodeURI preserves ":" in iconify paths (e.g. "logos:intel")
-        // while still escaping any unexpected characters.
-        const url = `https://api.iconify.design/${encodeURI(iconName)}.svg?height=32`;
-        const response = await fetch(url);
+        const response = await fetch(cpuIconSvgUrl(iconName));
         if (!response.ok) return null;
         return await response.text();
       } catch (e) {

@@ -37,6 +37,8 @@ const apiBase = apiBaseProp ?? '';
 </div>
 
 <script>
+  import { iconSvgUrl, flagIconForCode, flagIconForSlug } from '../utils/icons.ts';
+
   // Import utility functions (inline for Astro compatibility)
   const getApiBase = (root) => {
     if (root?.dataset.apiBase && root.dataset.apiBase.trim() !== '') {
@@ -177,85 +179,27 @@ const apiBase = apiBaseProp ?? '';
     }
   };
 
-  // Country to flag icon mapping (emojione-v1)
-  // Supports both ISO 3166-1 alpha-2 country codes (e.g., "US", "CN", "HK") and country names
-  // Backend now returns ISO 3166-1 alpha-2 country codes
-  // Format: emojione-v1:flag-for-{country-name} (e.g., emojione-v1:flag-for-afghanistan)
+  // Country → Emoji One (v1) flag icon. Location is an ISO 3166-1 alpha-2
+  // code (what the backend stores); its icon comes from the table generated
+  // from Unicode's flag list (utils/icon-manifest.ts). Free-text names from
+  // older data or manual entries go through the slug fallback below.
   const countryToFlag = (country) => {
     if (!country) return null;
     
     const countryTrimmed = country.trim();
     
-    // ISO 3166-1 alpha-2 country code to country name mapping
-    // Maps to emojione-v1 flag format: emojione-v1:flag-for-{country-name}
-    const countryCodeToName = {
-      'AD': 'andorra', 'AE': 'united-arab-emirates', 'AF': 'afghanistan', 'AG': 'antigua-and-barbuda',
-      'AI': 'anguilla', 'AL': 'albania', 'AM': 'armenia', 'AO': 'angola', 'AQ': 'antarctica',
-      'AR': 'argentina', 'AS': 'american-samoa', 'AT': 'austria', 'AU': 'australia', 'AW': 'aruba',
-      'AX': 'aland-islands', 'AZ': 'azerbaijan', 'BA': 'bosnia-and-herzegovina', 'BB': 'barbados',
-      'BD': 'bangladesh', 'BE': 'belgium', 'BF': 'burkina-faso', 'BG': 'bulgaria', 'BH': 'bahrain',
-      'BI': 'burundi', 'BJ': 'benin', 'BL': 'saint-barthelemy', 'BM': 'bermuda', 'BN': 'brunei',
-      'BO': 'bolivia', 'BQ': 'caribbean-netherlands', 'BR': 'brazil', 'BS': 'bahamas', 'BT': 'bhutan',
-      'BV': 'bouvet-island', 'BW': 'botswana', 'BY': 'belarus', 'BZ': 'belize', 'CA': 'canada',
-      'CC': 'cocos-islands', 'CD': 'congo-kinshasa', 'CF': 'central-african-republic', 'CG': 'congo-brazzaville',
-      'CH': 'switzerland', 'CI': 'cote-divoire', 'CK': 'cook-islands', 'CL': 'chile', 'CM': 'cameroon',
-      'CN': 'china', 'CO': 'colombia', 'CR': 'costa-rica', 'CU': 'cuba', 'CV': 'cape-verde',
-      'CW': 'curacao', 'CX': 'christmas-island', 'CY': 'cyprus', 'CZ': 'czech-republic', 'DE': 'germany',
-      'DJ': 'djibouti', 'DK': 'denmark', 'DM': 'dominica', 'DO': 'dominican-republic', 'DZ': 'algeria',
-      'EC': 'ecuador', 'EE': 'estonia', 'EG': 'egypt', 'EH': 'western-sahara', 'ER': 'eritrea',
-      'ES': 'spain', 'ET': 'ethiopia', 'FI': 'finland', 'FJ': 'fiji', 'FK': 'falkland-islands',
-      'FM': 'micronesia', 'FO': 'faroe-islands', 'FR': 'france', 'GA': 'gabon', 'GB': 'united-kingdom',
-      'GD': 'grenada', 'GE': 'georgia', 'GF': 'french-guiana', 'GG': 'guernsey', 'GH': 'ghana',
-      'GI': 'gibraltar', 'GL': 'greenland', 'GM': 'gambia', 'GN': 'guinea', 'GP': 'guadeloupe',
-      'GQ': 'equatorial-guinea', 'GR': 'greece', 'GS': 'south-georgia', 'GT': 'guatemala', 'GU': 'guam',
-      'GW': 'guinea-bissau', 'GY': 'guyana', 'HK': 'hong-kong-sar-china', 'HM': 'heard-island',
-      'HN': 'honduras', 'HR': 'croatia', 'HT': 'haiti', 'HU': 'hungary', 'ID': 'indonesia',
-      'IE': 'ireland', 'IL': 'israel', 'IM': 'isle-of-man', 'IN': 'india', 'IO': 'british-indian-ocean-territory',
-      'IQ': 'iraq', 'IR': 'iran', 'IS': 'iceland', 'IT': 'italy', 'JE': 'jersey', 'JM': 'jamaica',
-      'JO': 'jordan', 'JP': 'japan', 'KE': 'kenya', 'KG': 'kyrgyzstan', 'KH': 'cambodia',
-      'KI': 'kiribati', 'KM': 'comoros', 'KN': 'saint-kitts-and-nevis', 'KP': 'north-korea',
-      'KR': 'south-korea', 'KW': 'kuwait', 'KY': 'cayman-islands', 'KZ': 'kazakhstan', 'LA': 'laos',
-      'LB': 'lebanon', 'LC': 'saint-lucia', 'LI': 'liechtenstein', 'LK': 'sri-lanka', 'LR': 'liberia',
-      'LS': 'lesotho', 'LT': 'lithuania', 'LU': 'luxembourg', 'LV': 'latvia', 'LY': 'libya',
-      'MA': 'morocco', 'MC': 'monaco', 'MD': 'moldova', 'ME': 'montenegro', 'MF': 'saint-martin',
-      'MG': 'madagascar', 'MH': 'marshall-islands', 'MK': 'north-macedonia', 'ML': 'mali', 'MM': 'myanmar',
-      'MN': 'mongolia', 'MO': 'macau-sar-china', 'MP': 'northern-mariana-islands', 'MQ': 'martinique',
-      'MR': 'mauritania', 'MS': 'montserrat', 'MT': 'malta', 'MU': 'mauritius', 'MV': 'maldives',
-      'MW': 'malawi', 'MX': 'mexico', 'MY': 'malaysia', 'MZ': 'mozambique', 'NA': 'namibia',
-      'NC': 'new-caledonia', 'NE': 'niger', 'NF': 'norfolk-island', 'NG': 'nigeria', 'NI': 'nicaragua',
-      'NL': 'netherlands', 'NO': 'norway', 'NP': 'nepal', 'NR': 'nauru', 'NU': 'niue',
-      'NZ': 'new-zealand', 'OM': 'oman', 'PA': 'panama', 'PE': 'peru', 'PF': 'french-polynesia',
-      'PG': 'papua-new-guinea', 'PH': 'philippines', 'PK': 'pakistan', 'PL': 'poland', 'PM': 'saint-pierre-and-miquelon',
-      'PN': 'pitcairn', 'PR': 'puerto-rico', 'PS': 'palestine', 'PT': 'portugal', 'PW': 'palau',
-      'PY': 'paraguay', 'QA': 'qatar', 'RE': 'reunion', 'RO': 'romania', 'RS': 'serbia',
-      'RU': 'russia', 'RW': 'rwanda', 'SA': 'saudi-arabia', 'SB': 'solomon-islands', 'SC': 'seychelles',
-      'SD': 'sudan', 'SE': 'sweden', 'SG': 'singapore', 'SH': 'saint-helena', 'SI': 'slovenia',
-      'SJ': 'svalbard-and-jan-mayen', 'SK': 'slovakia', 'SL': 'sierra-leone', 'SM': 'san-marino',
-      'SN': 'senegal', 'SO': 'somalia', 'SR': 'suriname', 'SS': 'south-sudan', 'ST': 'sao-tome-and-principe',
-      'SV': 'el-salvador', 'SX': 'sint-maarten', 'SY': 'syria', 'SZ': 'eswatini', 'TC': 'turks-and-caicos',
-      'TD': 'chad', 'TF': 'french-southern-territories', 'TG': 'togo', 'TH': 'thailand', 'TJ': 'tajikistan',
-      'TK': 'tokelau', 'TL': 'timor-leste', 'TM': 'turkmenistan', 'TN': 'tunisia', 'TO': 'tonga',
-      'TR': 'turkey', 'TT': 'trinidad-and-tobago', 'TV': 'tuvalu', 'TW': 'taiwan', 'TZ': 'tanzania',
-      'UA': 'ukraine', 'UG': 'uganda', 'UM': 'us-outlying-islands', 'US': 'united-states', 'UY': 'uruguay',
-      'UZ': 'uzbekistan', 'VA': 'vatican-city', 'VC': 'saint-vincent-and-the-grenadines', 'VE': 'venezuela',
-      'VG': 'british-virgin-islands', 'VI': 'us-virgin-islands', 'VN': 'vietnam', 'VU': 'vanuatu',
-      'WF': 'wallis-and-futuna', 'WS': 'samoa', 'XK': 'kosovo', 'YE': 'yemen', 'YT': 'mayotte',
-      'ZA': 'south-africa', 'ZM': 'zambia', 'ZW': 'zimbabwe'
-    };
-    
-    // Check if this is a country code (2 uppercase letters, e.g., "US", "CN", "HK")
+    // Country code (2 uppercase letters, e.g. "US", "CN", "HK")
     if (countryTrimmed.length === 2 && /^[A-Z]{2}$/.test(countryTrimmed)) {
-      const countryName = countryCodeToName[countryTrimmed];
-      if (countryName) {
-        return `emojione-v1:flag-for-${countryName}`;
-      }
-      // If code not found, return null to show text fallback
-      return null;
+      // If the code has no flag, return null to show text fallback
+      return flagIconForCode(countryTrimmed);
     }
     
     // Fallback: if it's a country name, convert to flag format
-    // This handles legacy data or manual entries
+    // This handles legacy data or manual entries. Only names Emoji One
+    // really has become icons; anything else ("Unknown", a typo, a city)
+    // is shown as text rather than requested and left as an empty box.
     let countryLower = countryTrimmed.toLowerCase();
+    if (countryLower === 'unknown') return null;
     
     // Remove common prefixes that don't appear in flag names
     const prefixesToRemove = [
@@ -301,7 +245,7 @@ const apiBase = apiBaseProp ?? '';
       'korea': 'south-korea',
       'south korea': 'south-korea',
       'north korea': 'north-korea',
-      'czech republic': 'czech-republic',
+      'czech republic': 'czechia',
       'russian federation': 'russia',
       'myanmar': 'myanmar',
       'burma': 'myanmar',
@@ -312,7 +256,7 @@ const apiBase = apiBaseProp ?? '';
     
     // Check if there's a special mapping (after prefix removal)
     if (specialFlagMap[countryLower]) {
-      return `emojione-v1:flag-for-${specialFlagMap[countryLower]}`;
+      return flagIconForSlug(specialFlagMap[countryLower]);
     }
     
     // Convert country name to flag icon path:
@@ -326,7 +270,7 @@ const apiBase = apiBaseProp ?? '';
       .replace(/--+/g, '-')  // Replace multiple hyphens with single hyphen
       .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
     
-    return `emojione-v1:flag-for-${flagName}`;
+    return flagIconForSlug(flagName);
   };
 
   // Module-level cache for iconify SVG text, keyed by the full cache key
@@ -339,19 +283,19 @@ const apiBase = apiBaseProp ?? '';
   // We store Promise<string|null> rather than the resolved text so
   // concurrent calls for the same icon (common on first paint) only
   // fire one fetch — all callers `await` the same in-flight promise.
-  // `null` is returned on fetch failure so we don't retry a broken icon
-  // on every render (transient outages do recover on next page load).
+  // A 404 is cached as '' so a missing icon is not refetched on every
+  // render; a transient failure is dropped from the cache and retried.
   //
   // The cache key encodes the requested `height=` param because
   // iconify serves different viewBox sizes; re-using a 26px SVG where
   // a 32px one was asked for is safe visually (SVGs scale) but the
   // raw bytes differ — keying by size keeps the two callers consistent
   // with their original behaviour.
-  // Icon names reach the CDN URL from agent-reported fields (os_icon) and
-  // from the country -> flag lookup. Restrict them to the iconify
-  // "prefix:name" shape so a hostile agent can never steer the request at
-  // a different path (slashes, "..", "?", "#" are all rejected here).
-  const ICONIFY_NAME_RE = /^[a-z0-9-]+:[a-z0-9-]+$/i;
+  // Icons come from the copies shipped with the dashboard, or the Iconify
+  // API for the few that are not (utils/icons.ts). Icon names reach the URL
+  // from agent-reported fields (os_icon) and from the country -> flag
+  // lookup; iconSvgUrl only accepts the plain "prefix:name" shape, so a
+  // hostile agent can never steer the request at a different path.
 
   // SECURITY: escape an id before it is interpolated into a CSS selector.
   // Ids come from agent-reported data and may contain quotes or other
@@ -392,27 +336,36 @@ const apiBase = apiBaseProp ?? '';
 
   const iconSvgCache = new Map();
   const fetchIconSvg = (iconName, height) => {
-    // Reject anything that is not a plain iconify "prefix:name" pair before
-    // it can influence the CDN URL.
-    if (!ICONIFY_NAME_RE.test(String(iconName || ''))) return Promise.resolve(null);
+    const url = iconSvgUrl(iconName, height);
+    if (!url) return Promise.resolve(null);
     const key = `${iconName}@${height}`;
     let pending = iconSvgCache.get(key);
     if (pending) return pending;
     pending = (async () => {
       try {
-        // encodeURI preserves the `:` separator used by iconify paths
-        // (e.g. "logos:intel") while escaping any unusual characters
-        // that might sneak in from backend-derived icon names.
-        const url = `https://api.iconify.design/${encodeURI(iconName)}.svg?height=${height}`;
         const response = await fetch(url);
+        // A missing icon stays missing for the session (no refetch on every
+        // render); a network error or 5xx is dropped below and retried.
+        if (response.status === 404) return '';
         if (!response.ok) return null;
         return await response.text();
       } catch (e) {
         return null;
       }
     })();
+    pending = pending.then((svg) => { if (svg == null) iconSvgCache.delete(key); return svg; });
     iconSvgCache.set(key, pending);
     return pending;
+  };
+
+  // An icon that does not exist (the CDN answered 404) is replaced by the
+  // text it stands for — the OS name or the location — instead of leaving
+  // an empty box in the cell.
+  const showIconText = (el) => {
+    const text = document.createElement('span');
+    text.className = 'text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3] whitespace-nowrap';
+    text.textContent = el.dataset.fallback || '-';
+    el.replaceWith(text);
   };
 
   const loadOSIcons = async () => {
@@ -424,6 +377,7 @@ const apiBase = apiBaseProp ?? '';
       // icon — prevents flicker and avoids re-styling on every render.
       if (el.dataset.iconLoaded === iconName && el.querySelector('svg')) return;
       const svg = await fetchIconSvg(iconName, 26);
+      if (svg === '') { showIconText(el); return; }
       if (!svg) return;
       // Third-party markup: only a sanitized <svg> tree may reach innerHTML.
       const safeSvg = sanitizeSvgMarkup(svg);
@@ -453,6 +407,7 @@ const apiBase = apiBaseProp ?? '';
       if (!iconName) return;
       if (el.dataset.iconLoaded === iconName && el.querySelector('svg')) return;
       const svg = await fetchIconSvg(iconName, 32);
+      if (svg === '') { showIconText(el); return; }
       if (!svg) return;
       // Third-party markup: only a sanitized <svg> tree may reach innerHTML.
       const safeSvg = sanitizeSvgMarkup(svg);
@@ -971,7 +926,7 @@ const apiBase = apiBaseProp ?? '';
           ${item.location ? (() => {
             const flagIcon = countryToFlag(item.location);
             if (flagIcon) {
-              return `<span class="flag-icon block leading-none w-6 h-6 sm:w-8 sm:h-8" data-icon="${escapeHtmlAttr(flagIcon)}"></span>`;
+              return `<span class="flag-icon block leading-none w-6 h-6 sm:w-8 sm:h-8" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
             }
             // SECURITY: Escape location to prevent XSS
             const safeLocation = escapeHtml(item.location);
@@ -983,7 +938,7 @@ const apiBase = apiBaseProp ?? '';
         <div class="h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline)}</div>
         <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center">${((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0)).toFixed(2)} MB/s</div>
         <div class="h-5 flex items-center justify-center w-full" title="${escapeHtmlAttr(item.os || '-')}">
-          ${item.os_icon ? `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${escapeHtmlAttr(item.os_icon)}"></span>` : `<span class="text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3]">${escapeHtml(item.os || '-')}</span>`}
+          ${item.os_icon ? `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>` : `<span class="text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3]">${escapeHtml(item.os || '-')}</span>`}
     </div>
     </div>
       <!-- Expandable details section -->
@@ -1577,7 +1532,7 @@ const apiBase = apiBaseProp ?? '';
         if (item.location) {
           const flagIcon = countryToFlag(item.location);
           if (flagIcon) {
-            locationCell.innerHTML = `<span class="flag-icon block leading-none w-6 h-6 sm:w-8 sm:h-8" data-icon="${escapeHtmlAttr(flagIcon)}"></span>`;
+            locationCell.innerHTML = `<span class="flag-icon block leading-none w-6 h-6 sm:w-8 sm:h-8" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
             locationCell.title = item.location; // Set title for tooltip
             setTimeout(() => loadFlagIcons(), 0);
           } else {
@@ -1690,7 +1645,7 @@ const apiBase = apiBaseProp ?? '';
       const osCell = cells[7];
       if (osCell) {
         if (item.os_icon) {
-          osCell.innerHTML = `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${escapeHtmlAttr(item.os_icon)}"></span>`;
+          osCell.innerHTML = `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>`;
           setTimeout(() => loadOSIcons(), 0);
         } else {
           // SECURITY: Escape HTML to prevent XSS (same helper as renderRow)

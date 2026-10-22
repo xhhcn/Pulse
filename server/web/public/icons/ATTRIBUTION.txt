@@ -1,0 +1,11 @@
+Icons shipped with the dashboard (regenerate with scripts/sync-icons.mjs).
+
+emojione-v1/  Emoji One (v1) by Emoji One — CC BY-SA 4.0
+              https://github.com/joypixels/emojione-legacy
+              https://creativecommons.org/licenses/by-sa/4.0/
+devicon/      Devicon by konpa — MIT
+              https://github.com/devicons/devicon/blob/master/LICENSE
+logos/        SVG Logos by Gil Barbara — CC0 1.0
+              https://github.com/gilbarbara/logos
+
+Files are unmodified icon data, as served by the Iconify API.
