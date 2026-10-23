@@ -44,6 +44,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.26'
+          # The newest patch release, not whichever one the runner image has
+          # cached: a cached 1.26.9 built agents without the crypto/x509 fix
+          # of 1.26.10 (GO-2026-6809).
+          check-latest: true
 
       # NOTE: We build the whole package (`.`) rather than `main.go`. The
       # client is split across multiple source files (main.go +
