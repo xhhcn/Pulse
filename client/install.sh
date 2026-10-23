@@ -20,6 +20,8 @@ NC='\033[0m' # No Color
 INSTALL_DIR="/opt/pulse"
 SERVICE_NAME="pulse-client"
 UPDATE_SERVICE_NAME="pulse-client-update"
+# Linux: SECRET lives here (root-only), not in the unit (see create_service_linux)
+SECRET_ENV_FILE="/etc/pulse-client.env"
 GITHUB_REPO="https://raw.githubusercontent.com/xhhcn/Pulse/main/client"
 CLIENT_PORT="9090"
 AGENT_NAME=""
@@ -73,6 +75,18 @@ systemd_escape_env() {
     value="${value//\"/\\\"}"
     value="${value//%/%%}"
     printf '%s' "$value"
+}
+
+# Double-quoted value for a systemd EnvironmentFile. Inside double quotes
+# systemd, like sh, unescapes only \ " ` and $; newlines are rejected earlier,
+# so escaping those four keeps any value verbatim. (% is not special there.)
+env_file_quote() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//\`/\\\`}"
+    value="${value//\$/\\\$}"
+    printf '"%s"' "$value"
 }
 
 xml_escape() {
@@ -298,15 +312,27 @@ create_service_linux() {
     [ -n "$AGENT_NAME" ] && env_lines+="Environment=\"AGENT_NAME=$(systemd_escape_env "$AGENT_NAME")\""$'\n'
     env_lines+="Environment=\"SERVER_BASE=$(systemd_escape_env "$SERVER_BASE")\""$'\n'
     env_lines+="Environment=\"CLIENT_PORT=$(systemd_escape_env "$CLIENT_PORT")\""$'\n'
-    [ -n "$SECRET" ]     && env_lines+="Environment=\"SECRET=$(systemd_escape_env "$SECRET")\""$'\n'
 
-    # The unit embeds SECRET, so create it unreadable to anyone but root from
-    # the start: `cat >` would create it with the default mode (typically 644)
-    # and the chmod below only tightens it afterwards, leaving a window in which
-    # any local user can read the secret.
+    # SECRET goes into a root-only EnvironmentFile rather than an Environment=
+    # line: systemd shows every Environment= value to any local user who asks
+    # (`systemctl show pulse-client -p Environment`), whatever the unit file's
+    # mode, while an EnvironmentFile is read by systemd itself and only its
+    # path is shown. Created under umask 077 so it is never readable by others,
+    # not even between creation and chmod.
     local old_umask
     old_umask=$(umask)
     umask 077
+    if [ -n "$SECRET" ]; then
+        rm -f "${SECRET_ENV_FILE}.tmp"
+        printf 'SECRET=%s\n' "$(env_file_quote "$SECRET")" > "${SECRET_ENV_FILE}.tmp"
+        chmod 600 "${SECRET_ENV_FILE}.tmp"
+        mv -f "${SECRET_ENV_FILE}.tmp" "$SECRET_ENV_FILE"
+        env_lines+="EnvironmentFile=${SECRET_ENV_FILE}"$'\n'
+    else
+        rm -f "$SECRET_ENV_FILE"
+    fi
+
+    # The unit no longer holds the secret, but stays root-only as before.
 
     cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
 [Unit]
@@ -330,12 +356,14 @@ WantedBy=multi-user.target
 EOF
     umask "$old_umask"
 
-    # The unit carries the agent secret; keep it readable by root only.
     chmod 600 /etc/systemd/system/${SERVICE_NAME}.service
 
     systemctl daemon-reload
     systemctl enable ${SERVICE_NAME}
-    systemctl start ${SERVICE_NAME}
+    # restart, not start: on a re-install the agent is already running, and
+    # start would leave it on the old binary and settings until the next boot
+    # (the macOS path re-bootstraps for the same reason).
+    systemctl restart ${SERVICE_NAME}
     success "systemd service created and started"
 }
 
@@ -729,13 +757,13 @@ show_status() {
         if [ "$AUTO_UPDATE" = true ]; then
             echo "  systemctl stop ${SERVICE_NAME} ${UPDATE_SERVICE_NAME}.timer && \\"
             echo "  systemctl disable ${SERVICE_NAME} ${UPDATE_SERVICE_NAME}.timer && \\"
-            echo "  rm -rf ${INSTALL_DIR} /etc/systemd/system/${SERVICE_NAME}.service \\"
+            echo "  rm -rf ${INSTALL_DIR} ${SECRET_ENV_FILE} /etc/systemd/system/${SERVICE_NAME}.service \\"
             echo "  /etc/systemd/system/${UPDATE_SERVICE_NAME}.service \\"
             echo "  /etc/systemd/system/${UPDATE_SERVICE_NAME}.timer && \\"
             echo "  systemctl daemon-reload"
         else
             echo "  systemctl stop ${SERVICE_NAME} && systemctl disable ${SERVICE_NAME} && \\"
-            echo "  rm -rf ${INSTALL_DIR} /etc/systemd/system/${SERVICE_NAME}.service && \\"
+            echo "  rm -rf ${INSTALL_DIR} ${SECRET_ENV_FILE} /etc/systemd/system/${SERVICE_NAME}.service && \\"
             echo "  systemctl daemon-reload"
         fi
     fi

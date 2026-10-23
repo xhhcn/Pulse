@@ -75,6 +75,16 @@ function Test-ConfigValues {
     Assert-NoNewline "Secret" $script:Secret
 }
 
+# Limit a file to SYSTEM and Administrators (well-known SIDs, so this works on
+# any display language), dropping the inherited entries that let Users read it.
+function Protect-SecretFile($Path) {
+    icacls $Path /inheritance:r /grant:r "*S-1-5-18:(F)" "*S-1-5-32-544:(F)" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Could not restrict access to $Path (icacls exit code $LASTEXITCODE)"
+        exit 1
+    }
+}
+
 function Escape-BatchValue($Value) {
     if ($null -eq $Value) {
         return ""
@@ -234,7 +244,16 @@ goto restart
 "@
     
     $scriptPath = "$InstallDir\start-pulse.bat"
+    # The script holds SECRET, and under Program Files it would inherit read
+    # access for every local user. Create it empty, keep only SYSTEM (which
+    # runs the task) and Administrators on it, and only then write it; the
+    # second pass covers a write that replaced the file instead of truncating.
+    if (-not (Test-Path $scriptPath)) {
+        New-Item -ItemType File -Path $scriptPath -Force | Out-Null
+    }
+    Protect-SecretFile $scriptPath
     Set-Content -Path $scriptPath -Value $scriptContent -Encoding ASCII
+    Protect-SecretFile $scriptPath
     Write-Success "Created startup script with auto-restart: $scriptPath"
 }
 

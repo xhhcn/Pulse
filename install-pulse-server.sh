@@ -148,17 +148,24 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=$INSTALL_DIR
+# Recreates data/ if it was deleted: the sandbox below can no longer create it
+# (/opt/pulse is read-only there). "+" runs this one command unsandboxed, and
+# the "-" on ReadWritePaths lets the sandbox be built while data/ is missing.
+ExecStartPre=+/bin/mkdir -p $INSTALL_DIR/data
 ExecStart=$INSTALL_DIR/pulse-server
 Restart=always
 RestartSec=5
 Environment="PORT=8008"
 # Sandboxing: the server only needs the network and its own data directory.
 # Everything else is read-only or hidden, so a flaw in the server cannot be
-# turned into a full-system foothold.
+# turned into a full-system foothold. Only data/ is writable, not all of
+# $INSTALL_DIR: the agent installer puts its binary and update.sh there too,
+# and those run as root outside any sandbox. (A DB_PATH outside data/ needs
+# its own ReadWritePaths= line.)
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=$INSTALL_DIR
+ReadWritePaths=-$INSTALL_DIR/data
 PrivateTmp=true
 PrivateDevices=true
 ProtectKernelTunables=true
