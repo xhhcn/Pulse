@@ -1170,3 +1170,226 @@ func TestRaceIPEchoServicesFailsFast(t *testing.T) {
 		t.Errorf("took %v to conclude every service had failed; the budget is being burned instead of returning early", elapsed)
 	}
 }
+
+// ─── hardening: pipelines, throttle cap, redirects, single-flight probes ─
+
+// TestRunCommandOutputKillsWholePipeline: most probes are `sh -c` pipelines.
+// Killing only sh left the pipeline's other processes holding stdout open, so
+// the call returned when they finished (here after 5 s), not at the deadline.
+func TestRunCommandOutputKillsWholePipeline(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no sh on windows")
+	}
+	start := time.Now()
+	_, err := runCommandOutput(200*time.Millisecond, "sh", "-c", "sleep 5 | cat")
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatalf("runCommandOutput returned nil error after %v, want a timeout failure", elapsed)
+	}
+	// Below commandWaitDelay: WaitDelay alone would also end the wait, but only
+	// after that long, with sleep left running.
+	if elapsed >= commandWaitDelay {
+		t.Errorf("a timed-out pipeline took %v to return with a 200ms budget; only sh was killed", elapsed)
+	}
+}
+
+// TestRunCommandOutputWaitDelayBackstop: a process outside the group (here one
+// that started its own session) still holds stdout; WaitDelay must stop the
+// wait for it.
+func TestRunCommandOutputWaitDelayBackstop(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("setsid(1) is a util-linux tool")
+	}
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skipf("setsid not available: %v", err)
+	}
+	start := time.Now()
+	_, err := runCommandOutput(200*time.Millisecond, "sh", "-c", "setsid sleep 5")
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatalf("runCommandOutput returned nil error after %v, want a failure", elapsed)
+	}
+	if elapsed > 200*time.Millisecond+commandWaitDelay+time.Second {
+		t.Errorf("took %v; WaitDelay (%v) is not bounding the wait for an escaped process", elapsed, commandWaitDelay)
+	}
+}
+
+// TestLogOncePerMinuteStaysBounded: pruning removed only stale entries, so a
+// burst of distinct recent messages grew the map without limit and made every
+// call rescan it under the lock.
+func TestLogOncePerMinuteStaysBounded(t *testing.T) {
+	captureLog(t)
+	resetLogThrottle()
+	t.Cleanup(resetLogThrottle)
+
+	for i := 0; i < 10*logThrottleMaxEntries; i++ {
+		logOncePerMinute(fmt.Sprintf("TCPing to target-%d skipped", i))
+		logThrottleMutex.Lock()
+		size := len(logThrottleTimes)
+		logThrottleMutex.Unlock()
+		if size > logThrottleMaxEntries {
+			t.Fatalf("after %d distinct messages the map holds %d entries, cap is %d", i+1, size, logThrottleMaxEntries)
+		}
+	}
+}
+
+func TestRefuseHTTPSDowngrade(t *testing.T) {
+	mustReq := func(raw string) *http.Request {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, raw, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return req
+	}
+	cases := []struct {
+		name    string
+		via     []string
+		next    string
+		wantErr bool
+	}{
+		{"https to http is refused", []string{"https://monitor.example.com/api/clients/push"}, "http://monitor.example.com/api/clients/push", true},
+		{"https, https, then http is refused", []string{"https://a.example.com/", "https://b.example.com/"}, "http://b.example.com/", true},
+		{"http to https is followed", []string{"http://monitor.example.com/"}, "https://monitor.example.com/", false},
+		{"https to https is followed", []string{"https://monitor.example.com/"}, "https://new.example.com/", false},
+		{"http to http is followed", []string{"http://monitor.example.com/"}, "http://monitor.example.com:8008/", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var via []*http.Request
+			for _, u := range tc.via {
+				via = append(via, mustReq(u))
+			}
+			err := refuseHTTPSDowngrade(mustReq(tc.next), via)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("refuseHTTPSDowngrade(%s after %v) = %v, want error: %v", tc.next, tc.via, err, tc.wantErr)
+			}
+		})
+	}
+
+	var ten []*http.Request
+	for i := 0; i < 10; i++ {
+		ten = append(ten, mustReq("http://monitor.example.com/"))
+	}
+	if err := refuseHTTPSDowngrade(mustReq("http://monitor.example.com/"), ten); err == nil {
+		t.Error("an eleventh redirect was followed; the default limit of ten must still apply")
+	}
+}
+
+// TestRefuseHTTPSDowngradeKeepsSecretOffPlainHTTP is the end-to-end version:
+// a 307 from the HTTPS server to a plain-HTTP one must not deliver the push
+// body (which carries the secret) to the plain-HTTP server.
+func TestRefuseHTTPSDowngradeKeepsSecretOffPlainHTTP(t *testing.T) {
+	var plainHits int32
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&plainHits, 1)
+	}))
+	defer plain.Close()
+	secure := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, plain.URL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	defer secure.Close()
+
+	client := secure.Client()
+	client.CheckRedirect = refuseHTTPSDowngrade
+	resp, err := client.Post(secure.URL+"/api/clients/push", "application/json", strings.NewReader(`{"secret":"s3cret"}`))
+	if resp != nil {
+		resp.Body.Close()
+	}
+	if err == nil {
+		t.Error("the downgrade redirect was followed")
+	}
+	if got := atomic.LoadInt32(&plainHits); got != 0 {
+		t.Errorf("the plain-HTTP server received %d request(s) carrying the secret", got)
+	}
+}
+
+// TestGetIPAddressesColdStartDetectsOnce: callers arriving during the blocking
+// first detection used to each run their own.
+func TestGetIPAddressesColdStartDetectsOnce(t *testing.T) {
+	const wantV4, wantV6 = "203.0.113.5", "2001:db8::5"
+
+	origDetect := detectIPAddressesFn
+	ipCacheMutex.Lock()
+	origV4, origV6 := ipv4Cache, ipv6Cache
+	origCacheTime, origDetectedAt := ipCacheTime, ipDetectedAt
+	ipv4Cache, ipv6Cache = "", ""
+	ipCacheTime, ipDetectedAt = time.Time{}, time.Time{}
+	ipCacheMutex.Unlock()
+	t.Cleanup(func() {
+		detectIPAddressesFn = origDetect
+		ipCacheMutex.Lock()
+		ipv4Cache, ipv6Cache = origV4, origV6
+		ipCacheTime, ipDetectedAt = origCacheTime, origDetectedAt
+		ipCacheMutex.Unlock()
+	})
+
+	var detections int32
+	detectIPAddressesFn = func() (string, string) {
+		atomic.AddInt32(&detections, 1)
+		time.Sleep(100 * time.Millisecond) // long enough for every caller to arrive
+		return wantV4, wantV6
+	}
+
+	const callers = 20
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if v4, v6 := getIPAddresses(); v4 != wantV4 || v6 != wantV6 {
+				t.Errorf("getIPAddresses() = (%q, %q), want (%q, %q)", v4, v6, wantV4, wantV6)
+			}
+		}()
+	}
+	wg.Wait()
+	if got := atomic.LoadInt32(&detections); got != 1 {
+		t.Errorf("detector ran %d times for %d cold-start callers, want 1", got, callers)
+	}
+}
+
+// TestGetDiskUsageSingleFlight: while a refresh holds diskUsageRefreshMu, a
+// caller with a stale value gets it back at once instead of running df, and a
+// caller with no value yet waits for the refresh's result.
+func TestGetDiskUsageSingleFlight(t *testing.T) {
+	diskCacheMu.Lock()
+	origV, origAt := diskUsageCache, diskUsageCacheTime
+	diskCacheMu.Unlock()
+	t.Cleanup(func() {
+		diskCacheMu.Lock()
+		diskUsageCache, diskUsageCacheTime = origV, origAt
+		diskCacheMu.Unlock()
+	})
+
+	const stale = 12.345 // no real df result has three decimals
+	diskCacheMu.Lock()
+	diskUsageCache, diskUsageCacheTime = stale, time.Now().Add(-2*diskCacheTTL)
+	diskCacheMu.Unlock()
+
+	diskUsageRefreshMu.Lock() // a refresh is in flight
+	if got := getDiskUsage(); got != stale {
+		diskUsageRefreshMu.Unlock()
+		t.Fatalf("getDiskUsage() = %v during a refresh, want the stale %v without running df", got, stale)
+	}
+
+	// Cold start: nothing cached, so the caller waits for the refresh.
+	diskCacheMu.Lock()
+	diskUsageCache, diskUsageCacheTime = 0, time.Time{}
+	diskCacheMu.Unlock()
+	const refreshed = 67.891
+	got := make(chan float64, 1)
+	go func() { got <- getDiskUsage() }()
+	select {
+	case v := <-got:
+		diskUsageRefreshMu.Unlock()
+		t.Fatalf("getDiskUsage() returned %v before the first refresh finished, want it to wait", v)
+	case <-time.After(100 * time.Millisecond):
+	}
+	diskCacheMu.Lock()
+	diskUsageCache, diskUsageCacheTime = refreshed, time.Now()
+	diskCacheMu.Unlock()
+	diskUsageRefreshMu.Unlock()
+	if v := <-got; v != refreshed {
+		t.Errorf("getDiskUsage() = %v after waiting, want the refresh's %v", v, refreshed)
+	}
+}

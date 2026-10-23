@@ -111,6 +111,8 @@ var (
 	// when SECRET is unset) turns into an outbound request flood. Guarded by
 	// ipCacheMutex.
 	ipRefreshInFlight bool
+	// ipColdStartMu lets only one caller run the blocking first detection.
+	ipColdStartMu sync.Mutex
 
 	// Shared HTTP client for connection reuse (important for cross-continent networks)
 	sharedHTTPClient     *http.Client
@@ -178,6 +180,9 @@ var (
 	diskInfoCacheTime  time.Time
 	diskCacheMu        sync.RWMutex
 	diskCacheTTL       = 30 * time.Second
+	// Held while a refresh runs (see getDiskUsage).
+	diskUsageRefreshMu sync.Mutex
+	diskInfoRefreshMu  sync.Mutex
 )
 
 // applyPushTCPingConfig centralises "update targets / interval and wake the TCPing
@@ -608,7 +613,8 @@ func getSharedHTTPClient() *http.Client {
 		// - Connection reuse to avoid repeated TCP handshakes
 		// - DNS resolution timeout to handle slow DNS in China
 		sharedHTTPClient = &http.Client{
-			Timeout: 30 * time.Second, // Increased to 30s for high-latency cross-continent networks
+			Timeout:       30 * time.Second, // Increased to 30s for high-latency cross-continent networks
+			CheckRedirect: refuseHTTPSDowngrade,
 			Transport: &http.Transport{
 				DialContext: (&net.Dialer{
 					Timeout:   15 * time.Second,  // Increased to 15s for slow connections (DNS + TCP)
@@ -628,13 +634,35 @@ func getSharedHTTPClient() *http.Client {
 	return sharedHTTPClient
 }
 
+// refuseHTTPSDowngrade is the redirect policy of the agent's HTTP clients: it
+// follows redirects as Go does by default (up to ten) except one that leaves
+// HTTPS for plain HTTP. Requests to the server carry SECRET in the JSON body,
+// which Go sends again on a 307/308, and in the Authorization header, which it
+// keeps on any same-host redirect, so following such a redirect would put the
+// secret on the wire in clear text. For the IP-echo lookups it keeps an HTTPS
+// answer from being swapped for one an on-path attacker can forge.
+func refuseHTTPSDowngrade(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	if req.URL.Scheme != "https" {
+		for _, prev := range via {
+			if prev.URL.Scheme == "https" {
+				return fmt.Errorf("refusing to follow a redirect from HTTPS to %s://%s", req.URL.Scheme, req.URL.Host)
+			}
+		}
+	}
+	return nil
+}
+
 const (
 	// logThrottleInterval is how long a given message stays suppressed after
 	// it has been logged.
 	logThrottleInterval = 1 * time.Minute
-	// logThrottleMaxEntries is the map size above which stale entries are
-	// pruned, so server-supplied text (TCPing target names) cannot grow the
-	// map without bound.
+	// logThrottleMaxEntries caps the map. Messages carry server-supplied text
+	// (TCPing target names), so the number of distinct keys is not ours to
+	// bound; at the cap stale entries are pruned, and if that frees nothing
+	// the map starts over.
 	logThrottleMaxEntries = 128
 	// logThrottleRetention is how long an entry is kept when pruning. Anything
 	// older than logThrottleInterval can no longer suppress a message, so this
@@ -658,11 +686,18 @@ func logOncePerMinute(message string) {
 		return
 	}
 
-	if len(logThrottleTimes) > logThrottleMaxEntries {
+	if len(logThrottleTimes) >= logThrottleMaxEntries {
 		for msg, t := range logThrottleTimes {
 			if now.Sub(t) > logThrottleRetention {
 				delete(logThrottleTimes, msg)
 			}
+		}
+		// Still full of recent entries (a burst of distinct messages): forget
+		// them all. Pruning alone let such a burst grow the map without limit
+		// and rescanned all of it under the lock on every call; starting over
+		// costs at most one extra line per message.
+		if len(logThrottleTimes) >= logThrottleMaxEntries {
+			clear(logThrottleTimes)
 		}
 	}
 
@@ -683,11 +718,27 @@ func logOncePerMinute(message string) {
 // failure, which is the same error shape the call sites already handle: each
 // one falls back to its cached value or to the default it uses when the command
 // is missing, so a timed-out probe degrades exactly like an absent one.
+//
+// The kill reaches the whole process group, not only the direct child. Most
+// probes are `sh -c "a | b | c"` pipelines; killing sh alone left the rest of
+// the pipeline holding stdout open, Output() kept waiting for it to close, and
+// the deadline bounded nothing. WaitDelay covers a pipeline member that
+// outlives even that (stuck in uninterruptible I/O on a dead mount, or one
+// that left the group): once it expires the pipes are closed and the call
+// returns. A direct child stuck that way still blocks the call, as before;
+// the df probes that stat every mount are pipelines.
 func runCommandOutput(timeout time.Duration, name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return exec.CommandContext(ctx, name, args...).Output()
+	cmd := exec.CommandContext(ctx, name, args...)
+	killProcessGroupOnCancel(cmd)
+	cmd.WaitDelay = commandWaitDelay
+	return cmd.Output()
 }
+
+// commandWaitDelay is how long runCommandOutput still waits for a killed
+// command's output pipes to close before closing them itself.
+const commandWaitDelay = 1 * time.Second
 
 const (
 	// probeCommandTimeout bounds the quick probes: df, sysctl, uname,
@@ -1189,7 +1240,8 @@ var (
 func getPushHTTPClient() *http.Client {
 	pushHTTPClientOnce.Do(func() {
 		pushHTTPClient = &http.Client{
-			Timeout: 8 * time.Second, // Must be < push interval × offline_threshold / push_interval
+			Timeout:       8 * time.Second, // Must be < push interval × offline_threshold / push_interval
+			CheckRedirect: refuseHTTPSDowngrade,
 			Transport: &http.Transport{
 				DialContext: (&net.Dialer{
 					Timeout:   6 * time.Second,
@@ -1537,7 +1589,7 @@ func collectSystemMetrics() metricPayload {
 		NetOutMBps:         netOut,
 		TotalNetInBytes:    totalNetInBytes,
 		TotalNetOutBytes:   totalNetOutBytes,
-		AgentVersion:       "1.3.26",
+		AgentVersion:       "1.3.33",
 		Alert:              false, // Can be enhanced with actual alert logic
 	}
 }
@@ -1845,6 +1897,19 @@ func getIPAddresses() (ipv4, ipv6 string) {
 	if coldStart {
 		// Very first call: block until we have real IPs so the first push payload
 		// is populated correctly.  This happens once at startup.
+		//
+		// Callers that arrive while it runs (the push loop, early /metrics
+		// requests) wait for that one detection rather than each starting their
+		// own dozen outbound lookups.
+		ipColdStartMu.Lock()
+		defer ipColdStartMu.Unlock()
+		ipCacheMutex.RLock()
+		done := !ipCacheTime.IsZero()
+		v4, v6 = ipv4Cache, ipv6Cache
+		ipCacheMutex.RUnlock()
+		if done {
+			return v4, v6
+		}
 		v4, v6 = detectIPAddressesFn()
 		ipCacheMutex.Lock()
 		ipv4Cache = v4
@@ -2033,7 +2098,8 @@ const (
 // its own timeout so one dead service cannot starve the others.
 func newIPDetectionClient() *http.Client {
 	return &http.Client{
-		Timeout: 5 * time.Second, // per-request timeout (independent of other goroutines)
+		Timeout:       5 * time.Second, // per-request timeout (independent of other goroutines)
+		CheckRedirect: refuseHTTPSDowngrade,
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
 				Timeout: 4 * time.Second,
@@ -2500,12 +2566,28 @@ func getMemoryUsage() float64 {
 func getDiskUsage() float64 {
 	// Check cache — disk usage changes slowly; spawning df+awk every 3 s wastes CPU.
 	diskCacheMu.RLock()
-	if !diskUsageCacheTime.IsZero() && time.Since(diskUsageCacheTime) < diskCacheTTL {
-		v := diskUsageCache
-		diskCacheMu.RUnlock()
+	v, at := diskUsageCache, diskUsageCacheTime
+	diskCacheMu.RUnlock()
+	if !at.IsZero() && time.Since(at) < diskCacheTTL {
 		return v
 	}
+
+	// One refresh at a time. df can take seconds, up to its timeout on a hung
+	// mount, and every caller that found the cache stale used to start its own;
+	// /metrics requests (unauthenticated when SECRET is unset) could pile them
+	// up. Others now get the last value, and only the first one is waited for.
+	if at.IsZero() {
+		diskUsageRefreshMu.Lock()
+	} else if !diskUsageRefreshMu.TryLock() {
+		return v
+	}
+	defer diskUsageRefreshMu.Unlock()
+	diskCacheMu.RLock()
+	v, at = diskUsageCache, diskUsageCacheTime
 	diskCacheMu.RUnlock()
+	if !at.IsZero() && time.Since(at) < diskCacheTTL {
+		return v // refreshed while we waited
+	}
 
 	result := computeDiskUsage()
 
@@ -4643,12 +4725,25 @@ func getSwapInfo() string {
 func getDiskInfo() string {
 	// Check cache — same reason as getDiskUsage: df+awk is expensive to run every 3 s.
 	diskCacheMu.RLock()
-	if !diskInfoCacheTime.IsZero() && time.Since(diskInfoCacheTime) < diskCacheTTL {
-		v := diskInfoCache
-		diskCacheMu.RUnlock()
+	v, at := diskInfoCache, diskInfoCacheTime
+	diskCacheMu.RUnlock()
+	if !at.IsZero() && time.Since(at) < diskCacheTTL {
 		return v
 	}
+
+	// One refresh at a time, as in getDiskUsage.
+	if at.IsZero() {
+		diskInfoRefreshMu.Lock()
+	} else if !diskInfoRefreshMu.TryLock() {
+		return v
+	}
+	defer diskInfoRefreshMu.Unlock()
+	diskCacheMu.RLock()
+	v, at = diskInfoCache, diskInfoCacheTime
 	diskCacheMu.RUnlock()
+	if !at.IsZero() && time.Since(at) < diskCacheTTL {
+		return v // refreshed while we waited
+	}
 
 	result := computeDiskInfo()
 
