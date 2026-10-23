@@ -155,7 +155,7 @@ const apiBase = apiBaseProp ?? '';
           if (copyIcon && checkIcon) {
             copyIcon.style.display = 'none';
             checkIcon.style.display = 'block';
-            copyBtn.title = 'Copied!';
+            copyBtn.title = translations.copied[getCurrentLanguage()];
             setTimeout(() => {
               copyIcon.style.display = 'block';
               checkIcon.style.display = 'none';
@@ -316,22 +316,26 @@ const apiBase = apiBaseProp ?? '';
     return String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => '\\' + c);
   }
 
-  /* The icon CDN response is third-party markup that lands in innerHTML.
+  /* The icon response is third-party markup that ends up in the page.
      Accept only a plain <svg> tree: drop scripts, foreignObject, event
-     handler attributes and non-image hrefs. Returns '' when anything
+     handler attributes and non-image hrefs. Returns null when anything
      looks off so the icon is simply not shown. */
-  function sanitizeSvgMarkup(markup) {
-    if (!markup || typeof markup !== 'string') return '';
+  function sanitizedSvgElement(markup) {
+    if (!markup || typeof markup !== 'string') return null;
     let doc;
-    try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return ''; }
+    try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return null; }
     const root = doc.documentElement;
-    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return '';
+    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return null;
     const banned = /^(script|foreignobject|iframe|object|embed|use|style|animate|set|animatetransform|animatemotion)$/i;
-    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    // Every node, not only elements: comments, CDATA sections and processing
+    // instructions are dropped as well.
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ALL);
     const toRemove = [];
     let node = walker.currentNode;
     while (node) {
-      if (banned.test(node.nodeName)) toRemove.push(node);
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        if (node.nodeType !== Node.TEXT_NODE) toRemove.push(node);
+      } else if (banned.test(node.nodeName)) toRemove.push(node);
       else {
         Array.from(node.attributes).forEach((attr) => {
           const n = attr.name.toLowerCase(), v = String(attr.value || '');
@@ -341,7 +345,9 @@ const apiBase = apiBaseProp ?? '';
       node = walker.nextNode();
     }
     toRemove.forEach((n) => n.remove());
-    return new XMLSerializer().serializeToString(root);
+    // Handed over as nodes. Serialising and assigning innerHTML re-parsed the
+    // XML as HTML, where a comment or CDATA section could turn into live markup.
+    return document.importNode(root, true);
   }
 
   const iconSvgCache = new Map();
@@ -389,10 +395,10 @@ const apiBase = apiBaseProp ?? '';
       const svg = await fetchIconSvg(iconName, 26);
       if (svg === '') { showIconText(el); return; }
       if (!svg) return;
-      // Third-party markup: only a sanitized <svg> tree may reach innerHTML.
-      const safeSvg = sanitizeSvgMarkup(svg);
+      // Third-party markup: only a sanitized <svg> tree is inserted.
+      const safeSvg = sanitizedSvgElement(svg);
       if (!safeSvg) return;
-      el.innerHTML = safeSvg;
+      el.replaceChildren(safeSvg);
       el.dataset.iconLoaded = iconName;
       const svgEl = el.querySelector('svg');
       if (svgEl) {
@@ -419,10 +425,10 @@ const apiBase = apiBaseProp ?? '';
       const svg = await fetchIconSvg(iconName, 32);
       if (svg === '') { showIconText(el); return; }
       if (!svg) return;
-      // Third-party markup: only a sanitized <svg> tree may reach innerHTML.
-      const safeSvg = sanitizeSvgMarkup(svg);
+      // Third-party markup: only a sanitized <svg> tree is inserted.
+      const safeSvg = sanitizedSvgElement(svg);
       if (!safeSvg) return;
-      el.innerHTML = safeSvg;
+      el.replaceChildren(safeSvg);
       el.dataset.iconLoaded = iconName;
       const svgEl = el.querySelector('svg');
       if (svgEl) {
@@ -1208,6 +1214,7 @@ const apiBase = apiBaseProp ?? '';
     'noSystemsFound': { en: 'No services found', zh: '未找到服务' },
     'systemsWillAppear': { en: 'Services will appear here once agents start reporting', zh: '代理开始报告后，服务将显示在这里' },
     'copySystemName': { en: 'Copy system name', zh: '复制服务名称' },
+    'copied': { en: 'Copied!', zh: '已复制！' },
     // Empty state of a filter that matches nothing (the services exist).
     'noMatchingServices': { en: 'No matching services', zh: '没有匹配的服务' },
     'tryAnotherFilter': { en: 'Try a different filter', zh: '换个关键词试试' },
@@ -1217,7 +1224,7 @@ const apiBase = apiBaseProp ?? '';
     'diskInformation': { en: 'Disk:', zh: '磁盘:' },
     'realtimeTraffic': { en: 'Traffic:', zh: '流量:' },
     'totalTraffic': { en: 'Total:', zh: '总量:' },
-    'tcpingLatency': { en: 'TCPing Latency (24h)', zh: 'TCPing 延迟 (24小时)' },
+    'tcpingLatency': { en: 'TCPing Latency (24h)', zh: 'TCPing 延迟 (24 小时)' },
     'avgLatency': { en: 'Avg:', zh: '平均:' },
     'packetLoss': { en: 'Loss:', zh: '丢包:' },
     'loading': { en: 'Loading...', zh: '加载中...' },
@@ -2108,6 +2115,21 @@ const apiBase = apiBaseProp ?? '';
     });
   }
   
+  // Chart.js and its date adapter come from public CDNs. Each file is pinned
+  // by Subresource Integrity: a swapped file would otherwise run as
+  // first-party script on this origin, next to the admin token.
+  const CHARTJS_SRI = {
+    'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js': 'sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g',
+    'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js': 'sha384-FcQlsUOd0TJjROrBxhJdUhXTUgNJQxTMcxZe6nHbaEfFL1zjQ+bq/uRoBQxb0KMo',
+    'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js': 'sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws',
+    'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js': 'sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws',
+  };
+  function setChartScriptSource(script, url) {
+    script.integrity = CHARTJS_SRI[url];
+    script.crossOrigin = 'anonymous';
+    script.src = url;
+  }
+
   // Preload Chart.js library for faster chart rendering
   function preloadChartJS() {
     // Skip if already loaded or loading
@@ -2121,14 +2143,14 @@ const apiBase = apiBaseProp ?? '';
     // request whose CORS mode matches — so we must set crossorigin on
     // the dynamic <script> too, otherwise Chart.js gets fetched twice.
     const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    setChartScriptSource(script, 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js');
     script.crossOrigin = 'anonymous';
     script.onerror = function() {
       // Fallback to unpkg CDN if jsdelivr fails (better for Chinese networks).
       // unpkg ships chart.js as `chart.umd.js` (no `.min` suffix) — using
       // the jsdelivr filename here returns 404 and silently breaks the chart.
       const fallbackScript = document.createElement('script');
-      fallbackScript.src = 'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js';
+      setChartScriptSource(fallbackScript, 'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js');
       fallbackScript.crossOrigin = 'anonymous';
       fallbackScript.async = true;
       fallbackScript.setAttribute('data-chartjs', 'true');
@@ -2140,7 +2162,7 @@ const apiBase = apiBaseProp ?? '';
       // Also preload date adapter
       if (!document.querySelector('script[data-chartjs-adapter]')) {
         const adapterScript = document.createElement('script');
-        adapterScript.src = 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+        setChartScriptSource(adapterScript, 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
         adapterScript.crossOrigin = 'anonymous';
         adapterScript.async = true;
         adapterScript.setAttribute('data-chartjs-adapter', 'true');
@@ -2944,20 +2966,20 @@ const apiBase = apiBaseProp ?? '';
         // crossOrigin matches the <link rel="preload"> so the browser
         // can reuse the warmed cache entry (otherwise it refetches).
         const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+        setChartScriptSource(script, 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js');
         script.crossOrigin = 'anonymous';
         script.onerror = function() {
           // Fallback to unpkg CDN if jsdelivr fails. Note: unpkg only
           // ships `chart.umd.js` (no `.min` suffix) for chart.js@4.4.0.
           const fallbackScript = document.createElement('script');
-          fallbackScript.src = 'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js';
+          setChartScriptSource(fallbackScript, 'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js');
           fallbackScript.crossOrigin = 'anonymous';
           fallbackScript.async = true;
           fallbackScript.setAttribute('data-chartjs', 'true');
           fallbackScript.onload = () => {
             // Continue with adapter loading
             const adapterScript = document.createElement('script');
-            adapterScript.src = 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+            setChartScriptSource(adapterScript, 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
             adapterScript.crossOrigin = 'anonymous';
             adapterScript.async = true;
             adapterScript.setAttribute('data-chartjs-adapter', 'true');
@@ -2977,12 +2999,12 @@ const apiBase = apiBaseProp ?? '';
         script.onload = () => {
           // Then load the date adapter for time scale support with fallback
           const adapterScript = document.createElement('script');
-          adapterScript.src = 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+          setChartScriptSource(adapterScript, 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
           adapterScript.crossOrigin = 'anonymous';
           adapterScript.onerror = function() {
             // Fallback to unpkg CDN
             const fallbackAdapter = document.createElement('script');
-            fallbackAdapter.src = 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+            setChartScriptSource(fallbackAdapter, 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
             fallbackAdapter.crossOrigin = 'anonymous';
             fallbackAdapter.async = true;
             fallbackAdapter.setAttribute('data-chartjs-adapter', 'true');
@@ -3000,7 +3022,7 @@ const apiBase = apiBaseProp ?? '';
           adapterScript.onerror = () => {
             // Fallback to unpkg CDN
             const fallbackAdapter = document.createElement('script');
-            fallbackAdapter.src = 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+            setChartScriptSource(fallbackAdapter, 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
             fallbackAdapter.crossOrigin = 'anonymous';
             fallbackAdapter.async = true;
             fallbackAdapter.setAttribute('data-chartjs-adapter', 'true');
@@ -3042,7 +3064,7 @@ const apiBase = apiBaseProp ?? '';
         }
         
         const adapterScript = document.createElement('script');
-        adapterScript.src = 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+        setChartScriptSource(adapterScript, 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
         adapterScript.crossOrigin = 'anonymous';
         adapterScript.async = true;
         adapterScript.setAttribute('data-chartjs-adapter', 'true');
@@ -3053,7 +3075,7 @@ const apiBase = apiBaseProp ?? '';
         adapterScript.onerror = () => {
           // Fallback to unpkg CDN
           const fallbackAdapter = document.createElement('script');
-          fallbackAdapter.src = 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js';
+          setChartScriptSource(fallbackAdapter, 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
           fallbackAdapter.crossOrigin = 'anonymous';
           fallbackAdapter.async = true;
           fallbackAdapter.setAttribute('data-chartjs-adapter', 'true');

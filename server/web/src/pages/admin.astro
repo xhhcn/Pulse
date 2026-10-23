@@ -131,10 +131,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
             if (config) {
               // Store config for NavBar component to use
               window.__navbarConfig = config;
-              // Update page title with navbar text
-              if (config.text) {
-                document.title = `Admin - ${config.text}`;
-              }
+              // Page title: page name in the page's language · navbar text
+              document.title = `${document.documentElement.lang === 'zh' ? '管理' : 'Admin'} · ${config.text || 'Pulse Monitor'}`;
               // Update favicon with custom logo
               if (config.logo && /^(https?:\/\/|\/|data:)/i.test(String(config.logo).trim())) {
                 const favicon = document.querySelector('link[rel=\"icon\"]');

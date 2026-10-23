@@ -209,7 +209,7 @@ const customCodePlaceholder = [
             type="submit"
             class="flex-1 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-600"
           >
-            <span data-translate="updateSystem">Update System</span>
+            <span data-translate="updateSystem">Update Service</span>
           </button>
         </div>
       </form>
@@ -257,7 +257,7 @@ const customCodePlaceholder = [
   <div id="tcping-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm overflow-hidden" data-modal>
     <div class="mx-2 sm:mx-4 w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white shadow-2xl overflow-hidden" data-modal-content>
       <!-- Header - Fixed -->
-      <div class="flex items-center justify-between p-4 sm:p-6 pb-0 shrink-0">
+      <div class="flex items-center justify-between p-4 pb-0 sm:p-6 sm:pb-0 shrink-0">
         <h2 id="tcping-config-title" class="text-lg sm:text-xl font-semibold text-[#262626] dark:text-[#f5f5f5]" data-translate="tcpingSettings">TCPing Settings</h2>
         <button id="close-tcping-config-modal-btn" class="rounded-lg p-1 text-[#525252] dark:text-[#a3a3a3] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
           <Icon name="x" size={20} />
@@ -265,7 +265,7 @@ const customCodePlaceholder = [
       </div>
 
       <!-- Scrollable Content -->
-      <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 pt-4 scrollbar-hide">
+      <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 pt-4 sm:p-6 sm:pt-4 scrollbar-hide">
         <form id="tcping-config-form" class="space-y-4">
           <div>
             <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]">
@@ -356,7 +356,7 @@ const customCodePlaceholder = [
             required
             placeholder=""
             data-placeholder-en="Enter new password (min 6 characters)"
-            data-placeholder-zh="输入新密码（至少6个字符）"
+            data-placeholder-zh="输入新密码（至少 6 个字符）"
             class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
           />
           <p class="mt-1 text-xs text-[#525252] dark:text-[#737373]" data-translate="passwordMinLength">Password must be at least 6 characters long</p>
@@ -894,22 +894,26 @@ const customCodePlaceholder = [
   // influence the CDN URL path.
   const ICONIFY_NAME_RE = /^[a-z0-9-]+:[a-z0-9-]+$/i;
 
-  /* The icon CDN response is third-party markup that lands in innerHTML.
+  /* The icon response is third-party markup that ends up in the page.
      Accept only a plain <svg> tree: drop scripts, foreignObject, event
-     handler attributes and non-image hrefs. Returns '' when anything
+     handler attributes and non-image hrefs. Returns null when anything
      looks off so the icon is simply not shown. */
-  function sanitizeSvgMarkup(markup) {
-    if (!markup || typeof markup !== 'string') return '';
+  function sanitizedSvgElement(markup) {
+    if (!markup || typeof markup !== 'string') return null;
     let doc;
-    try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return ''; }
+    try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return null; }
     const root = doc.documentElement;
-    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return '';
+    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return null;
     const banned = /^(script|foreignobject|iframe|object|embed|use|style|animate|set|animatetransform|animatemotion)$/i;
-    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    // Every node, not only elements: comments, CDATA sections and processing
+    // instructions are dropped as well.
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ALL);
     const toRemove = [];
     let node = walker.currentNode;
     while (node) {
-      if (banned.test(node.nodeName)) toRemove.push(node);
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        if (node.nodeType !== Node.TEXT_NODE) toRemove.push(node);
+      } else if (banned.test(node.nodeName)) toRemove.push(node);
       else {
         Array.from(node.attributes).forEach((attr) => {
           const n = attr.name.toLowerCase(), v = String(attr.value || '');
@@ -919,7 +923,9 @@ const customCodePlaceholder = [
       node = walker.nextNode();
     }
     toRemove.forEach((n) => n.remove());
-    return new XMLSerializer().serializeToString(root);
+    // Handed over as nodes. Serialising and assigning innerHTML re-parsed the
+    // XML as HTML, where a comment or CDATA section could turn into live markup.
+    return document.importNode(root, true);
   }
 
   // CPU brand logos are shipped with the dashboard (public/icons, see
@@ -961,10 +967,10 @@ const customCodePlaceholder = [
       if (el.dataset.iconLoaded === iconName && el.querySelector('svg')) return;
       const svg = await fetchCpuIconSvg(iconName);
       if (!svg) return;
-      // Third-party markup: only a sanitized <svg> tree may reach innerHTML.
-      const safeSvg = sanitizeSvgMarkup(svg);
+      // Third-party markup: only a sanitized <svg> tree is inserted.
+      const safeSvg = sanitizedSvgElement(svg);
       if (!safeSvg) return;
-      el.innerHTML = safeSvg;
+      el.replaceChildren(safeSvg);
       el.dataset.iconLoaded = iconName;
       const svgEl = el.querySelector('svg');
       if (svgEl) {
@@ -1091,7 +1097,7 @@ const customCodePlaceholder = [
         const submitBtn = form.querySelector('button[type="submit"]');
         if (submitBtn) {
           submitBtn.disabled = false;
-          submitBtn.textContent = 'Update System';
+          submitBtn.textContent = adminT('updateSystem');
         }
       }
     });
@@ -1156,7 +1162,7 @@ const customCodePlaceholder = [
         throw new Error(error || `HTTP ${res.status}`);
       }
     } catch (err) {
-      alert('Failed to delete system: ' + err.message);
+      alert(adminTranslations.deleteServiceFailed[adminLang()] + err.message);
     } finally {
       if (confirmDeleteBtn) {
         confirmDeleteBtn.disabled = false;
@@ -1302,8 +1308,8 @@ const customCodePlaceholder = [
                 (system.hide_on_home === true ? '1' : '0') + '|' +
                 (system.hide_tcping === true ? '1' : '0')
               )}'
-              title="Edit system"
-              aria-label="Edit system"
+              title="${adminT('editSystem')}" data-title-en="Edit Service" data-title-zh="编辑服务"
+              aria-label="${adminT('editSystem')}"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -1332,7 +1338,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv4:</span>
                   <span class="system-ipv4 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(system.ipv4 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(system.ipv4 || '')}" title="Copy IPv4" aria-label="Copy IPv4 address">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(system.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4" aria-label="Copy IPv4 address">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1348,7 +1354,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
                   <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(system.ipv6 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(system.ipv6 || '')}" title="Copy IPv6" aria-label="Copy IPv6 address">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(system.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6" aria-label="Copy IPv6 address">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1392,8 +1398,8 @@ const customCodePlaceholder = [
             <button 
               class="copy-linux-cmd-btn shrink-0 rounded-lg p-2 text-[#525252] dark:text-[#737373] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-orange-400 dark:hover:text-orange-400 hover:text-orange-600 self-center"
               data-system-id="${escapeHtmlAttr(system.id || '')}"
-              title="Copy Linux install command"
-              aria-label="Copy Linux install command"
+              title="${adminT('copyLinuxCommand')}" data-title-en="Copy Linux install command" data-title-zh="复制 Linux 安装命令"
+              aria-label="${adminT('copyLinuxCommand')}"
             >
               <svg class="linux-icon" width="16" height="16" viewBox="0 0 24 24">
                 <g fill="none" fill-rule="evenodd"><path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"/><path fill="currentColor" d="M8.264 15.29a1 1 0 0 1 .822.522l1.892 3.493a1.809 1.809 0 0 1-1.856 2.65l-3.93-.582a1 1 0 0 1-.672-1.563l.623-.89l-.174-.984a1 1 0 0 1 .811-1.159l.985-.173l.623-.89a1 1 0 0 1 .876-.425Zm6.347-.024a1 1 0 0 1 .858-.043l.116.057l.94.543l.966-.259a1 1 0 0 1 1.188.596l.037.111l.259.966l.94.543a1 1 0 0 1 .154 1.623l-.103.078l-3.315 2.188a1.809 1.809 0 0 1-2.805-1.46l.003-.158l.238-3.965a1 1 0 0 1 .524-.82M12 2a4 4 0 0 1 4 4v1c0 1.214.502 2.267 1.166 3.354l.736 1.165c.1.16.195.315.28.457c.32.541.628 1.14.788 1.781a7 7 0 0 1 .194 1.358a2 2 0 0 0-1.932-.516l-.565.151l-.582-.336a2 2 0 0 0-2.996 1.613l-.238 3.965c-.021.345.022.684.121 1.003l-.269.005h-.406q-.114 0-.226-.004c.22-.71.152-1.492-.214-2.167l-1.891-3.493a2 2 0 0 0-3.397-.195l-.385.55l-.33.058a5.4 5.4 0 0 1 .024-1.16c.037-.285.086-.567.152-.832c.198-.792.535-1.459.857-2.02l.437-.74C7.74 10.28 8 9.722 8 9V6a4 4 0 0 1 4-4m-1.438 5.778l-.822.41c.224.597.572 1.156.897 1.6l.204.269l.184.225l.081.094l.25-.141l.329-.197c.176-.109.368-.232.566-.367c.604-.412 1.225-.91 1.662-1.427l-2.316-.58a1.5 1.5 0 0 0-1.035.114"/></g>
@@ -1407,8 +1413,8 @@ const customCodePlaceholder = [
             <button 
               class="copy-windows-cmd-btn shrink-0 rounded-lg p-2 text-[#525252] dark:text-[#737373] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-blue-400 dark:hover:text-blue-400 hover:text-blue-600 self-center"
               data-system-id="${escapeHtmlAttr(system.id || '')}"
-              title="Copy Windows install command"
-              aria-label="Copy Windows install command"
+              title="${adminT('copyWindowsCommand')}" data-title-en="Copy Windows install command" data-title-zh="复制 Windows 安装命令"
+              aria-label="${adminT('copyWindowsCommand')}"
             >
               <svg class="windows-icon" width="16" height="16" viewBox="0 0 24 24">
                 <g fill="none"><path d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"/><path fill="currentColor" d="M21 13v7.434a1.5 1.5 0 0 1-1.553 1.499l-.133-.011L12 21.008V13zm-11 0v7.758l-5.248-.656A2 2 0 0 1 3 18.117V13zm9.314-10.922a1.5 1.5 0 0 1 1.68 1.355l.006.133V11h-9V2.992zM10 3.242V11H3V5.883a2 2 0 0 1 1.752-1.985z"/></g>
@@ -1423,8 +1429,8 @@ const customCodePlaceholder = [
               class="delete-btn shrink-0 rounded-lg p-2 text-[#525252] dark:text-[#737373] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-red-400 dark:hover:text-red-400 hover:text-red-600 self-center"
               data-system-id="${escapeHtmlAttr(system.id || '')}"
               data-system-name="${escapeHtmlAttr(system.name || '')}"
-              title="Delete system"
-              aria-label="Delete system"
+              title="${adminT('deleteSystem')}" data-title-en="Delete Service" data-title-zh="删除服务"
+              aria-label="${adminT('deleteSystem')}"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -1631,7 +1637,7 @@ const customCodePlaceholder = [
           const ipv4CopyBtn = ipv4Row.querySelector('[data-ip]');
           if (ipv4CopyBtn) {
             ipv4CopyBtn.dataset.ip = item.ipv4;
-            ipv4CopyBtn.title = 'Copy IPv4';
+            ipv4CopyBtn.title = adminT('copyIpv4');
           }
         } else {
           // Need to create IPv4 row
@@ -1657,7 +1663,7 @@ const customCodePlaceholder = [
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#525252] dark:text-[#a3a3a3] shrink-0">IPv4:</span>
                 <span class="system-ipv4 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
-                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="Copy IPv4">
+                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                   <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1693,7 +1699,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv4:</span>
                   <span class="system-ipv4 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="Copy IPv4">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1761,7 +1767,7 @@ const customCodePlaceholder = [
           const ipv6CopyBtn = ipv6Row.querySelector('[data-ip]');
           if (ipv6CopyBtn) {
             ipv6CopyBtn.dataset.ip = item.ipv6;
-            ipv6CopyBtn.title = 'Copy IPv6';
+            ipv6CopyBtn.title = adminT('copyIpv6');
           }
         } else {
           // Need to create IPv6 row
@@ -1787,7 +1793,7 @@ const customCodePlaceholder = [
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#525252] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
                 <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv6 || '')}</span>
-                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="Copy IPv6">
+                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                   <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1811,7 +1817,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
                   <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv6 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="Copy IPv6">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -2337,7 +2343,7 @@ const customCodePlaceholder = [
           if (copyIcon && checkIcon) {
             copyIcon.style.display = 'none';
             checkIcon.style.display = 'block';
-            newBtn.title = 'Copied!';
+            newBtn.title = adminT('copied');
             setTimeout(() => {
               copyIcon.style.display = 'block';
               checkIcon.style.display = 'none';
@@ -2345,7 +2351,7 @@ const customCodePlaceholder = [
             }, 1000);
           }
         } else {
-          newBtn.title = 'Copy failed';
+          newBtn.title = adminT('copyFailed');
           setTimeout(() => {
             newBtn.title = originalTitle;
           }, 2000);
@@ -2414,7 +2420,7 @@ const customCodePlaceholder = [
             linuxIcon.style.display = 'none';
             checkIcon.style.display = 'block';
             newBtn.classList.add('text-green-600', 'dark:text-green-400');
-            newBtn.title = 'Copied!';
+            newBtn.title = adminT('copied');
             setTimeout(() => {
               linuxIcon.style.display = 'block';
               checkIcon.style.display = 'none';
@@ -2423,7 +2429,7 @@ const customCodePlaceholder = [
             }, 1500);
           }
         } else {
-          newBtn.title = 'Copy failed';
+          newBtn.title = adminT('copyFailed');
           setTimeout(() => {
             newBtn.title = originalTitle;
           }, 2000);
@@ -2458,14 +2464,19 @@ const customCodePlaceholder = [
         const checkIcon = newBtn.querySelector('.check-icon');
         const originalTitle = newBtn.title;
         
-        const success = await copyToClipboard(command);
+        // The command is pasted into PowerShell or cmd.exe, which expand
+        // $( ), $var, backticks and %VAR% inside the double quotes (and stop
+        // at a ") before powershellQuote's single quotes apply: only plain
+        // values are embedded, anything else is refused as a failed copy.
+        const plainValues = [systemId, serverUrl, secret].every((v) => /^[A-Za-z0-9._~:\/\[\]-]*$/.test(String(v ?? '')));
+        const success = plainValues && await copyToClipboard(command);
         
         if (success) {
           if (windowsIcon && checkIcon) {
             windowsIcon.style.display = 'none';
             checkIcon.style.display = 'block';
             newBtn.classList.add('text-green-600', 'dark:text-green-400');
-            newBtn.title = 'Copied!';
+            newBtn.title = adminT('copied');
             setTimeout(() => {
               windowsIcon.style.display = 'block';
               checkIcon.style.display = 'none';
@@ -2474,7 +2485,7 @@ const customCodePlaceholder = [
             }, 1500);
           }
         } else {
-          newBtn.title = 'Copy failed';
+          newBtn.title = adminT('copyFailed');
           setTimeout(() => {
             newBtn.title = originalTitle;
           }, 2000);
@@ -2530,8 +2541,8 @@ const customCodePlaceholder = [
       currentData = new Map();
       container.innerHTML = `
         <div class="text-center py-12">
-          <p class="text-sm text-red-500 dark:text-red-400">Failed to load systems</p>
-          <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-2">${escapeHtml(err.message || 'Unknown error')}</p>
+          <p class="text-sm text-red-500 dark:text-red-400">${adminT('loadServicesError')}</p>
+          <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-2">${escapeHtml(err.message || adminT('unknownError'))}</p>
         </div>
       `;
     }
@@ -3003,7 +3014,7 @@ const customCodePlaceholder = [
       if (!systemName) {
         if (messageEl) {
           messageEl.className = 'text-sm text-red-500 dark:text-red-400';
-          messageEl.textContent = '❌ Service Name is required';
+          messageEl.textContent = '❌ ' + adminT('serviceNameRequired');
           messageEl.classList.remove('hidden');
         }
         return;
@@ -3031,7 +3042,7 @@ const customCodePlaceholder = [
            "1" would silently overwrite an existing system. */
         if (messageEl) {
           messageEl.className = 'text-sm text-red-500 dark:text-red-400';
-          messageEl.textContent = '❌ Could not load the existing services, please try again: ' + err.message;
+          messageEl.textContent = '❌ ' + adminT('loadServicesFailed') + err.message;
           messageEl.classList.remove('hidden');
         }
         releaseSubmit();
@@ -3075,7 +3086,7 @@ const customCodePlaceholder = [
       } catch (err) {
         if (messageEl) {
           messageEl.className = 'text-sm text-red-500 dark:text-red-400';
-          messageEl.textContent = '❌ Failed to add system: ' + err.message;
+          messageEl.textContent = '❌ ' + adminT('addServiceFailed') + err.message;
           messageEl.classList.remove('hidden');
         }
       } finally {
@@ -3099,7 +3110,7 @@ const customCodePlaceholder = [
 
       // Validate
       if (!systemId || !systemName || systemId.trim() === '' || systemName.trim() === '') {
-        alert('Service Name is required');
+        alert(adminTranslations.serviceNameRequired[adminLang()]);
         return;
       }
 
@@ -3146,12 +3157,12 @@ const customCodePlaceholder = [
           throw new Error(errorText || `HTTP ${res.status}`);
         }
       } catch (err) {
-        alert('Failed to update system: ' + err.message);
+        alert(adminTranslations.updateServiceFailed[adminLang()] + err.message);
       } finally {
         // Re-enable submit button
         if (submitBtn) {
           submitBtn.disabled = false;
-          submitBtn.textContent = 'Update System';
+          submitBtn.textContent = adminT('updateSystem');
         }
       }
     });
@@ -3341,23 +3352,33 @@ const customCodePlaceholder = [
       changePasswordFormMessage.classList.add('hidden');
       changePasswordFormMessage.textContent = '';
 
+      const t = (key) => adminTranslations[key][adminLang()];
+
       // Validation
       if (!currentPassword || !newPassword || !confirmNewPassword) {
-        changePasswordFormMessage.textContent = 'Please fill in all fields';
+        changePasswordFormMessage.textContent = t('fillAllFields');
         changePasswordFormMessage.classList.remove('hidden');
         changePasswordFormMessage.classList.add('text-red-500', 'dark:text-red-400');
         return;
       }
 
       if (newPassword.length < 6) {
-        changePasswordFormMessage.textContent = 'New password must be at least 6 characters';
+        changePasswordFormMessage.textContent = t('newPasswordTooShort');
+        changePasswordFormMessage.classList.remove('hidden');
+        changePasswordFormMessage.classList.add('text-red-500', 'dark:text-red-400');
+        return;
+      }
+
+      // The server's limit; checked here so the reason is shown before sending.
+      if (newPassword.length > 128) {
+        changePasswordFormMessage.textContent = t('newPasswordTooLong');
         changePasswordFormMessage.classList.remove('hidden');
         changePasswordFormMessage.classList.add('text-red-500', 'dark:text-red-400');
         return;
       }
 
       if (newPassword !== confirmNewPassword) {
-        changePasswordFormMessage.textContent = 'New passwords do not match';
+        changePasswordFormMessage.textContent = t('newPasswordsDoNotMatch');
         changePasswordFormMessage.classList.remove('hidden');
         changePasswordFormMessage.classList.add('text-red-500', 'dark:text-red-400');
         return;
@@ -3367,13 +3388,13 @@ const customCodePlaceholder = [
       const submitBtn = changePasswordForm.querySelector('button[type="submit"]');
       if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Changing...';
+        submitBtn.textContent = t('changingPassword');
       }
 
       try {
         const token = localStorage.getItem('admin_auth_token');
         if (!token) {
-          throw new Error('Not authenticated');
+          throw new Error(t('sessionExpired'));
         }
 
         const response = await fetch(`${apiBase}/api/auth/change-password`, {
@@ -3389,8 +3410,7 @@ const customCodePlaceholder = [
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || 'Failed to change password');
+          throw new Error(changePasswordError(response.status, await response.text()));
         }
 
         const result = await response.json();
@@ -3398,10 +3418,12 @@ const customCodePlaceholder = [
           // Close modal immediately on success
           closeModalWithAnimation(changePasswordModal, resetChangePasswordForm);
         } else {
-          throw new Error('Failed to change password');
+          throw new Error(t('changePasswordFailed'));
         }
       } catch (err) {
-        changePasswordFormMessage.textContent = err.message || 'Failed to change password';
+        // Messages thrown above are already in the page's language; a network
+        // or parse failure (TypeError / SyntaxError) gets the generic one.
+        changePasswordFormMessage.textContent = err.name === 'Error' && err.message ? err.message : t('changePasswordFailed');
         changePasswordFormMessage.classList.remove('hidden');
         changePasswordFormMessage.classList.remove('text-emerald-600', 'dark:text-emerald-400', 'text-emerald-400');
         changePasswordFormMessage.classList.add('text-red-500', 'dark:text-red-400');
@@ -3644,6 +3666,16 @@ const customCodePlaceholder = [
     return secret;
   }
 
+  // A refused password change in the page's language: the server answers in
+  // English ("invalid current password", "unauthorized", "... too long ...").
+  function changePasswordError(status, body) {
+    const t = (key) => adminTranslations[key][adminLang()];
+    if (status === 401) return t(/current password/i.test(body) ? 'currentPasswordIncorrect' : 'sessionExpired');
+    if (/too long/i.test(body)) return t('newPasswordTooLong');
+    if (/at least/i.test(body)) return t('newPasswordTooShort');
+    return t('changePasswordFailed');
+  }
+
   // Function to perform client-side secret regeneration (no API call)
   function performSecretRegeneration() {
     const sharedSecretInput = document.getElementById('navbar-shared-secret-input');
@@ -3724,7 +3756,7 @@ const customCodePlaceholder = [
       tokenExpiryTimer = null;
       if (msUntilExpiry > MAX_DELAY) { scheduleExpiryLabel(msUntilExpiry - MAX_DELAY); return; }
       if (tokenExpiresInfo) {
-        tokenExpiresInfo.textContent = 'Expired';
+        tokenExpiresInfo.textContent = adminTranslations.shareExpired[adminLang()];
         tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
       }
     }, delay);
@@ -3761,6 +3793,13 @@ const customCodePlaceholder = [
     if (!date || date === '') return '';
     const d = new Date(date);
     return d.toLocaleString();
+  }
+
+  // "Expires: <date>" in the page's language, optionally marked as estimated
+  // (before the server has confirmed the new link).
+  function shareExpiresText(date, estimated = false) {
+    const t = (key) => adminTranslations[key][adminLang()];
+    return t('shareExpires') + date + (estimated ? t('shareEstimated') : '');
   }
 
   // Function to load and display current privacy config
@@ -3807,14 +3846,14 @@ const customCodePlaceholder = [
             // Check if token is expired based on server time
             if (config.token_expired === true) {
               // Token is already expired according to server
-              tokenExpiresInfo.textContent = 'Expired';
+              tokenExpiresInfo.textContent = adminTranslations.shareExpired[adminLang()];
               tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
             } else {
               // Calculate time difference using server time
               const timeDiff = expiresDate.getTime() - serverTime.getTime();
               if (timeDiff > 1000) {
                 // Token is still valid (more than 1 second remaining)
-                tokenExpiresInfo.textContent = `Expires: ${formatDate(config.token_expires)}`;
+                tokenExpiresInfo.textContent = shareExpiresText(formatDate(config.token_expires));
                 tokenExpiresInfo.className = 'mt-1 text-xs text-[#525252] dark:text-[#737373]';
                 
                 // Set up a timer to update the status when it actually expires
@@ -3822,7 +3861,7 @@ const customCodePlaceholder = [
                 scheduleExpiryLabel(timeDiff);
               } else {
                 // Token is expired or will expire within 1 second
-                tokenExpiresInfo.textContent = 'Expired';
+                tokenExpiresInfo.textContent = adminTranslations.shareExpired[adminLang()];
                 tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
               }
             }
@@ -3876,7 +3915,7 @@ const customCodePlaceholder = [
   generateShareLinkBtn?.addEventListener('click', async () => {
     const hours = parseInt(tokenExpiresHoursInput?.value || '1');
     if (hours < 1 || hours > 720) {
-      alert('Please enter a valid number of hours (1-720, max 30 days)');
+      alert(adminTranslations.shareHoursInvalid[adminLang()]);
       return;
     }
 
@@ -3897,7 +3936,7 @@ const customCodePlaceholder = [
       // Show estimated expiration (will be updated with server time after save)
       const estimatedExpires = new Date();
       estimatedExpires.setSeconds(estimatedExpires.getSeconds() + seconds);
-      tokenExpiresInfo.textContent = `Expires: ${formatDate(estimatedExpires.toISOString())} (estimated)`;
+      tokenExpiresInfo.textContent = shareExpiresText(formatDate(estimatedExpires.toISOString()), true);
       tokenExpiresInfo.className = 'mt-1 text-xs text-[#525252] dark:text-[#737373]';
     }
 
@@ -3939,7 +3978,7 @@ const customCodePlaceholder = [
       currentShareLinkInput.select();
       document.execCommand('copy');
       const originalText = copyShareLinkBtn.textContent;
-      copyShareLinkBtn.textContent = 'Copied!';
+      copyShareLinkBtn.textContent = adminT('copied');
       setTimeout(() => {
         copyShareLinkBtn.textContent = originalText;
       }, 2000);
@@ -4022,25 +4061,25 @@ const customCodePlaceholder = [
             // Check if date is valid
             if (isNaN(expiresDate.getTime())) {
               // Invalid expiration date from server
-              tokenExpiresInfo.textContent = 'Invalid expiration date';
+              tokenExpiresInfo.textContent = adminTranslations.shareExpiryInvalid[adminLang()];
               tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
             } else if (responseData.config.token_expired === true) {
               // Token is already expired according to server
-              tokenExpiresInfo.textContent = 'Expired';
+              tokenExpiresInfo.textContent = adminTranslations.shareExpired[adminLang()];
               tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
             } else {
               // Calculate time difference using server time
               const timeDiff = expiresDate.getTime() - serverTime.getTime();
               if (timeDiff > 1000) {
                 // Token is still valid (more than 1 second remaining)
-                tokenExpiresInfo.textContent = `Expires: ${formatDate(responseData.config.token_expires)}`;
+                tokenExpiresInfo.textContent = shareExpiresText(formatDate(responseData.config.token_expires));
                 tokenExpiresInfo.className = 'mt-1 text-xs text-[#525252] dark:text-[#737373]';
                 
                 // Set up timer to update when expired (using server time difference)
                 scheduleExpiryLabel(timeDiff);
               } else {
                 // Token is expired or will expire within 1 second
-                tokenExpiresInfo.textContent = 'Expired';
+                tokenExpiresInfo.textContent = adminTranslations.shareExpired[adminLang()];
                 tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
               }
             }
@@ -4078,7 +4117,7 @@ const customCodePlaceholder = [
       }
       if (messageEl) {
         messageEl.className = 'text-sm text-red-500 dark:text-red-400';
-        messageEl.textContent = '❌ Failed to save privacy config: ' + err.message;
+        messageEl.textContent = '❌ ' + adminT('savePrivacyFailed') + err.message;
         messageEl.classList.remove('hidden');
       }
     }
@@ -4203,7 +4242,7 @@ const customCodePlaceholder = [
       }
       if (messageEl) {
         messageEl.className = 'text-sm text-red-500 dark:text-red-400';
-        messageEl.textContent = '❌ Failed to save navbar config: ' + err.message;
+        messageEl.textContent = '❌ ' + adminT('saveCustomizationFailed') + err.message;
         messageEl.classList.remove('hidden');
       }
     }
@@ -4272,7 +4311,7 @@ const customCodePlaceholder = [
         const messageEl = document.getElementById('tcping-config-message');
         const error = await res.text();
         if (messageEl) {
-          messageEl.textContent = `Failed to save: ${error}`;
+          messageEl.textContent = adminT('saveFailed') + error;
           messageEl.className = 'text-sm text-red-500 dark:text-red-400';
           messageEl.classList.remove('hidden');
         }
@@ -4280,7 +4319,7 @@ const customCodePlaceholder = [
     } catch (err) {
       const messageEl = document.getElementById('tcping-config-message');
       if (messageEl) {
-        messageEl.textContent = `Error: ${err.message}`;
+        messageEl.textContent = adminT('errorPrefix') + err.message;
         messageEl.className = 'text-sm text-red-500 dark:text-red-400';
         messageEl.classList.remove('hidden');
       }
@@ -4621,7 +4660,7 @@ const customCodePlaceholder = [
     'showTcpingDesc': { en: 'When off, the homepage hides the TCPing chart for this service.', zh: '关闭后首页不再展示该服务的 TCPing 图表。' },
     'tagsHint': { en: 'Enter tags separated by commas (e.g., Python, traffic:in, speed:in, spr:VIP, spy:staff, spb:pro). Prefix with spr:/spy:/spb: for a red/amber/blue gradient badge.', zh: '输入标签，用逗号分隔（例如：Python, traffic:in, speed:in, spr:VIP, spy:staff, spb:pro）。前缀 spr:/spy:/spb: 分别表示红色 / 金色 / 蓝色起始的渐变彩色徽章。' },
     'cancel': { en: 'Cancel', zh: '取消' },
-    'updateSystem': { en: 'Update System', zh: '更新服务' },
+    'updateSystem': { en: 'Update Service', zh: '更新服务' },
     'areYouSureYouWantToDelete': { en: 'Are you sure you want to delete', zh: '您确定要删除' },
     'thisActionCannotBeUndone': { en: 'This action cannot be undone.', zh: '此操作无法撤销。' },
     'delete': { en: 'Delete', zh: '删除' },
@@ -4633,12 +4672,43 @@ const customCodePlaceholder = [
     'currentPassword': { en: 'Current Password', zh: '当前密码' },
     'newPassword': { en: 'New Password', zh: '新密码' },
     'confirmNewPassword': { en: 'Confirm New Password', zh: '确认新密码' },
-    'passwordMinLength': { en: 'Password must be at least 6 characters long', zh: '密码长度至少为6个字符' },
+    'passwordMinLength': { en: 'Password must be at least 6 characters long', zh: '密码长度至少为 6 个字符' },
+    'fillAllFields': { en: 'Please fill in all fields', zh: '请填写所有字段' },
+    'newPasswordTooShort': { en: 'New password must be at least 6 characters', zh: '新密码长度至少为 6 个字符' },
+    'newPasswordTooLong': { en: 'New password can be at most 128 characters', zh: '新密码最多 128 个字符' },
+    'newPasswordsDoNotMatch': { en: 'New passwords do not match', zh: '两次输入的新密码不一致' },
+    'changingPassword': { en: 'Changing...', zh: '修改中...' },
+    'currentPasswordIncorrect': { en: 'Current password is incorrect', zh: '当前密码错误' },
+    'sessionExpired': { en: 'Your session has expired, please sign in again', zh: '登录已过期，请重新登录' },
+    'changePasswordFailed': { en: 'Failed to change password', zh: '修改密码失败' },
+    'copyIpv4': { en: 'Copy IPv4', zh: '复制 IPv4' },
+    'copyIpv6': { en: 'Copy IPv6', zh: '复制 IPv6' },
+    'copyLinuxCommand': { en: 'Copy Linux install command', zh: '复制 Linux 安装命令' },
+    'copyWindowsCommand': { en: 'Copy Windows install command', zh: '复制 Windows 安装命令' },
+    'copied': { en: 'Copied!', zh: '已复制！' },
+    'copyFailed': { en: 'Copy failed', zh: '复制失败' },
+    'addServiceFailed': { en: 'Failed to add service: ', zh: '添加服务失败：' },
+    'loadServicesFailed': { en: 'Could not load the existing services, please try again: ', zh: '无法读取现有服务，请重试：' },
+    'savePrivacyFailed': { en: 'Failed to save privacy settings: ', zh: '保存隐私设置失败：' },
+    'saveCustomizationFailed': { en: 'Failed to save customization settings: ', zh: '保存自定义设置失败：' },
+    'saveFailed': { en: 'Failed to save: ', zh: '保存失败：' },
+    'errorPrefix': { en: 'Error: ', zh: '错误：' },
+    'duplicateTargetAddress': { en: 'Duplicate target address: ', zh: '目标地址重复：' },
+    'loadServicesError': { en: 'Failed to load services', zh: '加载服务失败' },
+    'unknownError': { en: 'Unknown error', zh: '未知错误' },
+    'deleteServiceFailed': { en: 'Failed to delete service: ', zh: '删除服务失败：' },
+    'updateServiceFailed': { en: 'Failed to update service: ', zh: '更新服务失败：' },
+    'serviceNameRequired': { en: 'Service name is required', zh: '服务名称不能为空' },
+    'shareHoursInvalid': { en: 'Please enter a valid number of hours (1-720, max 30 days)', zh: '请输入有效的小时数（1-720，最长 30 天）' },
+    'shareExpires': { en: 'Expires: ', zh: '过期时间：' },
+    'shareEstimated': { en: ' (estimated)', zh: '（预计）' },
+    'shareExpired': { en: 'Expired', zh: '已过期' },
+    'shareExpiryInvalid': { en: 'Invalid expiration date', zh: '过期时间无效' },
     'customizationSettings': { en: 'Customization Settings', zh: '自定义设置' },
     'navbarText': { en: 'Navbar Text', zh: '导航栏文字' },
     'navbarLogo': { en: 'Navbar Logo', zh: '导航栏图标' },
     'navbarTextHint': { en: 'Custom text displayed in navbar (leave empty for default: Pulse)', zh: '导航栏显示的自定义文字（留空使用默认：Pulse）' },
-    'navbarLogoHint': { en: 'Logo URL or SVG code (leave empty for default logo)', zh: '图标URL或SVG代码（留空使用默认图标）' },
+    'navbarLogoHint': { en: 'Logo URL or SVG code (leave empty for default logo)', zh: '图标 URL 或 SVG 代码（留空使用默认图标）' },
     'sharedSecret': { en: 'Shared Secret', zh: '共享密钥' },
     'sharedSecretHint': { en: 'This secret is shared by all clients for authentication', zh: '所有客户端共享此密钥进行认证' },
     'regenerate': { en: 'Regenerate', zh: '重新生成' },
@@ -4652,13 +4722,13 @@ const customCodePlaceholder = [
     'temporaryShareDesc': { en: 'Generate a temporary share link that allows access without login. Login page will appear before admin page for share links.', zh: '生成临时分享链接，允许无需登录访问。分享链接的登录页将出现在管理页面之前。' },
     'currentShareLink': { en: 'Current Share Link', zh: '当前分享链接' },
     'expirationHours': { en: 'Expiration (Hours)', zh: '有效期（小时）' },
-    'expirationHoursHint': { en: 'Number of hours until the share link expires (1-720, max 30 days)', zh: '分享链接过期前的小时数（1-720，最多30天）' },
+    'expirationHoursHint': { en: 'Number of hours until the share link expires (1-720, max 30 days)', zh: '分享链接过期前的小时数（1-720，最多 30 天）' },
     'generateShareLink': { en: 'Generate Share Link', zh: '生成分享链接' },
     'revokeShareLink': { en: 'Revoke Share Link', zh: '立即停止分享链接' },
     'copy': { en: 'Copy', zh: '复制' },
     'customCode': { en: 'Custom CSS & JavaScript', zh: '自定义 CSS 和 JavaScript' },
     'customCodeHint': { en: 'Custom CSS and JavaScript will be applied to all pages. Use <style> for CSS or <script> for JS', zh: '自定义 CSS 和 JavaScript 将应用于所有页面。使用 <style> 标签添加 CSS，使用 <script> 标签添加 JS' },
-    'customCodeSecurityWarning': { en: '⚠️ Security Warning: Do NOT include sensitive information (API keys, passwords, tokens).', zh: '⚠️ 安全提示：请勿包含敏感信息（API密钥、密码、令牌等）' },
+    'customCodeSecurityWarning': { en: '⚠️ Security Warning: Do NOT include sensitive information (API keys, passwords, tokens).', zh: '⚠️ 安全提示：请勿包含敏感信息（API 密钥、密码、令牌等）' },
     'showTrafficLabel': { en: 'Show Traffic Info', zh: '显示流量信息' },
     'showTrafficDesc': { en: 'Display real-time and total traffic in the detail dropdown section', zh: '在下拉详情部分显示实时流量和总流量' },
     'showGlassLabel': { en: 'Glassmorphism Effect', zh: '毛玻璃特效' },
@@ -4671,6 +4741,11 @@ const customCodePlaceholder = [
     const stored = localStorage.getItem('preferred-language');
     if (stored === 'zh' || stored === 'en') return stored;
     return document.documentElement.lang === 'zh' ? 'zh' : 'en';
+  }
+
+  // One adminTranslations entry in the page's language.
+  function adminT(key) {
+    return adminTranslations[key][adminLang()];
   }
 
   function updateAdminTranslations() {

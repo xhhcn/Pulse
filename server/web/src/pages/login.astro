@@ -127,10 +127,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
           .then(res => res.ok ? res.json() : null)
           .then(config => {
             if (config) {
-              // Update page title with navbar text
-              if (config.text) {
-                document.title = `Login - ${config.text}`;
-              }
+              // Page title: page name in the page's language · navbar text
+              document.title = `${document.documentElement.lang === 'zh' ? '登录' : 'Login'} · ${config.text || 'Pulse Monitor'}`;
               // Update favicon with custom logo
               if (config.logo && /^(https?:\/\/|\/|data:)/i.test(String(config.logo).trim())) {
                 const favicon = document.querySelector('link[rel=\"icon\"]');

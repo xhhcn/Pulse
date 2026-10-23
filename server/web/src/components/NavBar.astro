@@ -81,24 +81,28 @@ const { isAdmin = false } = Astro.props;
   </nav>
 
 <script>
-  /* Navbar logo SVG comes from admin input and lands in innerHTML.
+  /* Navbar logo SVG comes from admin input and ends up in the page.
      Accept only a plain <svg> tree: drop scripts, foreignObject, event
-     handler attributes and non-image hrefs. Returns '' when anything
+     handler attributes and non-image hrefs. Returns null when anything
      looks off so the logo simply falls back to the default mark.
      Byte-identical copy of the helper in SystemTable.astro and
      AdminDashboard.astro — keep the three in sync. */
-  function sanitizeSvgMarkup(markup) {
-    if (!markup || typeof markup !== 'string') return '';
+  function sanitizedSvgElement(markup) {
+    if (!markup || typeof markup !== 'string') return null;
     let doc;
-    try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return ''; }
+    try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return null; }
     const root = doc.documentElement;
-    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return '';
+    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return null;
     const banned = /^(script|foreignobject|iframe|object|embed|use|style|animate|set|animatetransform|animatemotion)$/i;
-    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    // Every node, not only elements: comments, CDATA sections and processing
+    // instructions are dropped as well.
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ALL);
     const toRemove = [];
     let node = walker.currentNode;
     while (node) {
-      if (banned.test(node.nodeName)) toRemove.push(node);
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        if (node.nodeType !== Node.TEXT_NODE) toRemove.push(node);
+      } else if (banned.test(node.nodeName)) toRemove.push(node);
       else {
         Array.from(node.attributes).forEach((attr) => {
           const n = attr.name.toLowerCase(), v = String(attr.value || '');
@@ -108,7 +112,9 @@ const { isAdmin = false } = Astro.props;
       node = walker.nextNode();
     }
     toRemove.forEach((n) => n.remove());
-    return new XMLSerializer().serializeToString(root);
+    // Handed over as nodes. Serialising and assigning innerHTML re-parsed the
+    // XML as HTML, where a comment or CDATA section could turn into live markup.
+    return document.importNode(root, true);
   }
 
   (function() {
@@ -381,17 +387,17 @@ const { isAdmin = false } = Astro.props;
               }
             }
           } else if (logo.startsWith('<svg')) {
-            // SECURITY: SVG markup from admin input lands in innerHTML. The
+            // SECURITY: SVG markup from admin input ends up in the page. The
             // old check was a substring blacklist ('<script', 'javascript:',
             // 'onerror=', 'onload=') plus attribute removal on the ROOT
             // element only, so e.g. `onmouseenter=` on the root, or any
             // handler / <script> / <use href=…> on a CHILD node, walked
             // straight through. Use the shared tree-walking sanitizer
             // instead (same copy as SystemTable.astro / AdminDashboard.astro)
-            // and insert its serialized output.
-            const safeSvg = sanitizeSvgMarkup(logo);
+            // and insert the element it returns.
+            const safeSvg = sanitizedSvgElement(logo);
             if (safeSvg) {
-              logoContainer.innerHTML = safeSvg;
+              logoContainer.replaceChildren(safeSvg);
               // Ensure SVG has proper size classes
               const svg = logoContainer.querySelector('svg');
               if (svg) {
