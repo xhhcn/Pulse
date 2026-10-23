@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.32"><img src="https://img.shields.io/badge/release-v1.3.32-blue?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.33"><img src="https://img.shields.io/badge/release-v1.3.33-blue?style=flat-square" alt="Release"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/pulls/xhh1128/pulse?style=flat-square&color=blue" alt="Docker Pulls"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/image-size/xhh1128/pulse/latest?style=flat-square&color=blue" alt="Docker Size"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
@@ -306,7 +306,7 @@ powershell -ExecutionPolicy Bypass -Command "& { $env:AgentId='<ID>'; $env:Serve
 ```bash
 sudo systemctl stop pulse-client pulse-client-update.timer 2>/dev/null
 sudo systemctl disable pulse-client pulse-client-update.timer 2>/dev/null
-sudo rm -f /opt/pulse/probe-client /opt/pulse/update.sh \
+sudo rm -f /opt/pulse/probe-client /opt/pulse/update.sh /etc/pulse-client.env \
   /etc/systemd/system/pulse-client.service \
   /etc/systemd/system/pulse-client-update.service \
   /etc/systemd/system/pulse-client-update.timer
