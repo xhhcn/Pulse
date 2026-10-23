@@ -38,6 +38,7 @@ const apiBase = apiBaseProp ?? '';
 
 <script>
   import { iconSvgUrl, flagIconForCode, flagIconForSlug } from '../utils/icons.ts';
+  import { getLanguage } from '../utils/i18n.ts';
 
   // Import utility functions (inline for Astro compatibility)
   const getApiBase = (root) => {
@@ -676,6 +677,12 @@ const apiBase = apiBaseProp ?? '';
   // percent is a sub-pixel step, yet each one restarted the 0.5 s width
   // transition of that bar on nearly every update.
   const barWidth = (val) => `${Math.round(pct(val))}%`;
+  // Usage label, one decimal. "100.0%" is wider than the w-8 / sm:w-10
+  // label slot and ran under the start of the bar; a full bar reads "100%".
+  const pctLabel = (val) => {
+    const s = val.toFixed(1);
+    return s === '100.0' ? '100%' : `${s}%`;
+  };
 
   // Pre-calculate server name column width from data (before rendering DOM)
   // This prevents visual jitter by setting the correct width from the start
@@ -775,7 +782,7 @@ const apiBase = apiBaseProp ?? '';
 
   const progress = (value, warn = false, isOffline = false) => `
     <div class="flex items-center gap-0.5 pr-2 sm:pr-3 min-w-0 w-full">
-      <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] w-8 sm:w-10 shrink-0">${value.toFixed(1)}%</span>
+      <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] w-8 sm:w-10 shrink-0">${pctLabel(value)}</span>
       <div class="progress-track relative h-2.5 sm:h-3 flex-1 min-w-[60px] max-w-[100px] sm:max-w-[120px] overflow-hidden rounded-full bg-[#111] dark:bg-[#111] bg-[#e5e5e5]">
         <div class="absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getProgressColor(value, isOffline)}" style="width:${barWidth(value)}"></div>
     </div>
@@ -916,7 +923,7 @@ const apiBase = apiBaseProp ?? '';
         <div class="flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-red-400' : 'bg-emerald-400'} shrink-0"></span>
           <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>
-          <button class="copy-btn text-[#525252] dark:text-[#737373] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" data-system-name="${safeNameAttr}" title="Copy system name">
+          <button class="copy-btn text-[#525252] dark:text-[#737373] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
@@ -1191,6 +1198,10 @@ const apiBase = apiBaseProp ?? '';
   const translations = {
     'noSystemsFound': { en: 'No services found', zh: '未找到服务' },
     'systemsWillAppear': { en: 'Services will appear here once agents start reporting', zh: '代理开始报告后，服务将显示在这里' },
+    'copySystemName': { en: 'Copy system name', zh: '复制服务名称' },
+    // Empty state of a filter that matches nothing (the services exist).
+    'noMatchingServices': { en: 'No matching services', zh: '没有匹配的服务' },
+    'tryAnotherFilter': { en: 'Try a different filter', zh: '换个关键词试试' },
     'cpuInformation': { en: 'CPU:', zh: 'CPU:' },
     'memoryInfo': { en: 'Memory:', zh: '内存:' },
     'swapPartition': { en: 'Swap:', zh: '交换:' },
@@ -1214,13 +1225,11 @@ const apiBase = apiBaseProp ?? '';
     'notApplicable': { en: 'N/A', zh: '不适用' },
   };
 
+  // [title, hint] of the empty table: no services at all / none match the filter.
+  const emptyMessageKeys = [['noSystemsFound', 'systemsWillAppear'], ['noMatchingServices', 'tryAnotherFilter']];
+
   function getCurrentLanguage() {
-    const stored = localStorage.getItem('preferred-language');
-    if (stored === 'zh' || stored === 'en') {
-      return stored;
-    }
-    // Default to English, not system language
-    return 'en';
+    return getLanguage();
   }
 
   function updateTranslations() {
@@ -1229,13 +1238,15 @@ const apiBase = apiBaseProp ?? '';
     // Update empty state - fix null check
     if (body) {
       const emptyState = body.querySelector('.text-sm.font-medium');
-      if (emptyState && (emptyState.textContent === translations.noSystemsFound.en || emptyState.textContent === translations.noSystemsFound.zh)) {
+      const emptyKeys = emptyState && emptyMessageKeys.find(([titleKey]) =>
+        emptyState.textContent === translations[titleKey].en || emptyState.textContent === translations[titleKey].zh);
+      if (emptyKeys) {
         const emptyContainer = body.querySelector('.flex.flex-col.items-center');
         if (emptyContainer) {
           const noSystems = emptyContainer.querySelector('.text-sm.font-medium');
           const willAppear = emptyContainer.querySelector('.text-xs');
-          if (noSystems) noSystems.textContent = translations.noSystemsFound[lang];
-          if (willAppear) willAppear.textContent = translations.systemsWillAppear[lang];
+          if (noSystems) noSystems.textContent = translations[emptyKeys[0]][lang];
+          if (willAppear) willAppear.textContent = translations[emptyKeys[1]][lang];
         }
       }
     }
@@ -1334,6 +1345,8 @@ const apiBase = apiBaseProp ?? '';
     
     if (body) {
       const lang = getCurrentLanguage();
+      // A filter that matches nothing is not an empty deployment.
+      const [titleKey, hintKey] = emptyMessageKeys[currentFilter.trim() ? 1 : 0];
       body.innerHTML = `
         <div class="flex flex-col items-center justify-center py-12 text-center">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-[#737373] dark:text-[#a3a3a3] mb-3">
@@ -1341,8 +1354,8 @@ const apiBase = apiBaseProp ?? '';
             <line x1="8" y1="21" x2="16" y2="21"/>
             <line x1="12" y1="17" x2="12" y2="21"/>
           </svg>
-          <p class="text-sm font-medium text-[#525252] dark:text-[#a3a3a3]">${translations.noSystemsFound[lang]}</p>
-          <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-1">${translations.systemsWillAppear[lang]}</p>
+          <p class="text-sm font-medium text-[#525252] dark:text-[#a3a3a3]">${translations[titleKey][lang]}</p>
+          <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-1">${translations[hintKey][lang]}</p>
     </div>
   `;
     }
@@ -1572,7 +1585,7 @@ const apiBase = apiBaseProp ?? '';
         const progressBar = cpuCell.querySelector('div.absolute');
         const value = newItemNormalized.cpu;
         if (textSpan) {
-          textSpan.textContent = `${value.toFixed(1)}%`;
+          textSpan.textContent = pctLabel(value);
         }
         if (progressBar) {
           const width = barWidth(value);
@@ -1595,7 +1608,7 @@ const apiBase = apiBaseProp ?? '';
         const progressBar = memoryCell.querySelector('div.absolute');
         const value = newItemNormalized.memory;
         if (textSpan) {
-          textSpan.textContent = `${value.toFixed(1)}%`;
+          textSpan.textContent = pctLabel(value);
         }
         if (progressBar) {
           const width = barWidth(value);
@@ -1618,7 +1631,7 @@ const apiBase = apiBaseProp ?? '';
         const progressBar = diskCell.querySelector('div.absolute');
         const value = newItemNormalized.disk;
         if (textSpan) {
-          textSpan.textContent = `${value.toFixed(1)}%`;
+          textSpan.textContent = pctLabel(value);
         }
         if (progressBar) {
           const width = barWidth(value);

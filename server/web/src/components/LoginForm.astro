@@ -33,6 +33,7 @@
             autocomplete="current-password"
             class="w-full px-4 py-2 rounded-lg border border-[#d4d4d4]/50 dark:border-[#404040]/50 bg-white dark:bg-[#151515] text-[#0a0a0a] dark:text-[#f5f5f5] outline-none transition-colors duration-200 focus:border-[#737373] dark:focus:border-[#525252] placeholder:text-[#737373] dark:placeholder:text-[#737373]"
             placeholder="Enter password"
+            data-translate-login-placeholder="passwordPlaceholder"
           />
         </div>
 
@@ -45,6 +46,7 @@
             autocomplete="new-password"
             class="w-full px-4 py-2 rounded-lg border border-[#d4d4d4]/50 dark:border-[#404040]/50 bg-white dark:bg-[#151515] text-[#0a0a0a] dark:text-[#f5f5f5] outline-none transition-colors duration-200 focus:border-[#737373] dark:focus:border-[#525252] placeholder:text-[#737373] dark:placeholder:text-[#737373]"
             placeholder="Confirm password"
+            data-translate-login-placeholder="confirmPasswordPlaceholder"
           />
         </div>
 
@@ -83,6 +85,8 @@
       subtitle: 'Enter your password to access the admin panel',
       password: 'Password',
       confirmPassword: 'Confirm Password',
+      passwordPlaceholder: 'Enter password',
+      confirmPasswordPlaceholder: 'Confirm password',
       submit: 'Login',
       setupPassword: 'Setup Password',
       setupSubtitle: 'Set up your admin password (first time only)',
@@ -98,6 +102,8 @@
       subtitle: '输入密码以访问管理面板',
       password: '密码',
       confirmPassword: '确认密码',
+      passwordPlaceholder: '输入密码',
+      confirmPasswordPlaceholder: '再次输入密码',
       submit: '登录',
       setupPassword: '设置密码',
       setupSubtitle: '设置您的管理员密码（仅首次）',
@@ -166,6 +172,12 @@
       const key = el.getAttribute('data-translate-login');
       if (key && t[key]) {
         el.textContent = t[key];
+      }
+    });
+    document.querySelectorAll('[data-translate-login-placeholder]').forEach(el => {
+      const key = el.getAttribute('data-translate-login-placeholder');
+      if (key && t[key]) {
+        el.placeholder = t[key];
       }
     });
   }

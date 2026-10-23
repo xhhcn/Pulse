@@ -57,9 +57,9 @@ import Icon from './Icon.astro';
   // initI18n() wires the global `languagechange` event onto a
   // `translate` event — the inline dictionary below listens for both
   // to stay in sync with NavBar / SystemTable language switches.
-  // We only need the side-effect of initI18n(); `t()` is handled
-  // locally so we don't import it.
-  import { initI18n } from '../utils/i18n.ts';
+  // `t()` is handled locally so we don't import it; getLanguage()
+  // decides which side of the dictionary to show.
+  import { getLanguage, initI18n } from '../utils/i18n.ts';
 
   initI18n();
   
@@ -76,7 +76,7 @@ import Icon from './Icon.astro';
   };
   
   function updateTranslations() {
-    const lang = localStorage.getItem('preferred-language') || 'en';
+    const lang = getLanguage();
     
     // Update title
     const title = document.getElementById('all-systems-title');

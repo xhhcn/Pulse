@@ -70,7 +70,8 @@ const translations: Translations = {
 let currentLanguage: Language = 'en';
 
 /**
- * Get current language
+ * Get current language: the visitor's stored choice, else the one the page
+ * head picked for <html lang> from the browser language (as the navbar does).
  */
 export function getLanguage(): Language {
   if (typeof window !== 'undefined') {
@@ -78,8 +79,7 @@ export function getLanguage(): Language {
     if (stored === 'zh' || stored === 'en') {
       return stored;
     }
-    // Default to English, not system language
-    return 'en';
+    return document.documentElement.lang === 'zh' ? 'zh' : 'en';
   }
   return currentLanguage;
 }
@@ -112,8 +112,10 @@ export function t(key: string): string {
  */
 export function initI18n(): void {
   if (typeof window !== 'undefined') {
-    const lang = getLanguage();
-    setLanguage(lang);
+    // Read, not stored: a visitor who never picked a language keeps
+    // following the browser's. (Storing it here pinned every first visit to
+    // English while the navbar followed the browser.)
+    currentLanguage = getLanguage();
     
     // Listen for language changes
     window.addEventListener('languagechange', (e: any) => {

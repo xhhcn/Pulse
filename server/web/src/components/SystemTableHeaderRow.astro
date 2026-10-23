@@ -41,6 +41,8 @@ import Icon from './Icon.astro';
 </div>
 
 <script>
+  import { getLanguage } from '../utils/i18n.ts';
+
   const translations = {
     'system': { en: 'Service', zh: '服务' },
     'time': { en: 'Time', zh: '运行时间' },
@@ -53,7 +55,7 @@ import Icon from './Icon.astro';
   };
   
   function updateTranslations() {
-    const lang = localStorage.getItem('preferred-language') || 'en';
+    const lang = getLanguage();
     document.querySelectorAll('[data-translate]').forEach(el => {
       const key = el.getAttribute('data-translate');
       if (key && translations[key]) {
