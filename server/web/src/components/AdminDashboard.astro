@@ -2520,7 +2520,7 @@ const customCodePlaceholder = [
         throw new Error(`HTTP ${response.status}`);
       }
     } catch (error) {
-      showMessage('Failed to save order: ' + error.message, 'error');
+      showMessage((adminLang() === 'zh' ? '保存排序失败：' : 'Failed to save order: ') + error.message, 'error');
       // The drop already moved the row; make the reload repaint the list
       // from the server's order instead of taking the "nothing changed"
       // shortcut (currentData still holds the pre-drag order).
@@ -2536,9 +2536,6 @@ const customCodePlaceholder = [
 
   // Show temporary message
   function showMessage(text, type = 'info') {
-    const container = document.getElementById('systems-container');
-    if (!container) return;
-
     const messageEl = document.createElement('div');
     messageEl.className = `fixed top-4 right-4 px-4 py-2 rounded-lg text-sm font-medium shadow-lg z-50 ${
       type === 'success' ? 'bg-green-500 text-white' : 

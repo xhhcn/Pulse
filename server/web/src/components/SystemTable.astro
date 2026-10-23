@@ -24,8 +24,17 @@ const apiBase = apiBaseProp ?? '';
       }
       /* CSS variable --first-col-width is now defined inline on #monitor-root element
          This avoids timing issues between <style> rules and inline style modifications */
+      /* A row's grid needs the name column (it grows with the longest name)
+         plus the other columns' minimums, the gaps and the left padding:
+         705 + 42 + 24 px (the right padding may shrink, as it already does
+         on desktop). With min-w-[1000px] alone a long name pushed the last
+         columns past the rows' borders, backgrounds and detail panels on
+         screens narrower than the table. */
+      #monitor-root .table-scroll-content {
+        min-width: max(1000px, calc(var(--first-col-width) + 771px));
+      }
     </style>
-    <div class="min-w-[1000px]">
+    <div class="min-w-[1000px] table-scroll-content">
       <SystemTableHeaderRow />
 
       <!-- 表格主体 -->
@@ -943,7 +952,7 @@ const apiBase = apiBaseProp ?? '';
         <div class="h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.cpu || 0, false, isOffline)}</div>
         <div class="h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.memory || 0, false, isOffline)}</div>
         <div class="h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline)}</div>
-        <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center">${((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0)).toFixed(2)} MB/s</div>
+        <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0)).toFixed(2)} MB/s</div>
         <div class="h-5 flex items-center justify-center w-full" title="${escapeHtmlAttr(item.os || '-')}">
           ${item.os_icon ? `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>` : `<span class="text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3]">${escapeHtml(item.os || '-')}</span>`}
     </div>

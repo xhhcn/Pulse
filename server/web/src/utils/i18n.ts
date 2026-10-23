@@ -21,7 +21,7 @@ const translations: Translations = {
   'columns': { en: 'Columns', zh: '列' },
   'sortBy': { en: 'Sort by', zh: '排序方式' },
   'name': { en: 'Name', zh: '名称' },
-  'time': { en: 'Time', zh: '运行时间' },
+  'time': { en: 'Uptime', zh: '运行时间' },
   'location': { en: 'Location', zh: '位置' },
   'cpu': { en: 'CPU', zh: 'CPU' },
   'memory': { en: 'Memory', zh: '内存' },
