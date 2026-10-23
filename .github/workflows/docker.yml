@@ -146,11 +146,11 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} fixes a layout problem in the admin page. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
+            v${{ steps.version.outputs.version }} gives the dashboard a phone layout. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
 
             ### Highlights
 
-            - Admin (layout): the CPU-brand logo in the middle of each service row ran into the row's text as soon as the rows showed addresses, which they do on any real install — on every row on phones and tablets, where it also lay under the first action button. From 1024 px the name and address columns have fixed widths, so the address and traffic columns line up on every row, and the logo sits in the free space left of the buttons. Narrower screens, where a row has no free space, no longer show it.
+            - Web (phones): below 640 px each service is a card instead of a row of a table that had to be swiped sideways. Before, the first screen showed only names, swiping right scrolled the names away, and the expanded TCPing chart was cut off. A card shows the name, flag and OS logo; CPU, memory and disk with their bars; network and uptime, each labelled with the table header's own icon and word. Tapping a card opens the same details and chart, now fitting the screen. Tablets and desktops keep the table unchanged.
 
             ### Compatibility
 
@@ -159,7 +159,7 @@ jobs:
 
             ### Verified
 
-            - Overlap measured on rows with IPv4 and IPv6 addresses at 390–1920 px in light and dark (none left except one IPv6 row at exactly 1024 px); the admin flows (add, edit, delete, copy command, password, share link), translations, stored-XSS and icon sanitiser runs. The server code is unchanged from v1.3.34.
+            - Chromium, Firefox and WebKit at 320–390 px in light, dark, Chinese, English and glass mode: labels survive live updates and runtime language and theme switches, the filter and sorting work, the expanded chart fits, no page scrolls sideways. At 640–1920 px every header and row cell has the same position and size as in v1.3.35. Stored-XSS runs at phone and desktop width. The server code is unchanged from v1.3.34.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
