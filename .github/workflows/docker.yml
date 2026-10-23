@@ -139,12 +139,13 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} brings the flags and logos back and closes a gap in the startup database check. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.26).
+            v${{ steps.version.outputs.version }} is a polish release for the dashboard's languages and a few visual details. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.26).
 
             ### Highlights
 
-            - Web: flags, OS icons and CPU logos are shipped with the dashboard (under `/icons`) instead of being fetched from api.iconify.design, which stopped answering the `prefix:name.svg` URLs the pages requested — every flag and logo had gone missing. The 26 flags too large to ship still come from Iconify, in the URL form it serves. The country → flag table is now generated from Unicode's flag list (the old one had names the icon set never had), an icon that does not exist shows the OS name or location as text instead of an empty box, and on the dark theme the black logos (macOS, Apple and AMD CPUs) are drawn light.
-            - Server: the startup database probe runs bbolt's consistency check itself. bbolt reports damage from a goroutine of its own, and the probe could exit before that report fired, passing a damaged file the server would then crash on.
+            - Web: a first visit follows the browser language everywhere. The home page stored English on every first visit, so a Chinese browser got an English page whose navbar tooltips were Chinese, and the admin page defaulted to English too. A language picked with the language button still wins; a browser that stored English through that bug keeps English until the button is used.
+            - Web: strings that stayed English on the Chinese pages are translated: the login password placeholders, the "Custom CSS & JavaScript" label and the logo placeholder in the customization settings, the TCPing target rows (name placeholder, remove button) and the copy-name tooltip. A filter that matches nothing now says so instead of "services will appear here once agents start reporting".
+            - Web: a full resource bar reads "100%"; "100.0%" was wider than the label and ran under the start of the bar. On the dark theme the letters of the admin page's Intel logo are drawn light like the AMD and Apple logos (only the cyan dot was visible).
 
             ### Compatibility
 
@@ -153,7 +154,7 @@ jobs:
 
             ### Verified
 
-            - Server vet, race-enabled tests and build; browser runs of both pages (flags, OS icons and CPU logos in light and dark themes, desktop and phone widths) against a local server and against production data.
+            - Browser runs of every page (light and dark, Chinese and English, 320–1920 px, every admin dialog), first visits with Chinese and English browsers with nothing stored, and language switches at runtime. The server code is unchanged from v1.3.30.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
