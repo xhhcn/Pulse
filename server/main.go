@@ -899,6 +899,15 @@ func newStandaloneHandler(distFS fs.FS, api http.Handler) http.Handler {
 		case isStaticAssetPath(urlPath):
 			w.Header().Set("Cache-Control", "public, max-age=86400, s-maxage=604800")
 		}
+		// An SVG is a document that can carry script. Opened directly from
+		// this origin it would run with the site's storage, admin token
+		// included, so it is served under a policy that allows nothing but
+		// its own inline styles. Used as an <img> or CSS image it renders as
+		// before; the icons fetched and inlined by the pages are sanitised
+		// separately.
+		if strings.EqualFold(filepath.Ext(urlPath), ".svg") {
+			w.Header().Set("Content-Security-Policy", svgContentSecurityPolicy)
+		}
 	}
 
 	// Strong validators for embedded files: html is served with
@@ -2030,7 +2039,7 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 		w.Header().Add("Vary", "Accept-Encoding")
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private, no-transform")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
 	w.Header().Set("Connection", "keep-alive")
@@ -4500,6 +4509,10 @@ func readDeadlineMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// svgContentSecurityPolicy is sent with every static SVG (see
+// setStaticCacheHeaders); docker/nginx.conf sends the same value.
+const svgContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox"
+
 // cdnFriendlyMiddleware adds CDN-friendly headers to prevent caching of dynamic API responses
 // This is critical when the server is behind a CDN (e.g., Cloudflare, CloudFront)
 func cdnFriendlyMiddleware(next http.Handler) http.Handler {
@@ -4507,8 +4520,13 @@ func cdnFriendlyMiddleware(next http.Handler) http.Handler {
 		// Only apply to API endpoints (not static files). Set this before
 		// dispatch so direct http.Error responses (401/404/405, etc.) cannot
 		// be cached by browsers or intermediary CDNs either.
+		//
+		// no-transform keeps CDNs from compressing on our behalf: the server
+		// gzips public responses itself and leaves Authorization-bearing ones
+		// uncompressed on purpose (see gzipAllowed), and Cloudflare would
+		// otherwise compress those anyway.
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private, no-transform")
 			w.Header().Set("Pragma", "no-cache")
 			w.Header().Set("Expires", "0")
 		}
@@ -4519,7 +4537,7 @@ func cdnFriendlyMiddleware(next http.Handler) http.Handler {
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
 	// CDN-friendly headers: ensure responses are not cached
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private, no-transform")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -4537,7 +4555,7 @@ func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
 // is to keep wire-format identical to writeJSON.
 func writeCachedJSON(w http.ResponseWriter, status int, body []byte) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, private, no-transform")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
 	w.Header().Set("X-Content-Type-Options", "nosniff")

@@ -766,3 +766,80 @@ func TestTCPingCacheSkipsAnEntryInvalidatedWhileItWasBuilt(t *testing.T) {
 		t.Fatal("the full clear must have emptied the cache")
 	}
 }
+
+// TestStandaloneHandlerSVGPolicy: a static SVG opened directly from this origin
+// must not be able to run script, in every way it can be served (plain, gzip,
+// 304), while other static files are left alone.
+func TestStandaloneHandlerSVGPolicy(t *testing.T) {
+	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">` + strings.Repeat(`<path d="M0 0h10v10H0z" fill="#e00"/>`, 60) + `</svg>`)
+	fsys := fstest.MapFS{
+		"index.html":        {Data: []byte("<!doctype html><title>x</title>")},
+		"favicon.svg":       {Data: svg},
+		"icons/flag/de.svg": {Data: svg},
+		"logo.png":          {Data: bytes.Repeat([]byte{1}, 100)},
+	}
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	h := newStandaloneHandler(fsys, api)
+	do := func(path, ae, inm string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodGet, path, nil)
+		if ae != "" {
+			r.Header.Set("Accept-Encoding", ae)
+		}
+		if inm != "" {
+			r.Header.Set("If-None-Match", inm)
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, r)
+		return rr
+	}
+	for _, path := range []string{"/favicon.svg", "/icons/flag/de.svg"} {
+		for _, ae := range []string{"", "gzip"} {
+			rr := do(path, ae, "")
+			if rr.Code != http.StatusOK {
+				t.Fatalf("GET %s (%q) = %d", path, ae, rr.Code)
+			}
+			if rr.Header().Get("Content-Security-Policy") != svgContentSecurityPolicy {
+				t.Errorf("GET %s (Accept-Encoding %q): Content-Security-Policy = %q, want %q", path, ae, rr.Header().Get("Content-Security-Policy"), svgContentSecurityPolicy)
+			}
+			if tag := rr.Header().Get("ETag"); tag != "" {
+				if nm := do(path, ae, tag); nm.Code == http.StatusNotModified && nm.Header().Get("Content-Security-Policy") != svgContentSecurityPolicy {
+					t.Errorf("304 for %s lost the SVG policy", path)
+				}
+			}
+		}
+	}
+	for _, path := range []string{"/logo.png", "/", "/index.html"} {
+		if csp := do(path, "", "").Header().Get("Content-Security-Policy"); csp != "" {
+			t.Errorf("GET %s: unexpected Content-Security-Policy %q", path, csp)
+		}
+	}
+	for _, d := range []string{"default-src 'none'", "sandbox"} {
+		if !strings.Contains(svgContentSecurityPolicy, d) {
+			t.Errorf("svgContentSecurityPolicy lacks %q", d)
+		}
+	}
+}
+
+// TestAPIResponsesForbidTransforms: the server leaves admin responses
+// uncompressed on purpose (gzipAllowed); no-transform keeps a CDN from
+// compressing them anyway.
+func TestAPIResponsesForbidTransforms(t *testing.T) {
+	h := cdnFriendlyMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
+	if cc := rr.Header().Get("Cache-Control"); !strings.Contains(cc, "no-transform") || !strings.Contains(cc, "no-store") {
+		t.Errorf("middleware Cache-Control = %q, want no-store and no-transform", cc)
+	}
+	for name, write := range map[string]func(http.ResponseWriter){
+		"writeJSON":       func(w http.ResponseWriter) { writeJSON(w, http.StatusOK, map[string]string{"a": "b"}) },
+		"writeCachedJSON": func(w http.ResponseWriter) { writeCachedJSON(w, http.StatusOK, []byte("{}\n")) },
+	} {
+		rr := httptest.NewRecorder()
+		write(rr)
+		if cc := rr.Header().Get("Cache-Control"); !strings.Contains(cc, "no-transform") {
+			t.Errorf("%s Cache-Control = %q, want no-transform", name, cc)
+		}
+	}
+}
