@@ -146,28 +146,22 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} is a security release. It closes what a review of the dashboard, the agent, the installers and the release workflows turned up. Existing clients and databases stay compatible; agents update themselves to 1.3.33, and the installer changes apply when an install command is run again.
+            v${{ steps.version.outputs.version }} is a toolchain maintenance release. The 1.3.33 agent was built with Go 1.26.9, the patch release the build runner had cached, which still trusts intermediate certificates that Go 1.26.10 distrusts as compromised. Agents update themselves to 1.3.34, built with the newest Go 1.26. Existing clients and databases stay compatible.
 
             ### Highlights
 
-            - Web: the SVG sanitiser that guards third-party icons and the custom navbar logo could be bypassed. A comment, CDATA section or processing instruction survived cleaning and became live HTML when the cleaned markup was parsed again. Every non-element node is now dropped, and the cleaned tree is inserted as nodes without being parsed again.
-            - Web: Chart.js and its date adapter load with Subresource Integrity from both CDNs, so the browser refuses a modified file instead of running it on the page next to the admin session. The Windows install command is not copied when a value would be expanded by the shell it is pasted into. Leftover English strings on the Chinese pages are translated, and the login and admin tab titles follow the page language.
-            - Agent 1.3.33: a timed-out probe now kills its whole `sh -c` pipeline; before, a hung `df` or `lscpu` kept the call waiting past its deadline. A redirect from HTTPS to plain HTTP is refused rather than followed with the secret. The disk probes and the first public-IP lookup run once at a time instead of once per caller, and the log throttle has a hard size limit.
-            - Linux installer: the agent secret goes into `/etc/pulse-client.env` (root only, loaded with `EnvironmentFile=`). As an `Environment=` line any local user could read it with `systemctl show pulse-client`. Running the install command again now restarts the agent so new settings take effect at once. The Windows installer restricts `start-pulse.bat`, which holds the secret, to SYSTEM and Administrators.
-            - Server: static SVG files carry a Content-Security-Policy that blocks script when one is opened directly. API responses carry `Cache-Control: no-transform`, so a CDN does not compress the admin responses that the server leaves uncompressed on purpose; the Docker image's nginx no longer compresses them either. The standalone installer's sandbox can write only `/opt/pulse/data`, no longer the agent binary and update script next to it, which run as root.
-            - CI: the release workflows pass the dispatch tag through the environment and no longer request `packages: write`.
+            - Agent 1.3.34: rebuilt with Go 1.26.10, whose crypto/x509 distrusts compromised intermediate certificates (GO-2026-6809). With 1.26.9, a certificate from such an intermediate could have passed as the server's, and the agent would have sent it its secret. No other code change.
+            - Server: golang.org/x/crypto v0.31.0 → v0.56.0 (golang.org/x/sys v0.47.0). The server only uses its bcrypt package, which none of the 20 advisories fixed in between affect, but binary scanners no longer report them. Building from source now needs Go 1.26 or later.
+            - CI: every Go setup step checks for the latest patch release instead of using the runner's cached one.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format changed.
             - Existing `metrics.db` files remain readable.
-            - An existing Linux agent keeps its secret in the unit file, and an existing Windows `start-pulse.bat` stays readable to all users, until the install command (copy it from the admin page) is run again. Where other people have shell access to a monitored machine, also consider rotating its secret.
-            - An agent whose HTTPS server URL answers with a redirect to plain HTTP no longer follows it (that would send the secret in clear text); set `SERVER_BASE` to the final address.
-            - The standalone server's sandbox now writes only `/opt/pulse/data` and recreates that directory at start if it is missing. Rerun `install-pulse-server.sh` to apply it to an existing install.
 
             ### Verified
 
-            - `go vet` and `go test -race` for server and agent, and agent builds for all five targets. A real install through the new installer code with a secret containing quotes, `$`, backticks and spaces: the secret reached the agent unchanged and an unprivileged user could no longer read it. The server under the narrowed sandbox; the SVG policy in Chromium, Firefox and WebKit; stored-XSS and sanitiser payload runs in all three browsers.
+            - `go vet` and `go test -race` for server and agent; `govulncheck` reports no vulnerability the code reaches, for the source and for the released binaries.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
