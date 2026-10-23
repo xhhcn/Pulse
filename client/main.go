@@ -1589,7 +1589,7 @@ func collectSystemMetrics() metricPayload {
 		NetOutMBps:         netOut,
 		TotalNetInBytes:    totalNetInBytes,
 		TotalNetOutBytes:   totalNetOutBytes,
-		AgentVersion:       "1.3.33",
+		AgentVersion:       "1.3.34",
 		Alert:              false, // Can be enhanced with actual alert logic
 	}
 }
