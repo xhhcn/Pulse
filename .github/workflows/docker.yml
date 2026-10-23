@@ -20,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
     
     steps:
       - name: Checkout
@@ -31,9 +30,13 @@ jobs:
 
       - name: Determine version
         id: version
+        # The dispatch input reaches the script through the environment, never
+        # pasted into it, so a crafted tag name cannot run as shell code.
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ inputs.tag }}"
+            TAG="$INPUT_TAG"
           else
             TAG="${GITHUB_REF#refs/tags/}"
           fi
