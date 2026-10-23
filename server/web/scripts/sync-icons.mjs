@@ -14,7 +14,9 @@
 // aliases) instead of a hand-written table, plus the four countries whose
 // v1 names predate their current CLDR names.
 // Logos: the OS icons the agent reports (client/main.go getOSIcon) and the
-// CPU brand icons of the admin page.
+// CPU brand icons of the admin page, plus the glyphs shown instead of an
+// agent icon that does not work at icon size (DISPLAY_ALIASES in
+// src/utils/icons.ts).
 
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -45,6 +47,12 @@ const LOGOS = {
   'devicon:opensuse': 26, 'devicon:oracle': 26, 'devicon:redhat': 26,
   'devicon:rockylinux': 26, 'logos:ubuntu': 26, 'logos:microsoft-windows-icon': 26,
   'logos:amd': 32, 'logos:apple': 32, 'logos:arm': 32, 'logos:intel': 32,
+  'simple-icons:oracle': 26,
+};
+
+// Logos drawn in currentColor, given their brand colour here.
+const LOGO_COLORS = {
+  'simple-icons:oracle': '#ea1b22',
 };
 
 async function get(url, as = 'text') {
@@ -105,7 +113,8 @@ async function main() {
 
   for (const [full, px] of Object.entries(LOGOS)) {
     const [prefix, name] = full.split(':');
-    await save(prefix, name, await get(`${ICONIFY_API}/${prefix}/${name}.svg?height=${px}`));
+    const color = LOGO_COLORS[full] ? `&color=${encodeURIComponent(LOGO_COLORS[full])}` : '';
+    await save(prefix, name, await get(`${ICONIFY_API}/${prefix}/${name}.svg?height=${px}${color}`));
   }
 
   await writeFile(join(outDir, 'ATTRIBUTION.txt'), [
@@ -118,8 +127,11 @@ async function main() {
     '              https://github.com/devicons/devicon/blob/master/LICENSE',
     'logos/        SVG Logos by Gil Barbara — CC0 1.0',
     '              https://github.com/gilbarbara/logos',
+    'simple-icons/ Simple Icons — CC0 1.0',
+    '              https://github.com/simple-icons/simple-icons',
     '',
-    'Files are unmodified icon data, as served by the Iconify API.',
+    'Files are unmodified icon data, as served by the Iconify API (simple-icons/',
+    'oracle.svg with its brand colour, through the API\'s color parameter).',
     '',
   ].join('\n'));
 

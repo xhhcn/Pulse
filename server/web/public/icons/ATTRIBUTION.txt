@@ -7,5 +7,8 @@ devicon/      Devicon by konpa — MIT
               https://github.com/devicons/devicon/blob/master/LICENSE
 logos/        SVG Logos by Gil Barbara — CC0 1.0
               https://github.com/gilbarbara/logos
+simple-icons/ Simple Icons — CC0 1.0
+              https://github.com/simple-icons/simple-icons
 
-Files are unmodified icon data, as served by the Iconify API.
+Files are unmodified icon data, as served by the Iconify API (simple-icons/
+oracle.svg with its brand colour, through the API's color parameter).

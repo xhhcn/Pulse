@@ -1113,3 +1113,9 @@ html.dark .cpu-brand-icon[data-icon="logos:amd"] svg,
 html.dark .cpu-brand-icon[data-icon="logos:intel"] svg {
   fill: #e5e5e5;
 }
+/* devicon:debian is drawn in the darker Debian red (#a80030), 2.3:1 on the
+   dark theme; the lighter red of Debian's own logo (#d70a53) reads like
+   the other logos there. */
+html.dark .os-icon[data-icon="devicon:debian"] svg path {
+  fill: #d70a53;
+}

@@ -666,6 +666,20 @@ const customCodePlaceholder = [
   .scrollbar-hide::-webkit-scrollbar {
     display: none;  /* Chrome, Safari and Opera */
   }
+  /* With the scrollbar hidden, nothing showed that the 600 px list goes
+     on: an edge with more services beyond it fades out
+     (updateListEdgeFades sets the attributes). */
+  #systems-list {
+    --fade-top: 0px;
+    --fade-bottom: 0px;
+  }
+  #systems-list[data-more-above] { --fade-top: 1.5rem; }
+  #systems-list[data-more-below] { --fade-bottom: 3rem; }
+  #systems-list[data-more-above],
+  #systems-list[data-more-below] {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
+  }
   
   /* Hide scrollbar for modal content */
   [data-modal-content]::-webkit-scrollbar {
@@ -2016,6 +2030,30 @@ const customCodePlaceholder = [
   // Latched on the first successful render so the initial SSE-first bootstrap
   // below can decide whether to fall back to a one-shot GET.
   let initialSystemsRendered = false;
+
+  // Edge fades of the services list (styles above): which ends have more
+  // services beyond them. Re-checked on scroll, resize and when items are
+  // added or removed; value updates inside items do not change the height.
+  function updateListEdgeFades() {
+    const list = document.getElementById('systems-list');
+    if (!list) return;
+    list.toggleAttribute('data-more-above', list.scrollTop > 1);
+    list.toggleAttribute('data-more-below', list.scrollTop + list.clientHeight < list.scrollHeight - 1);
+  }
+  {
+    const list = document.getElementById('systems-list');
+    let queued = false;
+    const queue = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; updateListEdgeFades(); });
+    };
+    if (list) {
+      list.addEventListener('scroll', queue, { passive: true });
+      new MutationObserver(queue).observe(list, { childList: true });
+      window.addEventListener('resize', queue);
+    }
+  }
 
   // Smart render with incremental updates
   async function renderSystems(data) {

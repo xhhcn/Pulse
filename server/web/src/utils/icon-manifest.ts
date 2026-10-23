@@ -434,5 +434,6 @@ export const LOCAL_ICONS: ReadonlySet<string> = new Set([
   "logos:arm",
   "logos:intel",
   "logos:microsoft-windows-icon",
-  "logos:ubuntu"
+  "logos:ubuntu",
+  "simple-icons:oracle"
 ]);

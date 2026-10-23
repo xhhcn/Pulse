@@ -16,10 +16,18 @@ import { FLAG_ICONS, LOCAL_ICONS } from './icon-manifest.ts';
    the request at another path ("/", "..", "?", "#" are all rejected). */
 export const ICONIFY_NAME_RE = /^[a-z0-9-]+:[a-z0-9-]+$/i;
 
+/* Agent icons that do not work at icon size, and what is drawn instead.
+   devicon:oracle (Oracle Linux) is the "ORACLE" wordmark, which comes out
+   26 x 4 px; Oracle's ring mark reads at that size. */
+const DISPLAY_ALIASES: Readonly<Record<string, string>> = {
+  'devicon:oracle': 'simple-icons:oracle',
+};
+
 /** URL of an icon's SVG, or null for a name that is not a plain prefix:name pair. */
 export function iconSvgUrl(name: string, height: number): string | null {
-  const full = String(name || '');
+  let full = String(name || '');
   if (!ICONIFY_NAME_RE.test(full)) return null;
+  full = DISPLAY_ALIASES[full] || full;
   const [prefix, icon] = full.split(':');
   if (LOCAL_ICONS.has(full)) return `/icons/${prefix}/${icon}.svg`;
   return `https://api.iconify.design/${prefix}/${icon}.svg?height=${height}`;

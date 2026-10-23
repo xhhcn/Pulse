@@ -792,7 +792,7 @@ const apiBase = apiBaseProp ?? '';
   const progress = (value, warn = false, isOffline = false) => `
     <div class="flex items-center gap-0.5 pr-2 sm:pr-3 min-w-0 w-full">
       <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] w-8 sm:w-10 shrink-0">${pctLabel(value)}</span>
-      <div class="progress-track relative h-2.5 sm:h-3 flex-1 min-w-[60px] max-w-[100px] sm:max-w-[120px] overflow-hidden rounded-full bg-[#111] dark:bg-[#111] bg-[#e5e5e5]">
+      <div class="progress-track relative h-2.5 sm:h-3 flex-1 min-w-[60px] max-w-[100px] sm:max-w-[120px] overflow-hidden rounded-full bg-[#111] dark:bg-[#262626] bg-[#e5e5e5]">
         <div class="absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getProgressColor(value, isOffline)}" style="width:${barWidth(value)}"></div>
     </div>
     </div>
@@ -2182,6 +2182,33 @@ const apiBase = apiBaseProp ?? '';
     }
   }
 
+  // Line colour of each target, by its position in the config: every line
+  // has its own while no target is selected; the selected one is drawn green
+  // and the rest grey. Each tab carries a dot of its line's colour, so the
+  // tab strip doubles as the chart's legend.
+  const TCPING_LINE_COLORS = [
+    'rgb(34, 197, 94)',    // emerald-500 (green)
+    'rgb(59, 130, 246)',  // blue-500
+    'rgb(168, 85, 247)',  // purple-500
+    'rgb(236, 72, 153)',  // pink-500
+    'rgb(251, 146, 60)',  // orange-500
+    'rgb(34, 211, 238)',  // cyan-500
+    'rgb(132, 204, 22)',  // lime-500
+    'rgb(245, 158, 11)',  // amber-500
+  ];
+  const TCPING_SELECTED_COLOR = 'rgb(34, 197, 94)';
+  const TCPING_UNSELECTED_COLOR = 'rgba(163, 163, 163, 0.5)';
+
+  function paintTCPingTabDots(tabsContainer, selectedTarget) {
+    tabsContainer.querySelectorAll('button').forEach((tab, index) => {
+      const dot = tab.querySelector('[data-tcping-dot]');
+      if (!dot) return;
+      dot.style.backgroundColor = selectedTarget === null
+        ? TCPING_LINE_COLORS[index % TCPING_LINE_COLORS.length]
+        : (tab.dataset.target === selectedTarget ? TCPING_SELECTED_COLOR : TCPING_UNSELECTED_COLOR);
+    });
+  }
+
   // Tab appearance. Three inputs: selected or not, and whether the agent
   // reported this target as skipped.
   //
@@ -2281,7 +2308,11 @@ const apiBase = apiBaseProp ?? '';
       tab.dataset.tcpingActive = isActive ? 'true' : 'false';
       applyTCPingTabAppearance(tab, isActive, isSkipped);
 
-      tab.textContent = target.name || target.address;
+      const dot = document.createElement('span');
+      dot.setAttribute('data-tcping-dot', '');
+      dot.setAttribute('aria-hidden', 'true');
+      dot.className = 'inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle';
+      tab.append(dot, document.createTextNode(target.name || target.address));
       tab.dataset.target = target.address;
       tab.dataset.targetName = target.name || target.address;
 
@@ -2300,6 +2331,7 @@ const apiBase = apiBaseProp ?? '';
 
           // Update chart colors to show all targets (don't reload data)
           updateTCPingChartColors(systemId, null);
+          paintTCPingTabDots(tabsContainer, null);
         } else {
           // Clicking an inactive tab: select it
           // Update all tabs to inactive state
@@ -2319,11 +2351,13 @@ const apiBase = apiBaseProp ?? '';
 
           // Update chart colors based on selected target (don't reload data)
           updateTCPingChartColors(systemId, target.address);
+          paintTCPingTabDots(tabsContainer, target.address);
         }
       });
 
       tabsContainer.appendChild(tab);
     });
+    paintTCPingTabDots(tabsContainer, previouslySelectedTarget);
     
     // Return the previously selected target (if any) to maintain state
     return previouslySelectedTarget;
@@ -2564,16 +2598,7 @@ const apiBase = apiBaseProp ?? '';
     const selectedTarget = activeTargetInfo ? activeTargetInfo.target : null; // null means no target selected (all colored)
     
     // Generate distinct colors for each target when no target is selected
-    const defaultColors = [
-      'rgb(34, 197, 94)',    // emerald-500 (green)
-      'rgb(59, 130, 246)',  // blue-500
-      'rgb(168, 85, 247)',  // purple-500
-      'rgb(236, 72, 153)',  // pink-500
-      'rgb(251, 146, 60)',  // orange-500
-      'rgb(34, 211, 238)',  // cyan-500
-      'rgb(132, 204, 22)',  // lime-500
-      'rgb(245, 158, 11)',  // amber-500
-    ];
+    const defaultColors = TCPING_LINE_COLORS;
     
     // Create datasets for each target
     const datasets = [];
@@ -2643,7 +2668,7 @@ const apiBase = apiBaseProp ?? '';
         borderWidth = 2;
       } else {
         // Target selected: only selected target is colored, others are gray
-        borderColor = isSelected ? 'rgb(34, 197, 94)' : 'rgba(163, 163, 163, 0.5)';
+        borderColor = isSelected ? TCPING_SELECTED_COLOR : TCPING_UNSELECTED_COLOR;
         borderWidth = isSelected ? 2 : 1.5;
       }
       
@@ -3533,16 +3558,7 @@ const apiBase = apiBaseProp ?? '';
     if (!config || !config.targets) return;
     
     // Generate distinct colors for each target when no target is selected
-    const defaultColors = [
-      'rgb(34, 197, 94)',    // emerald-500 (green)
-      'rgb(59, 130, 246)',  // blue-500
-      'rgb(168, 85, 247)',  // purple-500
-      'rgb(236, 72, 153)',  // pink-500
-      'rgb(251, 146, 60)',  // orange-500
-      'rgb(34, 211, 238)',  // cyan-500
-      'rgb(132, 204, 22)',  // lime-500
-      'rgb(245, 158, 11)',  // amber-500
-    ];
+    const defaultColors = TCPING_LINE_COLORS;
     
     // Update colors for each dataset
     chart.data.datasets.forEach((dataset, index) => {
@@ -3556,12 +3572,12 @@ const apiBase = apiBaseProp ?? '';
         dataset.backgroundColor = `${defaultColors[targetIndex % defaultColors.length]}20`;
       } else if (targetAddress === selectedTarget) {
         // Selected target: emerald-500
-        dataset.borderColor = 'rgb(34, 197, 94)';
+        dataset.borderColor = TCPING_SELECTED_COLOR;
         dataset.borderWidth = 2;
         dataset.backgroundColor = 'rgba(34, 197, 94, 0.1)';
       } else {
         // Other targets: gray color
-        dataset.borderColor = 'rgba(163, 163, 163, 0.5)';
+        dataset.borderColor = TCPING_UNSELECTED_COLOR;
         dataset.borderWidth = 1.5;
         dataset.backgroundColor = 'rgba(163, 163, 163, 0.05)';
       }
