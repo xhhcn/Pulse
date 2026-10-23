@@ -795,8 +795,8 @@ const apiBase = apiBaseProp ?? '';
     return 'bg-emerald-500';
   };
 
-  const progress = (value, warn = false, isOffline = false) => `
-    <div class="flex items-center gap-0.5 pr-2 sm:pr-3 min-w-0 w-full">
+  const progress = (value, warn = false, isOffline = false, label = '') => `
+    <div class="flex items-center gap-0.5 pr-2 sm:pr-3 min-w-0 w-full">${label}
       <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] w-8 sm:w-10 shrink-0">${pctLabel(value)}</span>
       <div class="progress-track relative h-2.5 sm:h-3 flex-1 min-w-[60px] max-w-[100px] sm:max-w-[120px] overflow-hidden rounded-full bg-[#111] dark:bg-[#262626] bg-[#e5e5e5]">
         <div class="absolute inset-y-0 left-0 h-full rounded-full transition-all duration-500 ease-out ${getProgressColor(value, isOffline)}" style="width:${barWidth(value)}"></div>
@@ -925,6 +925,20 @@ const apiBase = apiBaseProp ?? '';
       ')',
   };
 
+  // Phones show each row as a card (styles at the end of this file), where
+  // the column header is hidden, so the uptime / CPU / memory / disk / net
+  // cells carry their header's own icon and label. Both are copied from the
+  // header row at render time: the same icons, and a [data-translate] span
+  // that the header's script retranslates on a language change. Hidden on
+  // wider screens, where the header row is visible.
+  const cardLabel = (headerIndex) => {
+    const cell = document.getElementById('system-table-header-row')?.children[headerIndex];
+    if (!cell) return '';
+    const icon = cell.querySelector('svg');
+    const text = cell.querySelector('span[data-translate]');
+    return `<span class="cell-label hidden items-center gap-0.5 shrink-0 text-[#525252] dark:text-[#a3a3a3]">${icon ? icon.outerHTML : ''}${text ? text.outerHTML : ''}</span>`;
+  };
+
   const renderRow = (item, showTCPing = true) => {
     // Determine if system is offline/paused (alert = true means offline/paused)
     const isOffline = item.alert || false;
@@ -935,16 +949,16 @@ const apiBase = apiBaseProp ?? '';
     return `
     <div class="system-row" data-system-id="${safeId}">
       <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}" style="grid-template-columns: var(--first-col-width, 100px) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr);">
-        <div class="flex items-center gap-1 min-h-[20px]">
+        <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-red-400' : 'bg-emerald-400'} shrink-0"></span>
-          <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>
+          <span class="row-name text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>
           <button class="copy-btn text-[#525252] dark:text-[#737373] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
     </div>
-        <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center">${escapeHtml(item.time || '-')}</div>
-        <div class="h-5 flex items-center" title="${escapeHtmlAttr(item.location || '-')}">
+        <div class="cell-uptime text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center">${cardLabel(1)}<span class="cell-value">${escapeHtml(item.time || '-')}</span></div>
+        <div class="cell-location h-5 flex items-center" title="${escapeHtmlAttr(item.location || '-')}">
           ${item.location ? (() => {
             const flagIcon = countryToFlag(item.location);
             if (flagIcon) {
@@ -955,11 +969,11 @@ const apiBase = apiBaseProp ?? '';
             return `<span class="text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3]">${safeLocation}</span>`;
           })() : '<span class="text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3]">-</span>'}
     </div>
-        <div class="h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.cpu || 0, false, isOffline)}</div>
-        <div class="h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.memory || 0, false, isOffline)}</div>
-        <div class="h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline)}</div>
-        <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0)).toFixed(2)} MB/s</div>
-        <div class="h-5 flex items-center justify-center w-full" title="${escapeHtmlAttr(item.os || '-')}">
+        <div class="cell-cpu h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.cpu || 0, false, isOffline, cardLabel(3))}</div>
+        <div class="cell-memory h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.memory || 0, false, isOffline, cardLabel(4))}</div>
+        <div class="cell-disk h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline, cardLabel(5))}</div>
+        <div class="cell-net text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel(6)}<span class="cell-value">${((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0)).toFixed(2)} MB/s</span></div>
+        <div class="cell-os h-5 flex items-center justify-center w-full" title="${escapeHtmlAttr(item.os || '-')}">
           ${item.os_icon ? `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>` : `<span class="text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3]">${escapeHtml(item.os || '-')}</span>`}
     </div>
     </div>
@@ -1550,7 +1564,8 @@ const apiBase = apiBaseProp ?? '';
     if (shouldUpdateAll || oldItemNormalized.time !== newItemNormalized.time) {
       const timeCell = cells[1];
       if (timeCell) {
-        timeCell.textContent = item.time || '-';
+        // The value span, not the cell: the cell also holds the card label.
+        (timeCell.querySelector('.cell-value') || timeCell).textContent = item.time || '-';
       }
     }
     
@@ -1665,7 +1680,7 @@ const apiBase = apiBaseProp ?? '';
     if (shouldUpdateAll || netInChanged || netOutChanged) {
       const netCell = cells[6];
       if (netCell) {
-        netCell.textContent = `${(newItemNormalized.net_in_mb_s + newItemNormalized.net_out_mb_s).toFixed(2)} MB/s`;
+        (netCell.querySelector('.cell-value') || netCell).textContent = `${(newItemNormalized.net_in_mb_s + newItemNormalized.net_out_mb_s).toFixed(2)} MB/s`;
       }
     }
     
@@ -4867,6 +4882,69 @@ const apiBase = apiBaseProp ?? '';
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  /* Phones: each service is a card instead of a row of a table at least
+     1000 px wide, which had to be swiped sideways — the first screen showed
+     only names, and the names scrolled away with the rest. The same cells
+     sit in three lines (name, flag and OS logo; CPU, memory and disk bars;
+     network and uptime), each metric with its header's icon and label
+     (cardLabel), since the header row is hidden. The expanded details and
+     the TCPing chart then fit the screen. 640 px and up keep the table. */
+  @media (max-width: 639.98px) {
+    #monitor-root .table-scroll-content { min-width: 0 !important; }
+    #monitor-root #system-table-header-row { display: none !important; }
+    #monitor-root .system-row > [data-system-id] {
+      grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+      grid-template-areas:
+        "name name name name loc os"
+        "cpu cpu mem mem disk disk"
+        "net net net up up up";
+      column-gap: 12px;
+      row-gap: 7px;
+      padding: 11px 14px;
+    }
+    #monitor-root .system-row > [data-system-id] > div { height: auto; min-height: 0; }
+    #monitor-root .cell-name { grid-area: name; min-width: 0; align-items: flex-start; }
+    #monitor-root .cell-name > .rounded-full { margin-top: 0.42em; }
+    #monitor-root .row-name {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+    #monitor-root .cell-location { grid-area: loc; justify-self: end; }
+    #monitor-root .cell-os { grid-area: os; justify-self: end; width: auto; }
+    #monitor-root .cell-cpu { grid-area: cpu; }
+    #monitor-root .cell-memory { grid-area: mem; }
+    #monitor-root .cell-disk { grid-area: disk; }
+    #monitor-root .cell-cpu,
+    #monitor-root .cell-memory,
+    #monitor-root .cell-disk { display: block; padding-right: 0; }
+    #monitor-root .cell-cpu > div,
+    #monitor-root .cell-memory > div,
+    #monitor-root .cell-disk > div { flex-wrap: wrap; row-gap: 4px; padding-right: 0; }
+    #monitor-root .cell-cpu > div > span.font-medium,
+    #monitor-root .cell-memory > div > span.font-medium,
+    #monitor-root .cell-disk > div > span.font-medium {
+      order: 1;
+      flex: 1 1 auto;
+      width: auto;
+      text-align: right;
+      font-size: 12px;
+    }
+    #monitor-root .cell-cpu .progress-track,
+    #monitor-root .cell-memory .progress-track,
+    #monitor-root .cell-disk .progress-track { order: 2; flex: 0 0 100%; min-width: 0; max-width: none; }
+    #monitor-root .cell-net { grid-area: net; gap: 4px; font-size: 12px; }
+    #monitor-root .cell-uptime { grid-area: up; justify-self: end; gap: 4px; font-size: 12px; }
+    #monitor-root .cell-label { display: inline-flex; font-size: 11px; font-weight: 400; }
+    #monitor-root .cell-label svg { width: 12px; height: 12px; }
+    #monitor-root .system-details .details-content { padding-left: 14px; padding-right: 14px; }
   }
 
   /* TCPing target tabs — faster taps on mobile (no double-tap zoom delay). */
