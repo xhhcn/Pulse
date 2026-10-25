@@ -1721,7 +1721,9 @@ const customCodePlaceholder = [
               if (placeholder) {
                 nameAndIpContainer.replaceChild(newContainer, placeholder);
               } else {
-                nameAndIpContainer.appendChild(newContainer);
+                // Before the traffic block, which is already there when a
+                // system reported traffic before its first address.
+                nameAndIpContainer.insertBefore(newContainer, nameAndIpContainer.querySelector(':scope > .traffic-info-container'));
               }
               setupSystemEventHandlers(itemElement);
             }
@@ -1838,7 +1840,9 @@ const customCodePlaceholder = [
               if (placeholder) {
                 nameAndIpContainerForIPv6.replaceChild(newContainer, placeholder);
               } else {
-                nameAndIpContainerForIPv6.appendChild(newContainer);
+                // Before the traffic block, which is already there when a
+                // system reported traffic before its first address.
+                nameAndIpContainerForIPv6.insertBefore(newContainer, nameAndIpContainerForIPv6.querySelector(':scope > .traffic-info-container'));
               }
               setupSystemEventHandlers(itemElement);
             }
