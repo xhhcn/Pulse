@@ -972,7 +972,7 @@ const apiBase = apiBaseProp ?? '';
         <div class="cell-cpu h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.cpu || 0, false, isOffline, cardLabel(3))}</div>
         <div class="cell-memory h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.memory || 0, false, isOffline, cardLabel(4))}</div>
         <div class="cell-disk h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline, cardLabel(5))}</div>
-        <div class="cell-net text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel(6)}<span class="cell-value">${((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0)).toFixed(2)} MB/s</span></div>
+        <div class="cell-net text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel(6)}<span class="cell-value">${formatTrafficSpeed((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0))}</span></div>
         <div class="cell-os h-5 flex items-center justify-center w-full" title="${escapeHtmlAttr(item.os || '-')}">
           ${item.os_icon ? `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>` : `<span class="text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3]">${escapeHtml(item.os || '-')}</span>`}
     </div>
@@ -1674,13 +1674,15 @@ const apiBase = apiBaseProp ?? '';
       }
     }
     
-    // Cell 6: Net - only update if changed (with threshold)
-    const netInChanged = Math.abs(oldItemNormalized.net_in_mb_s - newItemNormalized.net_in_mb_s) >= 0.01;
-    const netOutChanged = Math.abs(oldItemNormalized.net_out_mb_s - newItemNormalized.net_out_mb_s) >= 0.01;
-    if (shouldUpdateAll || netInChanged || netOutChanged) {
+    // Cell 6: Net - only update when the displayed text changes. The value
+    // is shown in automatic units (B/s, KB/s, MB/s), so a fixed MB/s
+    // threshold would freeze small speeds that still change on screen.
+    const oldNetText = formatTrafficSpeed(oldItemNormalized.net_in_mb_s + oldItemNormalized.net_out_mb_s);
+    const newNetText = formatTrafficSpeed(newItemNormalized.net_in_mb_s + newItemNormalized.net_out_mb_s);
+    if (shouldUpdateAll || oldNetText !== newNetText) {
       const netCell = cells[6];
       if (netCell) {
-        (netCell.querySelector('.cell-value') || netCell).textContent = `${(newItemNormalized.net_in_mb_s + newItemNormalized.net_out_mb_s).toFixed(2)} MB/s`;
+        (netCell.querySelector('.cell-value') || netCell).textContent = newNetText;
       }
     }
     
@@ -4884,14 +4886,15 @@ const apiBase = apiBaseProp ?? '';
     }
   }
 
-  /* Phones: each service is a card instead of a row of a table at least
-     1000 px wide, which had to be swiped sideways — the first screen showed
-     only names, and the names scrolled away with the rest. The same cells
-     sit in three lines (name, flag and OS logo; CPU, memory and disk bars;
-     network and uptime), each metric with its header's icon and label
-     (cardLabel), since the header row is hidden. The expanded details and
-     the TCPing chart then fit the screen. 640 px and up keep the table. */
-  @media (max-width: 639.98px) {
+  /* Phones, held either way: each service is a card instead of a row of a
+     table at least 1000 px wide, which had to be swiped sideways — the
+     first screen showed only names, and the names scrolled away with the
+     rest. The same cells sit in three lines (name, flag and OS logo; CPU,
+     memory and disk bars; network and uptime), each metric with its
+     header's icon and label (cardLabel), since the header row is hidden.
+     The expanded details and the TCPing chart then fit the screen. 768 px
+     and up keep the table (see the tiers below). */
+  @media (max-width: 767.98px) {
     #monitor-root .table-scroll-content { min-width: 0 !important; }
     #monitor-root #system-table-header-row { display: none !important; }
     #monitor-root .system-row > [data-system-id] {
@@ -4945,6 +4948,51 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .cell-label { display: inline-flex; font-size: 11px; font-weight: 400; }
     #monitor-root .cell-label svg { width: 12px; height: 12px; }
     #monitor-root .system-details .details-content { padding-left: 14px; padding-right: 14px; }
+  }
+
+  /* Tablets and small laptops (768-1279 px): the table fits the card
+     instead of scrolling sideways behind a hidden scrollbar. The scroller
+     reserves the name column (--first-col-width) plus the other columns'
+     minimums, 6 px gaps and the 24 px left padding: 771 px from 1280 px
+     (bars at 130 px). Here the three bar columns go down to 116 px — the
+     40 px percentage, a 2 px gap, the bar's 60 px minimum and the cell's
+     12 px padding, without the bar's own 12 px right padding — and below
+     1024 px the least important columns go: location and OS, then the
+     uptime as well below 900 px. The rows' and the header's templates are
+     inline styles, hence !important. */
+  @media (min-width: 768px) and (max-width: 1279.98px) {
+    #monitor-root .cell-cpu > div,
+    #monitor-root .cell-memory > div,
+    #monitor-root .cell-disk > div { padding-right: 0; }
+  }
+  @media (min-width: 1024px) and (max-width: 1279.98px) {
+    #monitor-root .table-scroll-content { min-width: calc(var(--first-col-width) + 729px) !important; }
+    #monitor-root .system-row > [data-system-id],
+    #monitor-root #system-table-header-row {
+      grid-template-columns: var(--first-col-width, 100px) minmax(85px,1fr) minmax(90px,1fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr) !important;
+    }
+  }
+  @media (min-width: 768px) and (max-width: 1023.98px) {
+    #monitor-root .cell-location,
+    #monitor-root .cell-os,
+    #monitor-root #system-table-header-row > :nth-child(3),
+    #monitor-root #system-table-header-row > :nth-child(8) { display: none !important; }
+  }
+  @media (min-width: 900px) and (max-width: 1023.98px) {
+    #monitor-root .table-scroll-content { min-width: calc(var(--first-col-width) + 557px) !important; }
+    #monitor-root .system-row > [data-system-id],
+    #monitor-root #system-table-header-row {
+      grid-template-columns: var(--first-col-width, 100px) minmax(85px,1fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) !important;
+    }
+  }
+  @media (min-width: 768px) and (max-width: 899.98px) {
+    #monitor-root .table-scroll-content { min-width: calc(var(--first-col-width) + 466px) !important; }
+    #monitor-root .system-row > [data-system-id],
+    #monitor-root #system-table-header-row {
+      grid-template-columns: var(--first-col-width, 100px) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) !important;
+    }
+    #monitor-root .cell-uptime,
+    #monitor-root #system-table-header-row > :nth-child(2) { display: none !important; }
   }
 
   /* TCPing target tabs — faster taps on mobile (no double-tap zoom delay). */
