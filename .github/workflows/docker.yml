@@ -146,14 +146,15 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} makes the dashboard fit tablets and small laptops and shows network speeds in readable units. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
+            v${{ steps.version.outputs.version }} makes the TCPing chart of an expanded row appear sooner and draw in smoothly, and serves Chart.js from the dashboard itself. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
 
             ### Highlights
 
-            - Web (tablets and small laptops): from 768 to 1279 px the table ran past the card behind a hidden scrollbar (at 1024 px the OS column was cut, at 768 px everything after memory). Now 1024–1279 px keep all eight columns with slightly narrower bars, 900–1023 px leave out location and OS, and 768–899 px also the uptime. Phones in landscape (640–767 px) get the cards that portrait phones already had. From 1280 px and on portrait phones the layout is unchanged.
-            - Web: the table's network column shows the speed in automatic units (B/s, KB/s, MB/s, GB/s), like the expanded details, instead of a fixed MB/s with two decimals that read 0.00 MB/s for most servers.
-            - Web: the Chinese subtitle reads 实时更新，点击服务查看详细信息。
-            - Admin: a server that reports its traffic totals before its first address gets its address column in the right place at once; it used to appear after the traffic until the page was reloaded.
+            - Web: a new chart draws in from left to right with a short rise, instead of Chart.js redrawing all of its points on every frame for a second. The finished chart is pixel-identical to before; with reduced motion it simply appears.
+            - Web: a row's history is requested as soon as the mouse is pressed on it or has rested on it for a moment, so after a short hover the chart is usually ready when the row has opened. A pointer that only passes over rows, or a finger that starts a scroll, requests nothing, and a request older than 10 s or older than the newest sample is not reused.
+            - Web: building the chart is quicker (no per-point animation setup, timestamps handed to Chart.js as numbers), and a chart built while its row is still opening takes the size measured when the row started to open instead of re-laying out the whole table mid-animation. On a device that builds charts slowly, the chart waits for the 0.3 s opening to finish instead of interrupting it.
+            - Web: the first live update after a row is opened no longer fetches the same history again.
+            - Web: Chart.js 4.4.0 and its date adapter ship with the dashboard (`server/web/vendor`: the unmodified npm release files, MIT) under content-hashed names that browsers cache for a year, still checked with Subresource Integrity. Nothing is loaded from jsdelivr or unpkg any more, so visitors whose network cannot reach those CDNs get the chart too; if the file ever fails to load, the next open or sample tries again.
 
             ### Compatibility
 
@@ -162,7 +163,9 @@ jobs:
 
             ### Verified
 
-            - Chromium, Firefox and WebKit from 320 to 1920 px, light and dark, Chinese and English, with a 126-server data set: no sideways scrolling, no bar running into the next column, header and rows aligned at every width; below 640 px and from 1280 px every header and row cell has the same position and size as in v1.3.36. The cards at 640–767 px keep their labels through live updates and language and theme switches, and the expanded chart fits. Stored-XSS runs at 390, 700, 768 and 1024 px; admin add, edit, copy and delete flows. The server code is unchanged from v1.3.34.
+            - Chromium, Firefox and WebKit: rows opened by click, after a short hover and by tap on a phone; closing, reopening and rapid toggles; another row opened while one is open; target tabs; window sizes from 390 to 1366 px; light and dark; reduced motion; a theme switch after the draw-in; new samples arriving while a row is open, including a refresh that only drops expired points; the share-link and admin views of a privacy-mode instance; unreachable, empty, never-reporting and hidden-card rows; a deployment without targets; Chart.js unreachable or altered (integrity) on the first open and reachable afterwards. Every extra history request in these runs followed a newly announced sample.
+            - The finished chart is pixel-identical to v1.3.37 in 48 combinations of theme, width (390–1366 px) and pixel ratio, 21 of them built while the row was still opening. No request goes to another host.
+            - On a desktop the chart appears after about 0.4 s instead of 0.7 s (0.15–0.2 s after a short hover) and the opening's worst frame drops from 150–250 ms to 17–100 ms; with a 4× slower CPU the chart appears after 0.9 s instead of 2.3 s. The server code is unchanged from v1.3.34.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`

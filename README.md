@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.37"><img src="https://img.shields.io/badge/release-v1.3.37-blue?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/xhhcn/Pulse/releases/tag/v1.3.38"><img src="https://img.shields.io/badge/release-v1.3.38-blue?style=flat-square" alt="Release"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/pulls/xhh1128/pulse?style=flat-square&color=blue" alt="Docker Pulls"></a>
   <a href="https://hub.docker.com/r/xhh1128/pulse"><img src="https://img.shields.io/docker/image-size/xhh1128/pulse/latest?style=flat-square&color=blue" alt="Docker Size"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
@@ -566,7 +566,7 @@ docker compose up -d
 - **延迟测试与丢包率**：节点对某个目标根本发不起连接（例如没有 IPv6 的机器配了 IPv6 目标，内核直接返回无路由）时，探针 1.3.25 起会上报"不可测"而不是失败：这类样本不进入历史、不计入丢包率，页面上该目标显示"此节点无法访问该目标"。超时、拒绝连接、域名解析失败仍按丢包统计。旧版探针升级后自动生效。
 - **SSE 上限**：匿名实时流默认全局 2000 路、单 IP 200 路，可用 `SSE_MAX_STREAMS` 与 `SSE_MAX_STREAMS_PER_IP` 调整；管理员会话不受限制。单 IP 上限只对公网地址生效。
 - **Docker**：`docker-compose.yaml` 已设置 45 秒优雅停止，请勿缩短，否则强制退出可能损坏数据库。
-- **外部资源**：展开行的 TCPing 图表在首次打开时从 `cdn.jsdelivr.net`（备用 `unpkg.com`）加载 Chart.js，访客所在网络需能访问其中之一。
+- **外部资源**：TCPing 图表所用的 Chart.js 随服务端提供（来源与校验值见 `server/web/vendor/README.md`），访客无需访问任何公共 CDN。
 
 ## 📄 License
 
