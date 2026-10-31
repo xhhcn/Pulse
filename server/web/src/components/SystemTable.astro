@@ -48,6 +48,8 @@ const apiBase = apiBaseProp ?? '';
 <script>
   import { iconSvgUrl, flagIconForCode, flagIconForSlug } from '../utils/icons.ts';
   import { getLanguage } from '../utils/i18n.ts';
+  import chartJsUrl from '../../vendor/chart.js/chart.umd.js?url';
+  import chartJsAdapterUrl from '../../vendor/chartjs-adapter-date-fns/chartjs-adapter-date-fns.bundle.min.js?url';
 
   // Import utility functions (inline for Astro compatibility)
   const getApiBase = (root) => {
@@ -2132,14 +2134,13 @@ const apiBase = apiBaseProp ?? '';
     });
   }
   
-  // Chart.js and its date adapter come from public CDNs. Each file is pinned
-  // by Subresource Integrity: a swapped file would otherwise run as
-  // first-party script on this origin, next to the admin token.
+  // Chart.js and its date adapter ship with the site (see vendor/README.md),
+  // under content-hashed /_astro/ names, so no visitor depends on a public
+  // CDN. Each file is still pinned by Subresource Integrity to the npm
+  // release it came from.
   const CHARTJS_SRI = {
-    'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js': 'sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g',
-    'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js': 'sha384-FcQlsUOd0TJjROrBxhJdUhXTUgNJQxTMcxZe6nHbaEfFL1zjQ+bq/uRoBQxb0KMo',
-    'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js': 'sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws',
-    'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js': 'sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws',
+    [chartJsUrl]: 'sha384-FcQlsUOd0TJjROrBxhJdUhXTUgNJQxTMcxZe6nHbaEfFL1zjQ+bq/uRoBQxb0KMo',
+    [chartJsAdapterUrl]: 'sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws',
   };
   function setChartScriptSource(script, url) {
     script.integrity = CHARTJS_SRI[url];
@@ -2154,38 +2155,28 @@ const apiBase = apiBaseProp ?? '';
       return;
     }
     
-    // Load Chart.js with fallback for Chinese networks. The matching
-    // <link rel="preload" crossorigin="anonymous"> in index.astro warms
-    // the cache, but the browser only reuses that response for a script
-    // request whose CORS mode matches — so we must set crossorigin on
-    // the dynamic <script> too, otherwise Chart.js gets fetched twice.
+    // The matching <link rel="preload" crossorigin="anonymous"> in
+    // index.astro warms the cache, but the browser only reuses that
+    // response for a script request whose CORS mode matches — so we must
+    // set crossorigin on the dynamic <script> too, otherwise Chart.js gets
+    // fetched twice. A file that fails to load is removed again, so the
+    // loader in updateTCPingChart tries afresh when a row is opened.
     const script = document.createElement('script');
-    setChartScriptSource(script, 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js');
-    script.crossOrigin = 'anonymous';
-    script.onerror = function() {
-      // Fallback to unpkg CDN if jsdelivr fails (better for Chinese networks).
-      // unpkg ships chart.js as `chart.umd.js` (no `.min` suffix) — using
-      // the jsdelivr filename here returns 404 and silently breaks the chart.
-      const fallbackScript = document.createElement('script');
-      setChartScriptSource(fallbackScript, 'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js');
-      fallbackScript.crossOrigin = 'anonymous';
-      fallbackScript.async = true;
-      fallbackScript.setAttribute('data-chartjs', 'true');
-      document.head.appendChild(fallbackScript);
-    };
+    setChartScriptSource(script, chartJsUrl);
+    script.onerror = () => script.remove();
     script.async = true;
     script.setAttribute('data-chartjs', 'true');
     script.onload = () => {
       // Also preload date adapter
       if (!document.querySelector('script[data-chartjs-adapter]')) {
         const adapterScript = document.createElement('script');
-        setChartScriptSource(adapterScript, 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
-        adapterScript.crossOrigin = 'anonymous';
+        setChartScriptSource(adapterScript, chartJsAdapterUrl);
         adapterScript.async = true;
         adapterScript.setAttribute('data-chartjs-adapter', 'true');
         adapterScript.onload = () => {
           window._chartjsAdapterLoaded = true;
         };
+        adapterScript.onerror = () => adapterScript.remove();
         document.head.appendChild(adapterScript);
       }
     };
@@ -2206,7 +2197,56 @@ const apiBase = apiBaseProp ?? '';
   // looked identical and we used to destroy the existing chart on every
   // hiccup, which the user perceives as the chart "reloading" every few
   // ticks.
+  //
+  // A row's history can be requested before the row opens (a mouse press or
+  // a short hover, see setupRowClickHandlers); the open then takes over that
+  // request instead of starting its own, unless a newer sample has been
+  // announced since it was sent.
+  const TCPING_PREFETCH_TTL_MS = 10000;
+  const tcpingHistoryPrefetch = new Map(); // clientID -> { at, sig, promise }
+  // How long the last chart creation took on this device (see
+  // _updateTCPingChartImpl). Only a device that builds a chart within a
+  // frame or two draws one while its section is still sliding open.
+  const TCPING_FAST_BUILD_MS = 30;
+  let tcpingLastBuildMs = null;
+  let tcpingBuildCount = 0;
+  // Signature of the samples the newest snapshot announces for a system:
+  // an SSE payload can wait up to 80 ms for its render (debouncedRenderData),
+  // otherwise currentData keeps the raw snapshot item as `original`.
+  function latestTCPingSignature(systemId) {
+    const pending = Array.isArray(pendingRenderData)
+      ? pendingRenderData.find((item) => item && String(item.id) === systemId) : null;
+    if (pending) return computeTCPingSignature(pending);
+    const entry = currentData.get(systemId);
+    return computeTCPingSignature(entry && entry.original);
+  }
+  function usableTCPingPrefetch(clientID) {
+    const hit = tcpingHistoryPrefetch.get(clientID);
+    return hit && Date.now() - hit.at < TCPING_PREFETCH_TTL_MS
+      && hit.sig === latestTCPingSignature(clientID) ? hit : null;
+  }
+  function prefetchTCPingHistory(clientID) {
+    if (!clientID || !cachedTCPingConfig || !Array.isArray(cachedTCPingConfig.targets)
+        || cachedTCPingConfig.targets.length === 0 || usableTCPingPrefetch(clientID)) return;
+    const entry = { at: Date.now(), sig: latestTCPingSignature(clientID), promise: fetchTCPingHistory(clientID) };
+    tcpingHistoryPrefetch.set(clientID, entry);
+    // Rows that are only hovered must not keep their samples around.
+    setTimeout(() => {
+      if (tcpingHistoryPrefetch.get(clientID) === entry) tcpingHistoryPrefetch.delete(clientID);
+    }, TCPING_PREFETCH_TTL_MS);
+  }
   async function loadTCPingHistory(clientID, target) {
+    if (!target) {
+      const hit = usableTCPingPrefetch(clientID);
+      tcpingHistoryPrefetch.delete(clientID);
+      if (hit) {
+        const data = await hit.promise;
+        if (data && !data.__error) return data;
+      }
+    }
+    return fetchTCPingHistory(clientID, target);
+  }
+  async function fetchTCPingHistory(clientID, target) {
     try {
       let url = `${apiBase}/api/tcping/history?client_id=${encodeURIComponent(clientID)}${target ? `&target=${encodeURIComponent(target)}` : ''}`;
       const { url: authUrl, headers } = buildAuthOptions(url);
@@ -2485,7 +2525,14 @@ const apiBase = apiBaseProp ?? '';
     // Initialize chart with all targets
     // If there's a restored target, the chart will show single line highlight
     // Otherwise, all lines will be colored
-    await updateTCPingChart(systemId, null, null); // null means load all targets
+    try {
+      await updateTCPingChart(systemId, null, null); // null means load all targets
+    } catch (_) {
+      // Chart.js could not be loaded. Clearing the loading state lets the
+      // next sample (the SSE refresh) try again, as does the next open.
+      tcpingLoadingStates.delete(systemId);
+      return;
+    }
     
     // Check if cancelled after chart update
     if (!tcpingLoadingStates.get(systemId) || tcpingLoadingStates.get(systemId).cancelled) {
@@ -2576,6 +2623,10 @@ const apiBase = apiBaseProp ?? '';
     // This reduces HTTP requests from N (number of targets) to 1
     // Also leverages server-side caching for better performance
     // Response format: { results: [...], stats: { avg_latency, packet_loss_rate } }
+    // The snapshot signature these samples belong to (see the SSE handler).
+    // Recorded with a new chart, so the first broadcast after opening does
+    // not fetch the same history again.
+    const sigAtFetch = incremental ? null : latestTCPingSignature(systemId);
     const apiResponse = await loadTCPingHistory(clientID); // No target parameter = fetch all
 
     // Check if loading was cancelled after data fetch (the state object
@@ -2672,8 +2723,7 @@ const apiBase = apiBaseProp ?? '';
       let dsMax = null;
       for (let i = 0; i < safeHistoryData.length; i++) {
         const result = safeHistoryData[i];
-        const tsDate = new Date(result.timestamp);
-        const tsMs = tsDate.getTime();
+        const tsMs = Date.parse(result.timestamp);
         if (!Number.isFinite(tsMs) || tsMs < twentyFourHoursAgo) continue;
 
         let yValue = null;
@@ -2684,7 +2734,8 @@ const apiBase = apiBaseProp ?? '';
             yValue = result.latency;
           }
         }
-        chartData[chartIdx++] = { x: tsDate, y: yValue };
+        // x as epoch ms: the chart is created with parsing off (see below).
+        chartData[chartIdx++] = { x: tsMs, y: yValue };
         if (dsMin === null || tsMs < dsMin) dsMin = tsMs;
         if (dsMax === null || tsMs > dsMax) dsMax = tsMs;
       }
@@ -2833,6 +2884,13 @@ const apiBase = apiBaseProp ?? '';
       //     forward until we land on a point at or after the 24-h cutoff.
       // Typical K is 0–2, so the per-tick cost becomes effectively constant
       // even for charts with thousands of points already on screen.
+      //
+      // A changed dataset gets a new array rather than a push or splice of
+      // the one on the chart: with parsing off, Chart.js applies an in-place
+      // push or splice to its points at once, without the update() that
+      // keeps its draw state in step, and the next draw (a hover) would
+      // fail. A new array is taken up as a whole at the next update() —
+      // just as an in-place change was while the chart parsed its data.
       let hasNewData = false;
       datasets.forEach((newDataset, index) => {
         if (index >= chart.data.datasets.length) return;
@@ -2840,45 +2898,44 @@ const apiBase = apiBaseProp ?? '';
         const currentDataset = chart.data.datasets[index];
         const currentData = currentDataset.data || [];
         const newData = newDataset.data || [];
+        let data = currentData;
 
         if (currentData.length === 0) {
           if (newData.length > 0) {
-            currentDataset.data = newData.slice();
+            data = newData.slice();
             hasNewData = true;
           }
         } else if (newData.length > 0) {
-          const lastCurrentTime = currentData[currentData.length - 1].x.getTime();
+          const lastCurrentTime = currentData[currentData.length - 1].x;
           // Walk newData from the tail until we find a point we already
           // have. Everything to the right is brand-new and chronologically
-          // sorted; we splice that tail in directly.
+          // sorted; we append that tail directly.
           let firstNewIdx = newData.length;
           for (let i = newData.length - 1; i >= 0; i--) {
-            if (newData[i].x.getTime() <= lastCurrentTime) {
+            if (newData[i].x <= lastCurrentTime) {
               firstNewIdx = i + 1;
               break;
             }
             firstNewIdx = i;
           }
           if (firstNewIdx < newData.length) {
-            for (let i = firstNewIdx; i < newData.length; i++) {
-              currentData.push(newData[i]);
-            }
+            data = currentData.concat(newData.slice(firstNewIdx));
             hasNewData = true;
           }
         }
 
         // Drop expired points from the head. Because the array is sorted
-        // ascending, all expired points form a prefix, so a single splice
-        // at the boundary is enough — no full-array rewrite, no sort.
-        const data = currentDataset.data;
-        if (data && data.length > 0) {
-          let dropTo = 0;
-          while (dropTo < data.length && data[dropTo].x.getTime() < twentyFourHoursAgo) {
-            dropTo++;
-          }
-          if (dropTo > 0) {
-            data.splice(0, dropTo);
-          }
+        // ascending, all expired points form a prefix, so one cut at the
+        // boundary is enough — no sort.
+        let dropTo = 0;
+        while (dropTo < data.length && data[dropTo].x < twentyFourHoursAgo) {
+          dropTo++;
+        }
+        if (dropTo > 0) {
+          data = data.slice(dropTo);
+        }
+        if (data !== currentData) {
+          currentDataset.data = data;
         }
       });
         
@@ -2892,8 +2949,8 @@ const apiBase = apiBaseProp ?? '';
             chart.data.datasets.forEach(dataset => {
               if (dataset.data && dataset.data.length > 0) {
                 // Data is now sorted, so first and last are min and max
-                const firstTime = dataset.data[0].x.getTime();
-                const lastTime = dataset.data[dataset.data.length - 1].x.getTime();
+                const firstTime = dataset.data[0].x;
+                const lastTime = dataset.data[dataset.data.length - 1].x;
                 if (updatedMinTime === null || firstTime < updatedMinTime) {
                   updatedMinTime = firstTime;
                 }
@@ -2959,7 +3016,7 @@ const apiBase = apiBaseProp ?? '';
       }
     });
 
-    // Load Chart.js from CDN if not already loaded
+    // Load Chart.js if not already loaded
     if (!window.Chart) {
       return new Promise((resolve, reject) => {
         // Check if script is already being loaded
@@ -2979,57 +3036,18 @@ const apiBase = apiBaseProp ?? '';
           return;
         }
         
-        // Load Chart.js first with fallback for Chinese networks.
-        // crossOrigin matches the <link rel="preload"> so the browser
-        // can reuse the warmed cache entry (otherwise it refetches).
+        // Load Chart.js first, then its date adapter. crossOrigin (set by
+        // setChartScriptSource) matches the <link rel="preload"> so the
+        // browser can reuse the warmed cache entry. A file that fails to
+        // load is removed again, so the next open tries afresh.
         const script = document.createElement('script');
-        setChartScriptSource(script, 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js');
-        script.crossOrigin = 'anonymous';
-        script.onerror = function() {
-          // Fallback to unpkg CDN if jsdelivr fails. Note: unpkg only
-          // ships `chart.umd.js` (no `.min` suffix) for chart.js@4.4.0.
-          const fallbackScript = document.createElement('script');
-          setChartScriptSource(fallbackScript, 'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js');
-          fallbackScript.crossOrigin = 'anonymous';
-          fallbackScript.async = true;
-          fallbackScript.setAttribute('data-chartjs', 'true');
-          fallbackScript.onload = () => {
-            // Continue with adapter loading
-            const adapterScript = document.createElement('script');
-            setChartScriptSource(adapterScript, 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
-            adapterScript.crossOrigin = 'anonymous';
-            adapterScript.async = true;
-            adapterScript.setAttribute('data-chartjs-adapter', 'true');
-            adapterScript.onload = () => {
-              window._chartjsAdapterLoaded = true;
-              updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
-            };
-            adapterScript.onerror = () => {
-              reject(new Error('Failed to load Chart.js date adapter'));
-            };
-            document.head.appendChild(adapterScript);
-          };
-          document.head.appendChild(fallbackScript);
-        };
+        setChartScriptSource(script, chartJsUrl);
         script.async = true;
         script.setAttribute('data-chartjs', 'true');
         script.onload = () => {
-          // Then load the date adapter for time scale support with fallback
+          // Then load the date adapter for time scale support
           const adapterScript = document.createElement('script');
-          setChartScriptSource(adapterScript, 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
-          adapterScript.crossOrigin = 'anonymous';
-          adapterScript.onerror = function() {
-            // Fallback to unpkg CDN
-            const fallbackAdapter = document.createElement('script');
-            setChartScriptSource(fallbackAdapter, 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
-            fallbackAdapter.crossOrigin = 'anonymous';
-            fallbackAdapter.async = true;
-            fallbackAdapter.setAttribute('data-chartjs-adapter', 'true');
-            fallbackAdapter.onload = () => {
-              window._chartjsAdapterLoaded = true;
-            };
-            document.head.appendChild(fallbackAdapter);
-          };
+          setChartScriptSource(adapterScript, chartJsAdapterUrl);
           adapterScript.async = true;
           adapterScript.setAttribute('data-chartjs-adapter', 'true');
           adapterScript.onload = () => {
@@ -3037,24 +3055,13 @@ const apiBase = apiBaseProp ?? '';
             updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
           };
           adapterScript.onerror = () => {
-            // Fallback to unpkg CDN
-            const fallbackAdapter = document.createElement('script');
-            setChartScriptSource(fallbackAdapter, 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
-            fallbackAdapter.crossOrigin = 'anonymous';
-            fallbackAdapter.async = true;
-            fallbackAdapter.setAttribute('data-chartjs-adapter', 'true');
-            fallbackAdapter.onload = () => {
-              window._chartjsAdapterLoaded = true;
-              updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
-            };
-            fallbackAdapter.onerror = () => {
+            adapterScript.remove();
             reject(new Error('Failed to load Chart.js date adapter'));
-            };
-            document.head.appendChild(fallbackAdapter);
           };
           document.head.appendChild(adapterScript);
         };
         script.onerror = () => {
+          script.remove();
           reject(new Error('Failed to load Chart.js'));
         };
         document.head.appendChild(script);
@@ -3081,8 +3088,7 @@ const apiBase = apiBaseProp ?? '';
         }
         
         const adapterScript = document.createElement('script');
-        setChartScriptSource(adapterScript, 'https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
-        adapterScript.crossOrigin = 'anonymous';
+        setChartScriptSource(adapterScript, chartJsAdapterUrl);
         adapterScript.async = true;
         adapterScript.setAttribute('data-chartjs-adapter', 'true');
         adapterScript.onload = () => {
@@ -3090,26 +3096,28 @@ const apiBase = apiBaseProp ?? '';
           updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
         };
         adapterScript.onerror = () => {
-          // Fallback to unpkg CDN
-          const fallbackAdapter = document.createElement('script');
-          setChartScriptSource(fallbackAdapter, 'https://unpkg.com/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js');
-          fallbackAdapter.crossOrigin = 'anonymous';
-          fallbackAdapter.async = true;
-          fallbackAdapter.setAttribute('data-chartjs-adapter', 'true');
-          fallbackAdapter.onload = () => {
-            window._chartjsAdapterLoaded = true;
-            updateTCPingChart(systemId, target, targetName).then(resolve).catch(reject);
-          };
-          fallbackAdapter.onerror = () => {
+          adapterScript.remove();
           reject(new Error('Failed to load Chart.js date adapter'));
-          };
-          document.head.appendChild(fallbackAdapter);
         };
         document.head.appendChild(adapterScript);
       });
     }
     
     const ChartClass = window.Chart;
+
+    // Slide first: a chart whose samples arrive while its section is still
+    // sliding open waits for the slide to end, unless this device has shown
+    // it builds a chart within a frame or two. Building one takes the main
+    // thread for tens of ms, which the slide would otherwise stutter on.
+    const detailsSection = container.closest('.system-details');
+    const slideLeft = detailsSection && detailsSection._slideEndsAt ? detailsSection._slideEndsAt - performance.now() : 0;
+    if (slideLeft > 0 && !(tcpingLastBuildMs !== null && tcpingLastBuildMs <= TCPING_FAST_BUILD_MS)) {
+      await new Promise((resolve) => setTimeout(resolve, slideLeft));
+      if ((loadingState && loadingState.cancelled) || !container.isConnected
+          || detailsSection.classList.contains('hidden')) {
+        return;
+      }
+    }
 
     // Check if we have data
     // Still create an empty chart to show the structure if no data
@@ -3127,13 +3135,22 @@ const apiBase = apiBaseProp ?? '';
       }
     }
 
+    // While the section is still sliding open, the chart box size measured
+    // when it started to open (handleRowToggle) stands in for measuring the
+    // box now, which would force a layout of the whole table mid-slide.
+    // Chart.js takes it too (the platform below); size changes after that
+    // are Chart.js's own, as before.
+    let presize = canvas._presize && canvas._presize.width > 0
+      && detailsSection && detailsSection._slideEndsAt > performance.now() ? canvas._presize : null;
+    canvas._presize = null;
+
     // Ensure canvas has proper dimensions
     // Use fixed dimensions from CSS (200px height) instead of getBoundingClientRect()
     // to avoid issues when container is still animating
     // Note: tabs are in external container, so they don't affect chart container height
     const parent = canvas.parentElement;
     if (parent) {
-      const rect = parent.getBoundingClientRect();
+      const rect = presize || parent.getBoundingClientRect();
       // Use fixed 200px height from CSS, or getBoundingClientRect if available and stable
       const width = rect.width > 0 ? rect.width : parent.offsetWidth || 0;
       const height = 200; // Fixed height from CSS style="height: 200px"
@@ -3216,8 +3233,19 @@ const apiBase = apiBaseProp ?? '';
       }
     }
     
+    const platform = presize ? class extends ChartClass.DomPlatform {
+      getMaximumSize(element, width, height, aspectRatio) {
+        if (presize && width === undefined && height === undefined) {
+          return super.getMaximumSize(element, presize.width, presize.height, aspectRatio);
+        }
+        return super.getMaximumSize(element, width, height, aspectRatio);
+      }
+    } : undefined;
+
+    const builtAt = performance.now();
     const chart = new ChartClass(ctx, {
       type: 'line',
+      platform,
       data: {
         datasets: datasets // All targets as separate datasets
       },
@@ -3225,12 +3253,16 @@ const apiBase = apiBaseProp ?? '';
         responsive: true,
         maintainAspectRatio: false,
         devicePixelRatio: window.devicePixelRatio || 1, // Explicitly set for high-DPI displays
-        // Chart.js entrance animation intentionally left at the library's
-        // default (~1 s ease-out) so the curves still draw in with the
-        // polish users expect. Search & render hot path is fast enough
-        // independently — the data is on the canvas before the animation
-        // fully resolves, and incremental updates keep using
-        // chart.update('none') so they remain instantaneous.
+        // x is epoch ms, sorted ascending (the server's order).
+        parsing: false,
+        normalized: true,
+        // A new chart is drawn once and revealed from left to right by the
+        // tcping-reveal CSS animation (global styles below). Chart.js's own
+        // entrance animation would redraw all 3 × 1440 points on every frame
+        // for a second, and merely setting it up costs tens of ms. It is
+        // switched back on right after the build, so the tooltip glides
+        // between points as before; updates use chart.update('none').
+        animation: false,
         plugins: {
           legend: {
             display: false
@@ -3390,11 +3422,16 @@ const apiBase = apiBaseProp ?? '';
         }
       }
     });
+    presize = null;
+    chart.options.animation = ChartClass.defaults.animation;
+    // The page's first chart runs Chart.js cold (not yet optimised by the JS
+    // engine) and takes about three times as long as later ones.
+    const buildMs = performance.now() - builtAt;
+    tcpingLastBuildMs = tcpingBuildCount++ === 0 ? buildMs / 3 : buildMs;
 
     // Final check if loading was cancelled before storing chart. A section
     // that has been collapsed (hidden) meanwhile gets no chart either: its
     // teardown already ran, so nothing would ever destroy this one.
-    const detailsSection = container.closest('.system-details');
     if ((loadingState && loadingState.cancelled) || !container.isConnected
         || (detailsSection && detailsSection.classList.contains('hidden'))) {
       // Destroy the chart we just created since loading was cancelled
@@ -3407,6 +3444,7 @@ const apiBase = apiBaseProp ?? '';
     }
 
     tcpingCharts.set(chartKey, { chart, target: 'all' });
+    if (sigAtFetch !== null) tcpingDataSignatures.set(systemId, sigAtFetch);
 
     // The summary for a selected target is computed from the chart's
     // datasets, which did not exist yet when the stats were calculated
@@ -3424,6 +3462,17 @@ const apiBase = apiBaseProp ?? '';
         loadingElement.style.display = 'none';
       }
       if (canvas) {
+        // A new chart draws in (tcping-reveal in the global styles); the same
+        // chart shown again later, after a skipped target's notice, only
+        // fades back in as before.
+        canvas.classList.add('tcping-new');
+        if (!canvas._tcpingRevealDone) {
+          canvas._tcpingRevealDone = (e) => {
+            if (e.animationName === 'tcping-reveal') canvas.classList.remove('tcping-new');
+          };
+          canvas.addEventListener('animationend', canvas._tcpingRevealDone);
+          canvas.addEventListener('animationcancel', canvas._tcpingRevealDone);
+        }
         canvas.classList.remove('opacity-0');
         
         // Hide "No data" state when chart is created
@@ -3712,6 +3761,8 @@ const apiBase = apiBaseProp ?? '';
         const isExpanding = detailsSection.classList.contains('hidden');
         
         if (isExpanding) {
+          // (a row whose TCPing card the admin hid has no history to show)
+          if (systemRow.querySelector('[data-tcping-chart-container]')) prefetchTCPingHistory(systemId);
           // IMPORTANT: Close all other expanded sections first to prevent CPU overload
           // Only keep one section expanded at a time
           const allExpandedSections = container.querySelectorAll('.system-details:not(.hidden)');
@@ -3768,6 +3819,14 @@ const apiBase = apiBaseProp ?? '';
           
           // Trigger reflow
           detailsSection.offsetHeight;
+          // Same layout pass: a chart created while the section is sliding
+          // open (0.3 s, see the transition below) takes this box size
+          // instead of measuring it mid-slide, see _updateTCPingChartImpl.
+          const tcpingCanvas = detailsSection.querySelector('[data-tcping-chart]');
+          if (tcpingCanvas && tcpingCanvas.parentElement) {
+            tcpingCanvas._presize = tcpingCanvas.parentElement.getBoundingClientRect();
+          }
+          detailsSection._slideEndsAt = performance.now() + 320;
           
           // Initialize TCPing tabs and start animation in parallel for better UX
           // Start tabs initialization (don't wait)
@@ -3838,6 +3897,45 @@ const apiBase = apiBaseProp ?? '';
       }
     };
     
+    // Start a collapsed row's history request before it is opened: when the
+    // mouse is pressed on it, or once the mouse has rested on it for a
+    // moment. A pointer that only passes over rows requests nothing, and
+    // neither does a finger (it may be starting to scroll).
+    const TCPING_HOVER_PREFETCH_MS = 150;
+    let hoverPrefetchTimer = 0;
+    let hoverPrefetchRow = null;
+    const collapsedRowId = (target) => {
+      if (!target || !target.closest || target.closest('button') || target.closest('.system-details')) return null;
+      const rowElement = target.closest('[data-system-id]');
+      const systemRow = rowElement && rowElement.closest('.system-row');
+      const details = systemRow && systemRow.querySelector('.system-details');
+      return details && details.classList.contains('hidden')
+        && systemRow.querySelector('[data-tcping-chart-container]') ? rowElement.dataset.systemId : null;
+    };
+    container.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      const id = collapsedRowId(e.target);
+      if (id) prefetchTCPingHistory(id);
+    }, { passive: true });
+    container.addEventListener('pointerover', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      const rowElement = e.target.closest && e.target.closest('[data-system-id]');
+      if (rowElement === hoverPrefetchRow) return;
+      clearTimeout(hoverPrefetchTimer);
+      hoverPrefetchRow = rowElement;
+      const target = e.target;
+      if (!collapsedRowId(target)) return;
+      // Checked again when it fires: the row may have been opened meanwhile.
+      hoverPrefetchTimer = setTimeout(() => {
+        const id = collapsedRowId(target);
+        if (id) prefetchTCPingHistory(id);
+      }, TCPING_HOVER_PREFETCH_MS);
+    }, { passive: true });
+    container.addEventListener('pointerleave', () => {
+      clearTimeout(hoverPrefetchTimer);
+      hoverPrefetchRow = null;
+    }, { passive: true });
+
     // Use a simple approach: handle both touchstart and click, but prevent double-trigger
     let lastTouchTime = 0;
     let lastTouchTarget = null;
@@ -4993,6 +5091,33 @@ const apiBase = apiBaseProp ?? '';
     }
     #monitor-root .cell-uptime,
     #monitor-root #system-table-header-row > :nth-child(2) { display: none !important; }
+  }
+
+  /* A new TCPing chart draws in from left to right: Chart.js renders it
+     once, and a soft-edged mask sweeps across the canvas while it rises
+     6 px into place (the rows' data-row-in easing), instead of Chart.js
+     redrawing all 3 × 1440 points on every frame of its own entrance. */
+  @keyframes tcping-reveal {
+    from {
+      -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 33.4%, transparent 40%, transparent 100%);
+              mask-image: linear-gradient(90deg, #000 0%, #000 33.4%, transparent 40%, transparent 100%);
+      -webkit-mask-size: 300% 100%; mask-size: 300% 100%;
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+      -webkit-mask-position: 100% 0; mask-position: 100% 0;
+      transform: translateY(6px);
+    }
+    to {
+      -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 33.4%, transparent 40%, transparent 100%);
+              mask-image: linear-gradient(90deg, #000 0%, #000 33.4%, transparent 40%, transparent 100%);
+      -webkit-mask-size: 300% 100%; mask-size: 300% 100%;
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+      -webkit-mask-position: 0 0; mask-position: 0 0;
+      transform: none;
+    }
+  }
+  [data-tcping-chart].tcping-new:not(.opacity-0) { animation: tcping-reveal 900ms cubic-bezier(0.16, 1, 0.3, 1); }
+  @media (prefers-reduced-motion: reduce) {
+    [data-tcping-chart].tcping-new:not(.opacity-0) { animation: none; }
   }
 
   /* TCPing target tabs — faster taps on mobile (no double-tap zoom delay). */

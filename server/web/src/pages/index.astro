@@ -3,6 +3,9 @@ import '../styles/global.css';
 import NavBar from '../components/NavBar.astro';
 import SystemTable from '../components/SystemTable.astro';
 import Footer from '../components/Footer.astro';
+// The TCPing chart's libraries ship with the site (see vendor/README.md).
+import chartJsUrl from '../../vendor/chart.js/chart.umd.js?url';
+import chartJsAdapterUrl from '../../vendor/chartjs-adapter-date-fns/chartjs-adapter-date-fns.bundle.min.js?url';
 
 // API base will be auto-detected by client-side script
 // Can be overridden by PUBLIC_API_BASE environment variable
@@ -69,8 +72,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
       }
     </style>
     <!-- Preload Chart.js for faster TCPing chart rendering -->
-    <link rel="preload" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" as="script" crossorigin="anonymous" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" />
-    <link rel="preload" href="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js" as="script" crossorigin="anonymous" integrity="sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws" />
+    <link rel="preload" href={chartJsUrl} as="script" crossorigin="anonymous" integrity="sha384-FcQlsUOd0TJjROrBxhJdUhXTUgNJQxTMcxZe6nHbaEfFL1zjQ+bq/uRoBQxb0KMo" />
+    <link rel="preload" href={chartJsAdapterUrl} as="script" crossorigin="anonymous" integrity="sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws" />
     <!-- Initialize language and theme before page render to prevent FOUC -->
     <script is:inline>
       (function() {
