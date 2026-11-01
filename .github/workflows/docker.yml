@@ -146,29 +146,30 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} turns the glass appearance into frosted glass and leaves gaps in the TCPing chart where samples are missing. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
+            v${{ steps.version.outputs.version }} adds a live summary beside the title, marks offline servers clearly, makes the first load calmer, and makes the text, the chart and the admin dialogs easier to read. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
 
             ### Highlights
 
-            - Web (glass appearance): frosted glass over a misty blue wallpaper. The graphite version read as brushed metal: a grey wallpaper with a diagonal sheen, and panes with a hard top highlight. Its pane blur never reached the wallpaper either, because the entrance animations isolated it. Now:
-              - the wallpaper is pale (dark: deep) with a few large, very soft spots of light in muted blue-grey, lavender-grey and mint-grey, also behind the panes;
-              - the navbar, the main cards and the login card are a milky translucent tint with a fine grain, a soft light edge and a soft shadow;
-              - the columns menu and the dialogs still blur what lies beneath them.
-            - Web (glass appearance): scrolling costs the same as the default theme. The panes need no blur over this wallpaper: measured, it changes the picture by under 0.4/255 on average and would make scrolled frames about 2.4 times as costly.
-            - Web (glass appearance): the footer text on the light wallpaper is darker, so the name passes 4.5:1. The phone's address bar takes the tone at the top of the new wallpaper (#ebeff4 light, #141925 dark).
-            - Web: the TCPing chart leaves a stretch without samples, such as a time the agent was offline, as a gap instead of drawing a straight line across it. Lost samples are still bridged and listed as "Timeout" in the tooltip. Charts without such a stretch are drawn exactly as before and just as fast.
+            - Web: beside "All Services" a live summary: how many servers, how many are online and, only when some are, how many are offline (in red). It counts the same list as the table and follows the language switch.
+            - Web: an offline server is marked by an "Offline" chip after its name. Its last known values stay, muted, and its bars turn grey, so a red bar always means high load. The chip comes and goes in place when a server drops out or returns.
+            - Web: the first load no longer trickles in. The rows rose one by one, 50 ms apart, so 131 rows took 7.5 s and a quick scroll found empty rows; now the table is complete in under a second. With reduced motion set in the system, the page, the rows and the dialogs appear without animation.
+            - Web: the page uses the system UI font of each platform (Segoe UI, SF, Roboto…). The CSS named Inter first, which the site never loads, so it only applied where Inter happened to be installed. The TCPing chart uses the page font too, and its axis labels are darker on the light theme (#737373; #a3a3a3 was 2.5:1).
+            - Web: the "Columns" button only offers sorting, so it reads "Sort".
+            - Web (phones and tablets): the TCPing chart's loading spinner, its "No data" and "unreachable" notices and the page's loading preview are centred again. They were left-aligned below 1024 px for a table that once scrolled sideways there; phones now show cards and tablets a narrower table, both fitting the screen.
+            - Web (admin): the settings dialog keeps Cancel and Save on screen while it scrolls, and its scrollbar is no longer hidden. The traffic totals read "入站 / 出站" in Chinese. Hints in dark dialogs are lighter (#a3a3a3; #737373 was 3.6:1).
+            - Web (glass appearance): the light spot at the top left is softer, so the navbar's edge shows over it.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format changed.
-            - Existing `metrics.db` files remain readable; the glass switch keeps its setting.
+            - Existing `metrics.db` files remain readable.
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: the glass appearance on the home, admin and login pages and in all eight admin dialogs; the grain and the wallpaper render alike in all three engines.
-            - Only the menu and the dialogs blur. The scrolling frame time equals the default theme's (17 ms median on the test machine). The address bar matches the shown theme and appearance (25 of 25 checks).
-            - The chart rule, drawn with the bundled Chart.js in all three engines: continuous data with single and prolonged lost samples is pixel-identical to v1.3.41, and a one-hour hole is left empty. A 24-hour, three-target chart without holes builds as fast as before (about 5 ms).
-            - Regression: the 40 functional chart checks, the share-link and admin views of a privacy-mode instance in each browser, and Chart.js unreachable or altered. The server code is unchanged from v1.3.34.
+            - Chromium, Firefox and WebKit, 57 checks each: the summary and the chips in both languages and themes, an empty instance, phone width; the offline rows and the name column; the first load with and without reduced motion; the chart labels and font across a theme switch; the settings dialog in the default and glass appearance, its buttons flush on its bottom edge at either end of the scroll; the traffic labels across a language switch.
+            - A server going offline and coming back with the page open: chip, colours, summary and column follow in place.
+            - The chart's loading spinner and the page's loading preview sit in the middle of their card from 390 to 1440 px, in all three engines.
+            - Regression: the 40 functional chart checks, the chart gap rule in all three engines, the share-link and admin views of a privacy-mode instance in each browser, the glass appearance on every page and dialog, and Chart.js unreachable or altered. The server code is unchanged from v1.3.34.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
