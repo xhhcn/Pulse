@@ -146,25 +146,29 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} lines up the admin rows on tablets and small laptops, makes the dark admin rows easier to read and polishes page loading. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
+            v${{ steps.version.outputs.version }} turns the glass appearance into frosted glass and leaves gaps in the TCPing chart where samples are missing. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
 
             ### Highlights
 
-            - Web (admin): from 1024 px the address column fits a full IPv6 address, so the address and traffic columns line up on every row. Between 1024 and 1279 px a long IPv6 address used to push the traffic totals onto the CPU logo; the logo now shows from 1280 px, where it has room. Phones and wide screens are unchanged.
-            - Web (admin, dark): a row's OS line, traffic totals and icon buttons use #a3a3a3 instead of #737373 (contrast 3.4:1 -> 7:1), like the IPv4/IPv6 labels beside them. Hover colours are unchanged.
-            - Web: the access check that covers the home and admin pages while they load ("Checking access..." / "Checking authentication...") follows the page language (正在检查访问权限... / 正在验证登录状态...); it was always in English.
-            - Web (glass appearance): that check is now transparent over the graphite wallpaper. It used to show the default theme's #fafafa / #151515 and then fade to the wallpaper, so in light every load started bright and dimmed.
-            - Web: the footer's GitHub link has a 24 px touch target around its 14 px mark; nothing moves.
+            - Web (glass appearance): frosted glass over a misty blue wallpaper. The graphite version read as brushed metal: a grey wallpaper with a diagonal sheen, and panes with a hard top highlight. Its pane blur never reached the wallpaper either, because the entrance animations isolated it. Now:
+              - the wallpaper is pale (dark: deep) with a few large, very soft spots of light in muted blue-grey, lavender-grey and mint-grey, also behind the panes;
+              - the navbar, the main cards and the login card are a milky translucent tint with a fine grain, a soft light edge and a soft shadow;
+              - the columns menu and the dialogs still blur what lies beneath them.
+            - Web (glass appearance): scrolling costs the same as the default theme. The panes need no blur over this wallpaper: measured, it changes the picture by under 0.4/255 on average and would make scrolled frames about 2.4 times as costly.
+            - Web (glass appearance): the footer text on the light wallpaper is darker, so the name passes 4.5:1. The phone's address bar takes the tone at the top of the new wallpaper (#ebeff4 light, #141925 dark).
+            - Web: the TCPing chart leaves a stretch without samples, such as a time the agent was offline, as a gap instead of drawing a straight line across it. Lost samples are still bridged and listed as "Timeout" in the tooltip. Charts without such a stretch are drawn exactly as before and just as fast.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format changed.
-            - Existing `metrics.db` files remain readable.
+            - Existing `metrics.db` files remain readable; the glass switch keeps its setting.
 
             ### Verified
 
-            - Chromium, Firefox and WebKit, on a copy of a 131-server production dataset: every admin row has one address and one traffic column position at 1024, 1152, 1279, 1280, 1366 and 1920 px, with no logo under the text; the logo shows from 1280 px; the dark rows' colours; the access-check text in Chinese and English on both pages; in glass mode the wallpaper pixel is the same while the check is up and after it; the GitHub mark and the footer at exactly the v1.3.40 position (64 of 64 checks in each browser, together with the Pulse-Hotaru checks of this round).
-            - Regression: glass mode on the three pages and in all eight admin dialogs (30 of 30 in each browser); the theme toggle (6 of 6 in each browser); the browser's colour scheme matches the shown theme in 18 of 18 combinations; the v1.3.40 address-bar and login-link checks (25 of 25); the share-link and admin views of a privacy-mode instance (13 of 13 in each browser); the 40 functional chart checks. The server code is unchanged from v1.3.34.
+            - Chromium, Firefox and WebKit: the glass appearance on the home, admin and login pages and in all eight admin dialogs; the grain and the wallpaper render alike in all three engines.
+            - Only the menu and the dialogs blur. The scrolling frame time equals the default theme's (17 ms median on the test machine). The address bar matches the shown theme and appearance (25 of 25 checks).
+            - The chart rule, drawn with the bundled Chart.js in all three engines: continuous data with single and prolonged lost samples is pixel-identical to v1.3.41, and a one-hour hole is left empty. A 24-hour, three-target chart without holes builds as fast as before (about 5 ms).
+            - Regression: the 40 functional chart checks, the share-link and admin views of a privacy-mode instance in each browser, and Chart.js unreachable or altered. The server code is unchanged from v1.3.34.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
