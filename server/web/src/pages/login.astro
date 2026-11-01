@@ -105,15 +105,24 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
           html.classList.remove('dark');
         }
         // Browser-drawn parts (form controls, autofill, the phone's address
-        // bar) follow the page's theme rather than the OS setting.
+        // bar) follow the page's theme rather than the OS setting. With the
+        // glass appearance on, the address bar takes the wallpaper's tone
+        // instead (called again when the glass class arrives and on a theme
+        // switch).
         html.style.colorScheme = theme;
         document.querySelectorAll('meta[name="color-scheme"]').forEach(function (m) {
           m.setAttribute('content', theme);
         });
-        document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
-          m.removeAttribute('media');
-          m.setAttribute('content', theme === 'dark' ? '#151515' : '#fafafa');
-        });
+        window.__pulseSyncThemeColor = function () {
+          var dark = html.classList.contains('dark');
+          var glass = html.classList.contains('glass-enabled');
+          var colour = glass ? (dark ? '#242426' : '#eaebec') : (dark ? '#151515' : '#fafafa');
+          document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+            m.removeAttribute('media');
+            m.setAttribute('content', colour);
+          });
+        };
+        window.__pulseSyncThemeColor();
         
         // Apply theme to body when it's available
         function applyThemeToBody() {
@@ -185,6 +194,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
             // Apply glassmorphism effect immediately (before render)
             if (config.show_glass) {
               document.documentElement.classList.add('glass-enabled');
+              if (window.__pulseSyncThemeColor) window.__pulseSyncThemeColor();
             }
             
             // Inject CSS if exists

@@ -262,10 +262,8 @@ const { isAdmin = false } = Astro.props;
         document.querySelectorAll('meta[name="color-scheme"]').forEach((m) => {
           m.setAttribute('content', theme);
         });
-        document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
-          m.removeAttribute('media');
-          m.setAttribute('content', theme === 'dark' ? '#151515' : '#fafafa');
-        });
+        // The page head defines this (the glass appearance changes the colour).
+        if (window.__pulseSyncThemeColor) window.__pulseSyncThemeColor();
       };
 
       // Check if View Transitions API is supported for smooth cross-fade effect
