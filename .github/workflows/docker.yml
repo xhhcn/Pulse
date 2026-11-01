@@ -146,12 +146,15 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} matches the phone's address bar to the glass appearance and gives the login page a way back to the dashboard. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
+            v${{ steps.version.outputs.version }} lines up the admin rows on tablets and small laptops, makes the dark admin rows easier to read and polishes page loading. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
 
             ### Highlights
 
-            - Web: with the glass appearance on, the phone's address bar (the page's theme colour) takes the tone of the top of the graphite wallpaper, #eaebec in light and #242426 in dark. It used to keep the default theme's #fafafa / #151515, a brighter (light) or darker (dark) band above the page. It follows a theme switch; with the glass appearance off nothing changes.
-            - Web: the login page links back to the dashboard ("返回首页" / "Back to dashboard") under the login card. The link is shown only while the dashboard is public: in privacy mode the dashboard would just send the visitor back to the login page.
+            - Web (admin): from 1024 px the address column fits a full IPv6 address, so the address and traffic columns line up on every row. Between 1024 and 1279 px a long IPv6 address used to push the traffic totals onto the CPU logo; the logo now shows from 1280 px, where it has room. Phones and wide screens are unchanged.
+            - Web (admin, dark): a row's OS line, traffic totals and icon buttons use #a3a3a3 instead of #737373 (contrast 3.4:1 -> 7:1), like the IPv4/IPv6 labels beside them. Hover colours are unchanged.
+            - Web: the access check that covers the home and admin pages while they load ("Checking access..." / "Checking authentication...") follows the page language (正在检查访问权限... / 正在验证登录状态...); it was always in English.
+            - Web (glass appearance): that check is now transparent over the graphite wallpaper. It used to show the default theme's #fafafa / #151515 and then fade to the wallpaper, so in light every load started bright and dimmed.
+            - Web: the footer's GitHub link has a 24 px touch target around its 14 px mark; nothing moves.
 
             ### Compatibility
 
@@ -160,8 +163,8 @@ jobs:
 
             ### Verified
 
-            - Chromium, Firefox and WebKit, on a copy of a 131-server production dataset: the address-bar colour on the home, admin and login pages, light and dark, with the glass appearance on and off, before and after a theme switch; the login link in Chinese and English, reachable with Tab and showing the focus ring, opening the dashboard, and hidden in privacy mode (25 of 25 checks in each browser).
-            - Regression: glass mode on the three pages and in all eight admin dialogs (30 of 30); the browser's colour scheme matches the shown theme in 18 of 18 combinations of system setting, chosen theme and page; the 40 functional chart checks. The server code is unchanged from v1.3.34.
+            - Chromium, Firefox and WebKit, on a copy of a 131-server production dataset: every admin row has one address and one traffic column position at 1024, 1152, 1279, 1280, 1366 and 1920 px, with no logo under the text; the logo shows from 1280 px; the dark rows' colours; the access-check text in Chinese and English on both pages; in glass mode the wallpaper pixel is the same while the check is up and after it; the GitHub mark and the footer at exactly the v1.3.40 position (64 of 64 checks in each browser, together with the Pulse-Hotaru checks of this round).
+            - Regression: glass mode on the three pages and in all eight admin dialogs (30 of 30 in each browser); the theme toggle (6 of 6 in each browser); the browser's colour scheme matches the shown theme in 18 of 18 combinations; the v1.3.40 address-bar and login-link checks (25 of 25); the share-link and admin views of a privacy-mode instance (13 of 13 in each browser); the 40 functional chart checks. The server code is unchanged from v1.3.34.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
