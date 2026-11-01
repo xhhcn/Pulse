@@ -27,12 +27,12 @@ import Icon from './Icon.astro';
     <Icon name="hard-drive" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
     <span data-translate="disk">Disk</span>
   </div>
-  <div class="h-5 flex items-center gap-1">
+  <!-- Download and upload speed added together, said in the tooltip. No
+       arrow icon after the label: ⇅ read as a sort control on a header that
+       does not sort. -->
+  <div class="h-5 flex items-center gap-1" data-header-title="netTitle" title="Download + upload speed">
     <Icon name="network" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-    <div class="flex items-center gap-0.5">
-      <span data-translate="net">Net</span>
-      <Icon name="arrow-up-down" size={12} class="w-3 h-3 sm:w-3 sm:h-3" />
-    </div>
+    <span data-translate="net">Net</span>
   </div>
   <div class="h-5 flex items-center justify-center gap-1">
     <Icon name="computer" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
@@ -51,6 +51,7 @@ import Icon from './Icon.astro';
     'memory': { en: 'Memory', zh: '内存' },
     'disk': { en: 'Disk', zh: '磁盘' },
     'net': { en: 'Net', zh: '网络' },
+    'netTitle': { en: 'Download + upload speed', zh: '下行 + 上行速度' },
     'os': { en: 'OS', zh: '系统' },
   };
   
@@ -61,6 +62,10 @@ import Icon from './Icon.astro';
       if (key && translations[key]) {
         el.textContent = translations[key][lang];
       }
+    });
+    document.querySelectorAll('[data-header-title]').forEach(el => {
+      const key = el.getAttribute('data-header-title');
+      if (key && translations[key]) el.setAttribute('title', translations[key][lang]);
     });
   }
   

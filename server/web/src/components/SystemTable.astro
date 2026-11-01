@@ -1347,6 +1347,35 @@ const apiBase = apiBaseProp ?? '';
   function axisLabelColor(isDarkMode) {
     return isDarkMode ? '#a3a3a3' : '#737373';
   }
+  // Horizontal grid hairlines, quieter than the lines in either theme (one
+  // rgba(64, 64, 64, .3) for both was mid-grey on the light card).
+  function gridLineColor(isDarkMode) {
+    return isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
+  }
+
+  // Time-axis ticks on round steps (5 min … 12 h, counted from local
+  // midnight), as many as the axis width holds, at most 6. Chart.js's own
+  // pick thins its unit ticks by the factors of their count: 25 hourly ticks
+  // gave a label every 5 hours on a phone (04:00, 09:00, 14:00…), 295 minute
+  // ticks one every 59 minutes. Spans too short for two round ticks keep
+  // Chart.js's ticks.
+  const TIME_TICK_STEPS_MIN = [5, 10, 15, 30, 60, 120, 180, 240, 360, 480, 720];
+  function roundTimeTicks(scale) {
+    const { min, max } = scale;
+    if (!(max > min)) return;
+    const fit = Math.max(2, Math.min(6, Math.floor(scale.width / 64)));
+    const spanMin = (max - min) / 60000;
+    const step = TIME_TICK_STEPS_MIN.find((s) => Math.floor(spanMin / s) + 1 <= fit);
+    if (!step) return;
+    const first = new Date(min);
+    first.setSeconds(0, 0);
+    const past = (first.getHours() * 60 + first.getMinutes()) % step;
+    let t = first.getTime() + (past ? (step - past) * 60000 : 0);
+    if (t < min) t += step * 60000;
+    const ticks = [];
+    for (; t <= max; t += step * 60000) ticks.push({ value: t });
+    if (ticks.length >= 2) scale.ticks = ticks;
+  }
 
   // Function to update tooltip and axis label colours for all charts
   function updateChartTooltipStyles(theme) {
@@ -1367,10 +1396,12 @@ const apiBase = apiBaseProp ?? '';
         chart.options.plugins.tooltip.backgroundColor = tooltipBg;
         chart.options.plugins.tooltip.titleColor = tooltipTextColor;
         chart.options.plugins.tooltip.bodyColor = tooltipTextColor;
+        chart.options.plugins.tooltip.footerColor = tooltipTextColor;
         chart.options.plugins.tooltip.borderColor = tooltipBorderColor;
         if (chart.options.scales) {
           if (chart.options.scales.x && chart.options.scales.x.ticks) chart.options.scales.x.ticks.color = axisLabelColor(isDarkMode);
           if (chart.options.scales.y && chart.options.scales.y.ticks) chart.options.scales.y.ticks.color = axisLabelColor(isDarkMode);
+          if (chart.options.scales.y && chart.options.scales.y.grid) chart.options.scales.y.grid.color = gridLineColor(isDarkMode);
         }
         
         try {
@@ -2328,9 +2359,9 @@ const apiBase = apiBaseProp ?? '';
   }
 
   // Line colour of each target, by its position in the config: every line
-  // has its own while no target is selected; the selected one is drawn green
-  // and the rest grey. Each tab carries a dot of its line's colour, so the
-  // tab strip doubles as the chart's legend.
+  // has its own while no target is selected; a selected target keeps its
+  // colour and the rest turn grey. Each tab carries a dot of its line's
+  // colour, so the tab strip doubles as the chart's legend.
   const TCPING_LINE_COLORS = [
     'rgb(34, 197, 94)',    // emerald-500 (green)
     'rgb(59, 130, 246)',  // blue-500
@@ -2341,16 +2372,27 @@ const apiBase = apiBaseProp ?? '';
     'rgb(132, 204, 22)',  // lime-500
     'rgb(245, 158, 11)',  // amber-500
   ];
-  const TCPING_SELECTED_COLOR = 'rgb(34, 197, 94)';
   const TCPING_UNSELECTED_COLOR = 'rgba(163, 163, 163, 0.5)';
+  const tcpingLineColor = (index) => TCPING_LINE_COLORS[index % TCPING_LINE_COLORS.length];
+  // Line width by role ('all' targets shown, the 'selected' one, the grey
+  // 'other' ones), as a scriptable option: on a chart narrower than 600 px
+  // several 2 px lines ran together, so they are drawn thinner there.
+  function tcpingLineWidth(role) {
+    return (ctx) => {
+      const narrow = ctx.chart.width < 600 && ctx.chart.data.datasets.length > 1;
+      if (role === 'other') return narrow ? 1 : 1.5;
+      if (role === 'selected') return narrow ? 1.5 : 2;
+      return narrow ? 1.25 : 2;
+    };
+  }
 
   function paintTCPingTabDots(tabsContainer, selectedTarget) {
     tabsContainer.querySelectorAll('button').forEach((tab, index) => {
       const dot = tab.querySelector('[data-tcping-dot]');
       if (!dot) return;
-      dot.style.backgroundColor = selectedTarget === null
-        ? TCPING_LINE_COLORS[index % TCPING_LINE_COLORS.length]
-        : (tab.dataset.target === selectedTarget ? TCPING_SELECTED_COLOR : TCPING_UNSELECTED_COLOR);
+      dot.style.backgroundColor = selectedTarget === null || tab.dataset.target === selectedTarget
+        ? tcpingLineColor(index)
+        : TCPING_UNSELECTED_COLOR;
     });
   }
 
@@ -2364,15 +2406,19 @@ const apiBase = apiBaseProp ?? '';
   // change to a tab's measured width could push it onto a second line and
   // shift every row below. A target flipping between skipped and measured
   // therefore repaints in place and never moves anything.
-  const TCPING_TAB_BASE = 'px-3 py-1 text-xs font-medium rounded transition-colors';
-  const TCPING_TAB_ACTIVE = 'bg-[#404040]/50 dark:bg-[#404040]/50 text-[#151515] dark:text-[#f5f5f5]';
-  const TCPING_TAB_INACTIVE = 'bg-transparent text-[#525252] dark:text-[#a3a3a3] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
+  // Every tab has a hairline border, so the strip reads as a row of
+  // controls rather than a static legend; the selected one gets a light tint
+  // and a firmer border. Same 1 px border in every state: the box never
+  // changes size.
+  const TCPING_TAB_BASE = 'px-3 py-1 text-xs font-medium rounded-md border transition-colors';
+  const TCPING_TAB_ACTIVE = 'border-black/20 dark:border-white/20 bg-black/[0.06] dark:bg-white/10 text-[#151515] dark:text-[#f5f5f5]';
+  const TCPING_TAB_INACTIVE = 'border-black/10 dark:border-white/10 bg-transparent text-[#525252] dark:text-[#a3a3a3] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]';
   // A skipped target is de-emphasised with an explicit muted grey rather than
   // `opacity-50`. Blending the normal colours to 50% measures 2.38:1 in light
   // mode (#525252 over the card's #ffffff) and 2.73:1 in dark (#a3a3a3 over
   // #151515) by the WCAG formula — far below the 4.5:1 AA floor, and this is
   // 12 px text. The greys below measure 5.33:1 / 5.29:1 on the card
-  // background and 4.83:1 / 5.10:1 on the selected tab's tinted background.
+  // background and 11.1:1 / 4.96:1 on the selected tab's tinted background.
   // Only the colour changes: padding, font-size and weight are untouched, so
   // the tab keeps exactly the same box and a target flipping between skipped
   // and measured still repaints in place without moving the row.
@@ -2381,8 +2427,8 @@ const apiBase = apiBaseProp ?? '';
   // appended after them — two competing `text-*` utilities in one class list
   // resolve by stylesheet order, not by the order they appear in the
   // attribute, so layering would be a coin flip.
-  const TCPING_TAB_SKIPPED_ACTIVE = 'bg-[#404040]/50 dark:bg-[#404040]/50 text-[#333333] dark:text-[#9a9a9a]';
-  const TCPING_TAB_SKIPPED_INACTIVE = 'bg-transparent text-[#6b6b6b] dark:text-[#8a8a8a] hover:bg-[#404040]/30 dark:hover:bg-[#404040]/30';
+  const TCPING_TAB_SKIPPED_ACTIVE = 'border-black/20 dark:border-white/20 bg-black/[0.06] dark:bg-white/10 text-[#333333] dark:text-[#9a9a9a]';
+  const TCPING_TAB_SKIPPED_INACTIVE = 'border-black/10 dark:border-white/10 bg-transparent text-[#6b6b6b] dark:text-[#8a8a8a] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]';
 
   function applyTCPingTabAppearance(tab, isActive, isSkipped) {
     const variant = isSkipped
@@ -2753,9 +2799,6 @@ const apiBase = apiBaseProp ?? '';
     const activeTargetInfo = tcpingActiveTargets.get(systemId);
     const selectedTarget = activeTargetInfo ? activeTargetInfo.target : null; // null means no target selected (all colored)
     
-    // Generate distinct colors for each target when no target is selected
-    const defaultColors = TCPING_LINE_COLORS;
-    
     // Create datasets for each target
     const datasets = [];
     let hasAnyData = false;
@@ -2817,24 +2860,17 @@ const apiBase = apiBaseProp ?? '';
       // If no target is selected (selectedTarget === null), all lines have distinct colors
       // If a target is selected, only that target is colored, others are gray
       const isSelected = selectedTarget !== null && targetConfig.address === selectedTarget;
-      let borderColor, borderWidth;
-      if (selectedTarget === null) {
-        // No target selected: all lines have distinct colors
-        borderColor = defaultColors[index % defaultColors.length];
-        borderWidth = 2;
-      } else {
-        // Target selected: only selected target is colored, others are gray
-        borderColor = isSelected ? TCPING_SELECTED_COLOR : TCPING_UNSELECTED_COLOR;
-        borderWidth = isSelected ? 2 : 1.5;
-      }
+      const role = selectedTarget === null ? 'all' : (isSelected ? 'selected' : 'other');
+      const borderColor = role === 'other' ? TCPING_UNSELECTED_COLOR : tcpingLineColor(index);
       
       datasets.push({
         // The tooltip adds the unit to each value ("CU: 231.67 ms").
         label: targetConfig.name || targetConfig.address,
         data: chartData,
         borderColor: borderColor,
-        backgroundColor: selectedTarget === null ? `${borderColor}20` : 'rgba(34, 197, 94, 0.1)', // Semi-transparent version of border color when all colored
-        borderWidth: borderWidth,
+        // Not filled: this is the tooltip's colour dot.
+        backgroundColor: borderColor,
+        borderWidth: tcpingLineWidth(role),
         fill: false,
         tension: 0.1,
         spanGaps: true,
@@ -3258,7 +3294,7 @@ const apiBase = apiBaseProp ?? '';
     }
     const tooltipBg = isDarkMode ? 'rgba(21, 21, 21, 0.95)' : 'rgba(250, 250, 250, 0.95)';
     const tooltipTextColor = isDarkMode ? '#f5f5f5' : '#262626';
-    const tooltipBorderColor = isDarkMode ? '#404040' : '#a3a3a3';
+    const tooltipBorderColor = isDarkMode ? '#404040' : '#d4d4d4';
     
     // Register crosshair plugin if not already registered
     // Use a global variable to track if plugin is registered
@@ -3358,7 +3394,18 @@ const apiBase = apiBaseProp ?? '';
             bodyFont: {
               size: 11
             },
-            displayColors: false,
+            // Each line starts with its target's colour dot, as on the tabs.
+            displayColors: true,
+            usePointStyle: true,
+            boxWidth: 6,
+            boxHeight: 6,
+            boxPadding: 4,
+            footerColor: tooltipTextColor,
+            footerFont: {
+              size: 11,
+              weight: 'normal'
+            },
+            footerMarginTop: 4,
             filter: function(tooltipItem) {
               // Get active target for this system
               const systemId = canvas.dataset.tcpingChart;
@@ -3375,6 +3422,8 @@ const apiBase = apiBaseProp ?? '';
               return dataset.targetAddress === selectedTarget;
             },
             callbacks: {
+              labelColor: (item) => ({ borderColor: item.dataset.borderColor, backgroundColor: item.dataset.borderColor }),
+              labelPointStyle: () => ({ pointStyle: 'circle', rotation: 0 }),
               title: function(context) {
                 if (context.length > 0 && context[0].label) {
                   return context[0].label;
@@ -3430,8 +3479,9 @@ const apiBase = apiBaseProp ?? '';
               // A target that timed out in this minute has no point here:
               // Chart.js leaves empty values out when it collects the tooltip
               // items, so the target was simply missing from the list. Name
-              // it after the measured ones.
-              afterBody: function(items) {
+              // it below the measured ones (in the footer, which has no
+              // colour dots to line up with).
+              footer: function(items) {
                 if (!items.length) return [];
                 const chart = items[0].chart;
                 const x = items[0].parsed.x;
@@ -3492,7 +3542,8 @@ const apiBase = apiBaseProp ?? '';
               display: false, // Hide vertical grid lines (only show horizontal)
               drawOnChartArea: false
             },
-            bounds: 'ticks' // Use 'ticks' instead of 'data' to ensure proper tooltip positioning
+            bounds: 'ticks', // Use 'ticks' instead of 'data' to ensure proper tooltip positioning
+            afterBuildTicks: roundTimeTicks
           },
           y: {
             beginAtZero: true,
@@ -3508,7 +3559,7 @@ const apiBase = apiBaseProp ?? '';
               maxTicksLimit: 6 // Limit to 6 ticks to make grid lines sparser
             },
             grid: {
-              color: 'rgba(64, 64, 64, 0.3)',
+              color: gridLineColor(isDarkMode),
               display: true, // Show horizontal grid lines only
               // Make grid lines sparser by using stepSize
               drawOnChartArea: true
@@ -3752,30 +3803,14 @@ const apiBase = apiBaseProp ?? '';
     const config = tcpingConfigs.get(systemId);
     if (!config || !config.targets) return;
     
-    // Generate distinct colors for each target when no target is selected
-    const defaultColors = TCPING_LINE_COLORS;
-    
-    // Update colors for each dataset
+    // Every line in its own colour, or the selected one in its colour and
+    // the others grey.
     chart.data.datasets.forEach((dataset, index) => {
-      const targetAddress = dataset.targetAddress;
       const targetIndex = dataset.targetIndex !== undefined ? dataset.targetIndex : index;
-      
-      if (selectedTarget === null) {
-        // No target selected: all lines have distinct colors
-        dataset.borderColor = defaultColors[targetIndex % defaultColors.length];
-        dataset.borderWidth = 2;
-        dataset.backgroundColor = `${defaultColors[targetIndex % defaultColors.length]}20`;
-      } else if (targetAddress === selectedTarget) {
-        // Selected target: emerald-500
-        dataset.borderColor = TCPING_SELECTED_COLOR;
-        dataset.borderWidth = 2;
-        dataset.backgroundColor = 'rgba(34, 197, 94, 0.1)';
-      } else {
-        // Other targets: gray color
-        dataset.borderColor = TCPING_UNSELECTED_COLOR;
-        dataset.borderWidth = 1.5;
-        dataset.backgroundColor = 'rgba(163, 163, 163, 0.05)';
-      }
+      const role = selectedTarget === null ? 'all' : (dataset.targetAddress === selectedTarget ? 'selected' : 'other');
+      dataset.borderColor = role === 'other' ? TCPING_UNSELECTED_COLOR : tcpingLineColor(targetIndex);
+      dataset.backgroundColor = dataset.borderColor;
+      dataset.borderWidth = tcpingLineWidth(role);
     });
     
     chart.update('none');
