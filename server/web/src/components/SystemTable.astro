@@ -710,16 +710,16 @@ const apiBase = apiBaseProp ?? '';
     
     // Create a temporary hidden span to measure text width accurately
     const tempSpan = document.createElement('span');
-    // Match the global body font stack (global.css line 12) so measurements
-    // reflect what Inter actually renders. Using a generic sans-serif here
-    // would cause the measurement to silently drift from the real row width
+    // Measure in the body's own font (read from the page) so the widths
+    // match what the rows render. A generic sans-serif here would make the
+    // measurement silently drift from the real row width
     // (different glyph metrics → first column too wide or too narrow → the
     // very column-jitter we went to great lengths to eliminate).
     tempSpan.style.cssText = `
       position: absolute;
       visibility: hidden;
       white-space: nowrap;
-      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: ${getComputedStyle(document.body).fontFamily};
       font-size: 12px;
       font-weight: 500;
       letter-spacing: normal;
@@ -731,7 +731,17 @@ const apiBase = apiBaseProp ?? '';
     }
     
     document.body.appendChild(tempSpan);
-    
+
+    // An offline row also carries the "离线 / Offline" chip after its name:
+    // its 10 px semibold label plus 12 px of padding and the 4 px gap.
+    const nameFontSize = tempSpan.style.fontSize;
+    tempSpan.style.fontSize = '10px';
+    tempSpan.style.fontWeight = '600';
+    tempSpan.textContent = translations.offlineChip[getCurrentLanguage()];
+    const chipWidth = tempSpan.offsetWidth + 16;
+    tempSpan.style.fontSize = nameFontSize;
+    tempSpan.style.fontWeight = '500';
+
     // Measure each server name
     items.forEach(item => {
       const name = item.name || 'unknown';
@@ -745,7 +755,7 @@ const apiBase = apiBaseProp ?? '';
       // - Copy button: ~14px (w-2.5 sm:w-3)
       // - Extra buffer for font rendering variations: ~16px
       const uiElementsWidth = isSmallScreen ? 44 : 50; // Mobile: 44px, Desktop: 50px
-      const estimatedCellWidth = textWidth + uiElementsWidth;
+      const estimatedCellWidth = textWidth + uiElementsWidth + (item.alert ? chipWidth : 0);
       maxWidth = Math.max(maxWidth, estimatedCellWidth);
     });
     
@@ -789,8 +799,12 @@ const apiBase = apiBaseProp ?? '';
   }
 
   // Get color class based on value threshold
+  // An offline server keeps its last known values, in grey: red means high
+  // load only.
+  const OFFLINE_BAR = 'bg-[#a3a3a3] dark:bg-[#525252]';
+  const offlineChip = () => `<span class="offline-chip shrink-0 rounded-full px-1.5 text-[10px] font-semibold leading-4 bg-red-500/10 text-red-700 dark:bg-red-400/15 dark:text-red-300" data-translate-detail="offlineChip">${translations.offlineChip[getCurrentLanguage()]}</span>`;
   const getProgressColor = (value, isOffline = false) => {
-    if (isOffline) return 'bg-red-500';
+    if (isOffline) return OFFLINE_BAR;
     if (value >= 90) return 'bg-red-500';
     if (value >= 80) return 'bg-orange-500';
     if (value >= 70) return 'bg-amber-500';
@@ -949,11 +963,11 @@ const apiBase = apiBaseProp ?? '';
     const safeName = escapeHtml(item.name || 'unknown');
     const safeNameAttr = escapeHtmlAttr(item.name || 'unknown');
     return `
-    <div class="system-row" data-system-id="${safeId}">
+    <div class="system-row${isOffline ? ' is-offline' : ''}" data-system-id="${safeId}">
       <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}" tabindex="0" aria-expanded="false" style="grid-template-columns: var(--first-col-width, 100px) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-red-400' : 'bg-emerald-400'} shrink-0"></span>
-          <span class="row-name text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>
+          <span class="row-name text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>${isOffline ? offlineChip() : ''}
           <button class="copy-btn text-[#525252] dark:text-[#737373] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
@@ -1257,6 +1271,11 @@ const apiBase = apiBaseProp ?? '';
     'notApplicable': { en: 'N/A', zh: '不适用' },
     // Tooltip line of a target whose probe failed at the hovered time.
     'tcpingTimeout': { en: 'Timeout', zh: '超时' },
+    // Offline row chip and the summary beside the title.
+    'offlineChip': { en: 'Offline', zh: '离线' },
+    'summaryTotal': { en: 'servers', zh: '台' },
+    'summaryOnline': { en: 'online', zh: '在线' },
+    'summaryOffline': { en: 'offline', zh: '离线' },
   };
 
   // [title, hint] of the empty table: no services at all / none match the filter.
@@ -1266,8 +1285,12 @@ const apiBase = apiBaseProp ?? '';
     return getLanguage();
   }
 
+  // Counts for the summary beside the title (renderSystemsSummary).
+  let systemsSummary = null;
+
   function updateTranslations() {
     const lang = getCurrentLanguage();
+    renderSystemsSummary();
     
     // Update empty state - fix null check
     if (body) {
@@ -1320,7 +1343,12 @@ const apiBase = apiBaseProp ?? '';
     updateChartTooltipStyles(theme);
   });
   
-  // Function to update tooltip styles for all charts
+  // Axis labels: #a3a3a3 was 2.5:1 on the light chart card.
+  function axisLabelColor(isDarkMode) {
+    return isDarkMode ? '#a3a3a3' : '#737373';
+  }
+
+  // Function to update tooltip and axis label colours for all charts
   function updateChartTooltipStyles(theme) {
     const isDarkMode = theme === 'dark';
     const tooltipBg = isDarkMode ? 'rgba(21, 21, 21, 0.95)' : 'rgba(250, 250, 250, 0.95)';
@@ -1340,6 +1368,10 @@ const apiBase = apiBaseProp ?? '';
         chart.options.plugins.tooltip.titleColor = tooltipTextColor;
         chart.options.plugins.tooltip.bodyColor = tooltipTextColor;
         chart.options.plugins.tooltip.borderColor = tooltipBorderColor;
+        if (chart.options.scales) {
+          if (chart.options.scales.x && chart.options.scales.x.ticks) chart.options.scales.x.ticks.color = axisLabelColor(isDarkMode);
+          if (chart.options.scales.y && chart.options.scales.y.ticks) chart.options.scales.y.ticks.color = axisLabelColor(isDarkMode);
+        }
         
         try {
           chart.update('none'); // Update without animation
@@ -1543,6 +1575,17 @@ const apiBase = apiBaseProp ?? '';
           // Preserve responsive classes: h-1.5 w-1.5 sm:h-2 sm:w-2
           statusDot.className = `h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${item.alert ? 'bg-red-400' : 'bg-emerald-400'} shrink-0`;
         }
+        const rowEl = systemCell.closest('.system-row');
+        if (rowEl) rowEl.classList.toggle('is-offline', !!item.alert);
+        const chip = systemCell.querySelector('.offline-chip');
+        if (item.alert && !chip) {
+          const nameSpan = systemCell.querySelector('.row-name');
+          if (nameSpan) nameSpan.insertAdjacentHTML('afterend', offlineChip());
+        } else if (!item.alert && chip) {
+          chip.remove();
+        }
+        // The chip widens the name cell (the column only ever grows).
+        if (item.alert) recalculateColumnWidthFromCurrentData();
       }
       if (shouldUpdateAll || oldItemNormalized.name !== newItemNormalized.name) {
         // Use font-medium to match the name span (which has text-[10px] sm:text-xs)
@@ -1603,7 +1646,7 @@ const apiBase = apiBaseProp ?? '';
     const cpuChanged = Math.abs(oldItemNormalized.cpu - newItemNormalized.cpu) >= 0.1;
     // Helper function for dynamic color updates (same logic as getProgressColor)
     const getDynamicProgressColor = (value, isOffline = false) => {
-      if (isOffline) return 'bg-red-500';
+      if (isOffline) return OFFLINE_BAR;
       if (value >= 90) return 'bg-red-500';
       if (value >= 80) return 'bg-orange-500';
       if (value >= 70) return 'bg-amber-500';
@@ -3207,6 +3250,12 @@ const apiBase = apiBaseProp ?? '';
     
     // Detect current theme for tooltip styling
     const isDarkMode = document.documentElement.classList.contains('dark');
+    // Chart text in the page's font (Chart.js would use its own Helvetica /
+    // Arial stack next to the system font of the rest of the card).
+    if (window.Chart && !window.__pulseChartFont) {
+      window.Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+      window.__pulseChartFont = true;
+    }
     const tooltipBg = isDarkMode ? 'rgba(21, 21, 21, 0.95)' : 'rgba(250, 250, 250, 0.95)';
     const tooltipTextColor = isDarkMode ? '#f5f5f5' : '#262626';
     const tooltipBorderColor = isDarkMode ? '#404040' : '#a3a3a3';
@@ -3429,7 +3478,7 @@ const apiBase = apiBaseProp ?? '';
               tooltipFormat: 'yyyy-MM-dd HH:mm:ss' // Tooltip format with date and seconds
             },
             ticks: {
-              color: '#a3a3a3',
+              color: axisLabelColor(isDarkMode),
               font: {
                 size: 10
               },
@@ -3448,7 +3497,7 @@ const apiBase = apiBaseProp ?? '';
           y: {
             beginAtZero: true,
             ticks: {
-              color: '#a3a3a3',
+              color: axisLabelColor(isDarkMode),
               font: {
                 size: 10
               },
@@ -4197,16 +4246,22 @@ const apiBase = apiBaseProp ?? '';
       const systemRows = body.querySelectorAll('.system-row');
       if (!staggerAnimationPlayed) {
         staggerAnimationPlayed = true;
-        systemRows.forEach((row, index) => {
+        // The first screen rises row by row; later rows arrive with its last
+        // one instead of trickling in for seconds (at 50 ms a row, 131 rows
+        // took 7 s, and a quick scroll found empty rows). No cascade with
+        // reduced motion.
+        const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!calm) systemRows.forEach((row, index) => {
+          const delay = Math.min(index, 12) * 40;
           row.style.opacity = '0';
           row.style.animation = 'data-row-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards';
-          row.style.animationDelay = `${index * 50}ms`;
+          row.style.animationDelay = `${delay}ms`;
           // Clean up after animation
           setTimeout(() => {
             row.style.opacity = '';
             row.style.animation = '';
             row.style.animationDelay = '';
-          }, 400 + index * 50);
+          }, 400 + delay);
         });
       }
 
@@ -4479,6 +4534,29 @@ const apiBase = apiBaseProp ?? '';
     return false;
   }
 
+  // Summary beside the title: "131 台 · 128 在线 · 3 离线", from the same
+  // list as the rows (the offline chip only when a server is offline).
+  function updateSystemsSummary(list) {
+    systemsSummary = { total: list.length, offline: list.filter((s) => s && s.alert).length };
+    renderSystemsSummary();
+  }
+  function renderSystemsSummary() {
+    const el = document.getElementById('systems-summary');
+    if (!el || !systemsSummary) return;
+    const lang = getCurrentLanguage();
+    const { total, offline } = systemsSummary;
+    const chip = 'inline-flex items-center gap-1.5 rounded-full px-2 py-1';
+    const quiet = `${chip} bg-black/5 dark:bg-white/[0.06] text-[#404040] dark:text-[#d4d4d4]`;
+    const dot = (c) => `<span class="h-1.5 w-1.5 rounded-full ${c}"></span>`;
+    let html = `<span class="${quiet}">${total} ${translations.summaryTotal[lang]}</span>`
+      + `<span class="${quiet}">${dot('bg-emerald-400')}${total - offline} ${translations.summaryOnline[lang]}</span>`;
+    if (offline > 0) {
+      html += `<span class="${chip} bg-red-500/10 dark:bg-red-400/15 text-red-700 dark:text-red-300">${dot('bg-red-400')}${offline} ${translations.summaryOffline[lang]}</span>`;
+    }
+    if (el.innerHTML !== html) el.innerHTML = html;
+    el.classList.toggle('hidden', total === 0);
+  }
+
   async function renderData(data) {
     if (!Array.isArray(data)) return;
     if (streamPayloads.has(data) && primeGuardArmed) {
@@ -4540,6 +4618,7 @@ const apiBase = apiBaseProp ?? '';
     // Admin per-system toggle: `hide_on_home` systems stay in the API and
     // the admin page but never reach the public table.
     data = data.filter((sys) => !(sys && sys.hide_on_home === true));
+    updateSystemsSummary(data);
     if (data.length === 0) {
       showEmpty();
       // Materialise the header (it ships as display:none during the
@@ -5201,6 +5280,15 @@ const apiBase = apiBaseProp ?? '';
     /* Rows open and close without the slide (beats the inline transition
        handleRowToggle sets; its timers still tidy up afterwards). */
     .system-details { transition: none !important; }
+  }
+
+  /* An offline server: its last known values stay, muted (the bars turn
+     grey in getProgressColor and a chip follows the name). */
+  .system-row.is-offline :is(.cell-uptime, .cell-net, .cell-cpu, .cell-memory, .cell-disk) :is(span.font-medium, .cell-value) {
+    color: #737373;
+  }
+  html.dark .system-row.is-offline :is(.cell-uptime, .cell-net, .cell-cpu, .cell-memory, .cell-disk) :is(span.font-medium, .cell-value) {
+    color: #a3a3a3;
   }
 
   /* A row reached with Tab (Enter/Space opens it) shows a ring in the

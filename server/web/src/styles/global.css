@@ -9,7 +9,8 @@
 body {
   background: #151515;
   color: #e5e7eb;
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* The system UI font of each platform (Segoe UI, SF, Roboto…). */
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -95,7 +96,7 @@ html.light * {
 /* ========================================
    Width-stable numeric rendering for volatile cells
    ========================================
-   Inter (the body font) is proportional, so the digit "1" is narrower
+   The system UI font is proportional, so the digit "1" is narrower
    than "0", "8" or "9". For columns that update on every 3 s SSE push
    — CPU/memory/disk %, network speed, total traffic, TCPing averages
    on the public dashboard, and traffic / IP info on the admin list —
@@ -570,7 +571,7 @@ html.glass-enabled body::before {
 }
 html.glass-enabled.light body::before {
   background:
-    radial-gradient(48% 52% at 8% 2%, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0) 70%),
+    radial-gradient(48% 52% at 8% 2%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 70%),
     radial-gradient(38% 44% at 88% 22%, rgba(170, 198, 240, 0.7), rgba(170, 198, 240, 0) 70%),
     radial-gradient(36% 40% at 30% 58%, rgba(204, 196, 240, 0.55), rgba(204, 196, 240, 0) 70%),
     radial-gradient(40% 42% at 78% 82%, rgba(182, 226, 212, 0.6), rgba(182, 226, 212, 0) 70%),
@@ -842,6 +843,16 @@ html.glass-enabled.dark [data-modal-content] button.rounded-lg.border:hover {
   border-color: rgba(255, 255, 255, 0.11) !important;
 }
 
+/* The settings dialog's buttons, kept on screen at its bottom edge */
+html.glass-enabled.light [data-modal-content] .modal-actions {
+  background: rgba(250, 250, 252, 0.97) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+html.glass-enabled.dark [data-modal-content] .modal-actions {
+  background: rgba(38, 38, 42, 0.97) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
 /* Dialog close / icon buttons (p-1 targets the small X buttons only) */
 html.glass-enabled.light [data-modal-content] button.rounded-lg.p-1:hover {
   background: rgba(0, 0, 0, 0.05) !important;
@@ -926,6 +937,26 @@ html.glass-enabled.dark [data-modal-content] textarea {
 }
 @media (prefers-reduced-motion: reduce) {
   .monitor-icon.default-logo { animation: none; }
+}
+
+/* Reduced motion: entrance, dialog and row animations are skipped and what
+   they reveal is simply shown (several start from opacity 0). The loading
+   spinner keeps turning: it tells that something is in progress. Dialogs
+   close on a timer, not on animationend, so skipping the exit is safe. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-page-in, .animate-stagger-in, .animate-scale-in, .animate-progress,
+  .animate-row-update, .animate-row-expand, .animate-row-collapse,
+  .animate-login-card, .animate-form-field, .animate-navbar, .animate-content,
+  .modal-backdrop-enter, .modal-content-enter, .modal-backdrop-exit, .modal-content-exit,
+  .animate-skeleton, .animate-shimmer {
+    animation: none !important;
+  }
+  .animate-page-in, .animate-stagger-in, .animate-scale-in, .animate-login-card,
+  .animate-form-field, .animate-navbar, .animate-content,
+  .modal-backdrop-enter, .modal-content-enter {
+    opacity: 1 !important;
+  }
+  #system-table-header-row { transition: none !important; }
 }
 
 /* Logos drawn in the SVG default fill (black: devicon:apple for macOS,

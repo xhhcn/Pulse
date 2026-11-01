@@ -70,7 +70,7 @@ const customCodePlaceholder = [
 
     <div id="systems-list" class="space-y-3 max-h-[600px] overflow-y-auto scrollbar-hide" data-draggable-list>
       <div class="flex items-center justify-center py-12">
-        <div id="loading-systems-text" class="text-sm text-[#525252] dark:text-[#737373]" data-translate="loadingSystems">Loading systems...</div>
+        <div id="loading-systems-text" class="text-sm text-[#525252] dark:text-[#a3a3a3]" data-translate="loadingSystems">Loading systems...</div>
       </div>
     </div>
   </div>
@@ -97,7 +97,7 @@ const customCodePlaceholder = [
             data-placeholder-zh="我的服务器"
             class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
           />
-          <p class="mt-1 text-xs text-[#525252] dark:text-[#737373]" data-translate="displayNameForThisSystem">Display name for this system</p>
+          <p class="mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="displayNameForThisSystem">Display name for this system</p>
         </div>
 
         <div class="rounded-lg bg-[#282828] dark:bg-[#282828] bg-[#f5f5f5] p-3">
@@ -154,7 +154,7 @@ const customCodePlaceholder = [
         </div>
 
         <div>
-          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="tags">Tags</span> <span class="text-xs text-[#737373] dark:text-[#737373]" data-translate="tagsCommaSeparated">(comma-separated)</span></label>
+          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="tags">Tags</span> <span class="text-xs text-[#737373] dark:text-[#a3a3a3]" data-translate="tagsCommaSeparated">(comma-separated)</span></label>
           <input
             type="text"
             name="tags"
@@ -170,7 +170,7 @@ const customCodePlaceholder = [
           <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2">
             <div class="flex-1 pr-3">
               <label for="edit-show-on-home" class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4]" data-translate="showOnHomeLabel">首页展示该服务</label>
-              <p class="text-xs text-[#525252] dark:text-[#737373]" data-translate="showOnHomeDesc">关闭后首页不再展示该服务，API 与管理页仍然可见。</p>
+              <p class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="showOnHomeDesc">关闭后首页不再展示该服务，API 与管理页仍然可见。</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer ml-3">
               <input type="checkbox" id="edit-show-on-home" name="show_on_home" class="sr-only peer" checked>
@@ -180,7 +180,7 @@ const customCodePlaceholder = [
           <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2">
             <div class="flex-1 pr-3">
               <label for="edit-show-tcping" class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4]" data-translate="showTcpingLabel">展示 TCPing</label>
-              <p class="text-xs text-[#525252] dark:text-[#737373]" data-translate="showTcpingDesc">关闭后首页不再展示该服务的 TCPing 图表。</p>
+              <p class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="showTcpingDesc">关闭后首页不再展示该服务的 TCPing 图表。</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer ml-3">
               <input type="checkbox" id="edit-show-tcping" name="show_tcping" class="sr-only peer" checked>
@@ -282,7 +282,7 @@ const customCodePlaceholder = [
               />
               <span class="text-sm text-[#525252] dark:text-[#a3a3a3] shrink-0" data-translate="seconds">seconds</span>
             </div>
-            <p class="mt-1 text-xs text-[#525252] dark:text-[#737373]" data-translate="pollingIntervalDesc">How often to send tcping requests to clients</p>
+            <p class="mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="pollingIntervalDesc">How often to send tcping requests to clients</p>
           </div>
 
           <div>
@@ -299,7 +299,7 @@ const customCodePlaceholder = [
             >
               <span data-translate="addTarget">+ Add Target</span>
             </button>
-            <p class="mt-1 text-xs text-[#525252] dark:text-[#737373]" data-translate="targetFormatDesc">Format: name and address (e.g., Google DNS, 8.8.8.8:53)</p>
+            <p class="mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="targetFormatDesc">Format: name and address (e.g., Google DNS, 8.8.8.8:53)</p>
           </div>
 
           <div id="tcping-config-message" class="hidden text-sm"></div>
@@ -359,7 +359,7 @@ const customCodePlaceholder = [
             data-placeholder-zh="输入新密码（至少 6 个字符）"
             class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
           />
-          <p class="mt-1 text-xs text-[#525252] dark:text-[#737373]" data-translate="passwordMinLength">Password must be at least 6 characters long</p>
+          <p class="mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="passwordMinLength">Password must be at least 6 characters long</p>
         </div>
 
         <div>
@@ -398,7 +398,7 @@ const customCodePlaceholder = [
 
   <!-- Navbar Config Modal -->
   <div id="navbar-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" data-modal>
-    <div class="mx-4 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-6 sm:p-7 shadow-2xl" data-modal-content style="scrollbar-width: none; -ms-overflow-style: none;">
+    <div class="mx-4 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-6 sm:p-7 pb-0 sm:pb-0 shadow-2xl" data-modal-content>
       <div class="mb-5 flex items-center justify-between">
         <h2 id="navbar-config-title" class="text-xl font-semibold text-[#262626] dark:text-[#f5f5f5]" data-translate="customizationSettings">Customization Settings</h2>
         <button id="close-navbar-config-modal-btn" class="rounded-lg p-1 text-[#525252] dark:text-[#a3a3a3] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
@@ -416,7 +416,7 @@ const customCodePlaceholder = [
             placeholder="Pulse"
             class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
           />
-          <p class="mt-1 text-xs text-[#525252] dark:text-[#737373]" data-translate="navbarTextHint">Custom text displayed in navbar (leave empty for default: Pulse)</p>
+          <p class="mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="navbarTextHint">Custom text displayed in navbar (leave empty for default: Pulse)</p>
         </div>
 
         <div>
@@ -430,7 +430,7 @@ const customCodePlaceholder = [
             data-placeholder-zh="https://example.com/logo.svg 或 SVG 代码"
             class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
           />
-          <p class="mt-1 text-xs text-[#525252] dark:text-[#737373]" data-translate="navbarLogoHint">Logo URL or SVG code (leave empty for default logo)</p>
+          <p class="mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="navbarLogoHint">Logo URL or SVG code (leave empty for default logo)</p>
         </div>
 
         <div>
@@ -450,14 +450,14 @@ const customCodePlaceholder = [
               <span data-translate="regenerate">Regenerate</span>
             </button>
           </div>
-          <p class="mt-1 text-xs text-[#525252] dark:text-[#737373]" data-translate="sharedSecretHint">This secret is shared by all clients for authentication</p>
+          <p class="mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="sharedSecretHint">This secret is shared by all clients for authentication</p>
         </div>
 
         <!-- Show Traffic Toggle -->
         <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
           <div class="flex-1">
             <label class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4] mb-1" data-translate="showTrafficLabel">Show Traffic Info</label>
-            <p class="text-xs text-[#525252] dark:text-[#737373]" data-translate="showTrafficDesc">Display real-time and total traffic in the detail dropdown section</p>
+            <p class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="showTrafficDesc">Display real-time and total traffic in the detail dropdown section</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer ml-3">
             <input type="checkbox" id="show-traffic-toggle" name="show_traffic" class="sr-only peer">
@@ -469,7 +469,7 @@ const customCodePlaceholder = [
         <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
           <div class="flex-1">
             <label class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4] mb-1" data-translate="showGlassLabel">Glassmorphism Effect</label>
-            <p class="text-xs text-[#525252] dark:text-[#737373]" data-translate="showGlassDesc">Enable frosted glass visual effect on navbar and cards</p>
+            <p class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="showGlassDesc">Enable frosted glass visual effect on navbar and cards</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer ml-3">
             <input type="checkbox" id="show-glass-toggle" name="show_glass" class="sr-only peer">
@@ -486,15 +486,19 @@ const customCodePlaceholder = [
             placeholder={customCodePlaceholder}
             class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa] font-mono"
           ></textarea>
-          <p class="mt-1 text-xs text-[#525252] dark:text-[#737373]" data-translate="customCodeHint">Custom CSS and JavaScript will be applied to all pages. Use &lt;style&gt; for CSS or &lt;script&gt; for JS</p>
-          <p class="mt-2 text-xs text-[#525252] dark:text-[#737373]">
+          <p class="mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="customCodeHint">Custom CSS and JavaScript will be applied to all pages. Use &lt;style&gt; for CSS or &lt;script&gt; for JS</p>
+          <p class="mt-2 text-xs text-[#525252] dark:text-[#a3a3a3]">
             <strong data-translate="customCodeSecurityWarning">⚠️ Security Warning: Custom code is publicly accessible. Do NOT include sensitive information (API keys, passwords, tokens).</strong>
           </p>
         </div>
 
         <div id="navbar-config-message" class="hidden text-sm"></div>
 
-        <div class="flex gap-3">
+        <!-- The dialog scrolls; its buttons stay on screen at the bottom edge.
+             The bar carries the dialog's bottom padding (the dialog has none):
+             a sticky box keeps clear of its scroll container's padding, which
+             left a strip of the scrolled text showing below the buttons. -->
+        <div class="modal-actions sticky bottom-0 z-10 -mx-6 sm:-mx-7 flex gap-3 border-t border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white px-6 sm:px-7 pt-4 pb-6 sm:pb-7">
           <button
             type="button"
             id="cancel-navbar-config-btn"
@@ -566,7 +570,7 @@ const customCodePlaceholder = [
         <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
           <div class="flex-1">
             <label class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4] mb-1" data-translate="enablePrivacyMode">Enable Privacy Mode</label>
-            <p class="text-xs text-[#525252] dark:text-[#737373]" data-translate="privacyModeDesc">When enabled, login page will appear before index page. Admin page does not require login.</p>
+            <p class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="privacyModeDesc">When enabled, login page will appear before index page. Admin page does not require login.</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
             <input type="checkbox" id="privacy-enabled" name="enabled" class="sr-only peer">
@@ -578,7 +582,7 @@ const customCodePlaceholder = [
         <div id="share-section" class="space-y-3 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
           <div>
             <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]" data-translate="temporaryShare">Temporary Share</label>
-            <p class="text-xs text-[#525252] dark:text-[#737373]" data-translate="temporaryShareDesc">Generate a temporary share link that allows access without login. Login page will appear before admin page for share links.</p>
+            <p class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="temporaryShareDesc">Generate a temporary share link that allows access without login. Login page will appear before admin page for share links.</p>
           </div>
 
           <!-- Current Share Link -->
@@ -597,7 +601,7 @@ const customCodePlaceholder = [
                 class="rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-xs font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
                 data-translate="copy">Copy</button>
             </div>
-            <p id="token-expires-info" class="mt-1 text-xs text-[#525252] dark:text-[#737373]"></p>
+            <p id="token-expires-info" class="mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]"></p>
           </div>
 
           <!-- Generate New Share Link -->
@@ -612,7 +616,7 @@ const customCodePlaceholder = [
               value="1"
               class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
-            <p class="mt-1 text-xs text-[#525252] dark:text-[#737373]" data-translate="expirationHoursHint">Number of hours until the share link expires (1-720, max 30 days)</p>
+            <p class="mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="expirationHoursHint">Number of hours until the share link expires (1-720, max 30 days)</p>
           </div>
 
           <button
@@ -827,8 +831,8 @@ const customCodePlaceholder = [
     //
     // Earlier we did `value.toFixed(2).replace(/\.?0+$/, '')`, which
     // produces "1 KiB", "1.5 KiB" and "1.55 KiB" — three different
-    // widths for the same column. Combined with Inter being a
-    // proportional font, the traffic cell jitters horizontally on
+    // widths for the same column. Combined with a proportional body
+    // font, the traffic cell jitters horizontally on
     // every 3 s push, dragging neighbouring cells with it. Always
     // emitting two decimals plus tabular-nums on the wrapping span
     // (see renderSystemItem / updateSystemItem) keeps every traffic
@@ -1383,12 +1387,12 @@ const customCodePlaceholder = [
               <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center" style="font-variant-numeric: tabular-nums; min-width: 110px;">
                 ${system.total_net_in_bytes ? `
                 <div class="traffic-row-in flex items-center min-h-[22px]">
-                  <span class="system-total-net-in text-[#525252] dark:text-[#a3a3a3]">In: ${formatBytes(system.total_net_in_bytes)}</span>
+                  <span class="system-total-net-in text-[#525252] dark:text-[#a3a3a3]">${adminT('trafficIn')} ${formatBytes(system.total_net_in_bytes)}</span>
                 </div>
                 ` : '<div class="traffic-row-in flex items-center min-h-[22px]"></div>'}
                 ${system.total_net_out_bytes ? `
                 <div class="traffic-row-out flex items-center min-h-[22px]">
-                  <span class="system-total-net-out text-[#525252] dark:text-[#a3a3a3]">Out: ${formatBytes(system.total_net_out_bytes)}</span>
+                  <span class="system-total-net-out text-[#525252] dark:text-[#a3a3a3]">${adminT('trafficOut')} ${formatBytes(system.total_net_out_bytes)}</span>
                 </div>
                 ` : '<div class="traffic-row-out flex items-center min-h-[22px]"></div>'}
               </div>
@@ -1923,12 +1927,12 @@ const customCodePlaceholder = [
           <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center" style="font-variant-numeric: tabular-nums; min-width: 110px;">
             ${item.total_net_in_bytes ? `
             <div class="traffic-row-in flex items-center min-h-[22px]">
-              <span class="system-total-net-in text-[#525252] dark:text-[#a3a3a3]">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
+              <span class="system-total-net-in text-[#525252] dark:text-[#a3a3a3]">${adminT('trafficIn')} ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
             </div>
             ` : '<div class="traffic-row-in flex items-center min-h-[22px]"></div>'}
             ${item.total_net_out_bytes ? `
             <div class="traffic-row-out flex items-center min-h-[22px]">
-              <span class="system-total-net-out text-[#525252] dark:text-[#a3a3a3]">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
+              <span class="system-total-net-out text-[#525252] dark:text-[#a3a3a3]">${adminT('trafficOut')} ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
             </div>
             ` : '<div class="traffic-row-out flex items-center min-h-[22px]"></div>'}
           </div>
@@ -1952,12 +1956,12 @@ const customCodePlaceholder = [
           const formattedIn = typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B';
           let netInSpan = inRow?.querySelector('.system-total-net-in');
           if (netInSpan) {
-            netInSpan.textContent = `In: ${formattedIn}`;
+            netInSpan.textContent = `${adminT('trafficIn')} ${formattedIn}`;
           } else if (inRow) {
             // Create the span if it doesn't exist
             netInSpan = document.createElement('span');
             netInSpan.className = 'system-total-net-in text-[#525252] dark:text-[#a3a3a3]';
-            netInSpan.textContent = `In: ${formattedIn}`;
+            netInSpan.textContent = `${adminT('trafficIn')} ${formattedIn}`;
             inRow.appendChild(netInSpan);
           }
         } else {
@@ -1986,12 +1990,12 @@ const customCodePlaceholder = [
           <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center" style="font-variant-numeric: tabular-nums; min-width: 110px;">
             ${item.total_net_in_bytes ? `
             <div class="traffic-row-in flex items-center min-h-[22px]">
-              <span class="system-total-net-in text-[#525252] dark:text-[#a3a3a3]">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
+              <span class="system-total-net-in text-[#525252] dark:text-[#a3a3a3]">${adminT('trafficIn')} ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
             </div>
             ` : '<div class="traffic-row-in flex items-center min-h-[22px]"></div>'}
             ${item.total_net_out_bytes ? `
             <div class="traffic-row-out flex items-center min-h-[22px]">
-              <span class="system-total-net-out text-[#525252] dark:text-[#a3a3a3]">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
+              <span class="system-total-net-out text-[#525252] dark:text-[#a3a3a3]">${adminT('trafficOut')} ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
             </div>
             ` : '<div class="traffic-row-out flex items-center min-h-[22px]"></div>'}
           </div>
@@ -2012,12 +2016,12 @@ const customCodePlaceholder = [
           const formattedOut = typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B';
           let netOutSpan = outRow?.querySelector('.system-total-net-out');
           if (netOutSpan) {
-            netOutSpan.textContent = `Out: ${formattedOut}`;
+            netOutSpan.textContent = `${adminT('trafficOut')} ${formattedOut}`;
           } else if (outRow) {
             // Create the span if it doesn't exist
             netOutSpan = document.createElement('span');
             netOutSpan.className = 'system-total-net-out text-[#525252] dark:text-[#a3a3a3]';
-            netOutSpan.textContent = `Out: ${formattedOut}`;
+            netOutSpan.textContent = `${adminT('trafficOut')} ${formattedOut}`;
             outRow.appendChild(netOutSpan);
           }
         } else {
@@ -3859,7 +3863,7 @@ const customCodePlaceholder = [
               if (timeDiff > 1000) {
                 // Token is still valid (more than 1 second remaining)
                 tokenExpiresInfo.textContent = shareExpiresText(formatDate(config.token_expires));
-                tokenExpiresInfo.className = 'mt-1 text-xs text-[#525252] dark:text-[#737373]';
+                tokenExpiresInfo.className = 'mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]';
                 
                 // Set up a timer to update the status when it actually expires
                 // Use the calculated time difference
@@ -3942,7 +3946,7 @@ const customCodePlaceholder = [
       const estimatedExpires = new Date();
       estimatedExpires.setSeconds(estimatedExpires.getSeconds() + seconds);
       tokenExpiresInfo.textContent = shareExpiresText(formatDate(estimatedExpires.toISOString()), true);
-      tokenExpiresInfo.className = 'mt-1 text-xs text-[#525252] dark:text-[#737373]';
+      tokenExpiresInfo.className = 'mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]';
     }
 
     // Store temporarily in form data (will be sent to server)
@@ -4078,7 +4082,7 @@ const customCodePlaceholder = [
               if (timeDiff > 1000) {
                 // Token is still valid (more than 1 second remaining)
                 tokenExpiresInfo.textContent = shareExpiresText(formatDate(responseData.config.token_expires));
-                tokenExpiresInfo.className = 'mt-1 text-xs text-[#525252] dark:text-[#737373]';
+                tokenExpiresInfo.className = 'mt-1 text-xs text-[#525252] dark:text-[#a3a3a3]';
                 
                 // Set up timer to update when expired (using server time difference)
                 scheduleExpiryLabel(timeDiff);
@@ -4653,6 +4657,8 @@ const customCodePlaceholder = [
     'loadingSystems': { en: 'Loading services...', zh: '加载服务中...' },
     'addNewSystem': { en: 'Add New Service', zh: '添加新服务' },
     'editSystem': { en: 'Edit Service', zh: '编辑服务' },
+    'trafficIn': { en: 'In:', zh: '入站:' },
+    'trafficOut': { en: 'Out:', zh: '出站:' },
     'deleteSystem': { en: 'Delete Service', zh: '删除服务' },
     'systemName': { en: 'Service Name', zh: '服务名称' },
     'displayNameForThisSystem': { en: 'Display name for this system', zh: '此服务的显示名称' },
@@ -4755,6 +4761,11 @@ const customCodePlaceholder = [
 
   function updateAdminTranslations() {
     const lang = adminLang();
+
+    document.querySelectorAll('.system-total-net-in, .system-total-net-out').forEach((el) => {
+      const key = el.classList.contains('system-total-net-in') ? 'trafficIn' : 'trafficOut';
+      el.textContent = el.textContent.replace(/^\S+:/, adminT(key));
+    });
     
     // Update all elements with data-translate attribute
     document.querySelectorAll('[data-translate]').forEach(el => {
