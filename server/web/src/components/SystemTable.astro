@@ -1958,6 +1958,27 @@ const apiBase = apiBaseProp ?? '';
   let tcpingConfigLoading = null; // Promise to prevent duplicate fetches
 
   // Cleanup function to destroy tcping chart for a system
+  // A stretch with no samples at all (the agent was offline) is left as a
+  // gap instead of a straight line across it: the piece of line between two
+  // neighbouring samples more than 2.5 sampling intervals apart (the median
+  // spacing) is not drawn. Lost samples are points with y=null and stay
+  // bridged by spanGaps, as before. (A numeric spanGaps would break the line
+  // at every lost sample too.)
+  function tcpingGapSegment(points) {
+    const d = [];
+    for (let i = 1; i < points.length; i++) {
+      const v = points[i].x - points[i - 1].x;
+      if (v > 0) d.push(v);
+    }
+    if (d.length === 0) return undefined;
+    d.sort((a, b) => a - b);
+    const limit = d[d.length >> 1] * 2.5;
+    // Without such a stretch: no per-piece styling, which costs ~20 ms per chart.
+    if (d[d.length - 1] <= limit) return undefined;
+    const hide = (ctx) => (ctx.p1.parsed.x - ctx.p0.parsed.x > limit ? 'transparent' : undefined);
+    return { borderColor: hide, backgroundColor: hide };
+  }
+
   function cleanupTCPingChart(systemId) {
     // Cancel any ongoing loading for this system
     // The flag lives on the state object, which the in-flight build keeps a
@@ -2774,6 +2795,7 @@ const apiBase = apiBaseProp ?? '';
         fill: false,
         tension: 0.1,
         spanGaps: true,
+        segment: tcpingGapSegment(chartData),
         pointRadius: 0,
         pointHoverRadius: 0,
         pointHitRadius: 5,
@@ -2939,6 +2961,7 @@ const apiBase = apiBaseProp ?? '';
         }
         if (data !== currentData) {
           currentDataset.data = data;
+          currentDataset.segment = tcpingGapSegment(data);
         }
       });
         
