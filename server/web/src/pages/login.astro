@@ -116,7 +116,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
         window.__pulseSyncThemeColor = function () {
           var dark = html.classList.contains('dark');
           var glass = html.classList.contains('glass-enabled');
-          var colour = glass ? (dark ? '#242426' : '#eaebec') : (dark ? '#151515' : '#fafafa');
+          var colour = glass ? (dark ? '#141925' : '#ebeff4') : (dark ? '#151515' : '#fafafa');
           document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
             m.removeAttribute('media');
             m.setAttribute('content', colour);

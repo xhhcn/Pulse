@@ -527,34 +527,38 @@ html.light :focus-visible {
    Glassmorphism (Frosted Glass) Effect
    Activated by .glass-enabled on <html>.
 
-   A graphite take on the macOS material, so the glass mode stays an
-   extension of the default theme: no hues of its own (colour keeps
-   meaning status and chart targets only), depth comes from light and
-   material instead.
-     - The page is a graphite wallpaper under a soft studio light (bright
-       from the top left, a faint diagonal sheen, deeper towards the
-       bottom right), fixed to the screen.
-     - Navbar, main cards and the login card are frosted panes: see-through
-       enough for that light to show, with a top highlight, a hairline edge
-       and a soft lift. They carry no backdrop-filter: the wallpaper behind
-       them is all soft gradients, which a blur would leave unchanged, and
-       a blurred pane the size of the table made every scrolled frame cost
-       several times a plain one.
+   Frosted glass over a misty blue wallpaper: the panes read as matte
+   glass, not metal, and the colour stays faint enough for the mode to
+   remain an extension of the default theme (hues keep meaning status and
+   chart targets).
+     - The page is a pale (dark: deep) wallpaper with a few large, very
+       soft spots of light in muted blue-grey, lavender-grey and
+       mint-grey, fixed to the screen. The spots also lie behind the
+       panes, so the frosting shows as a gentle shift of light and colour
+       across them.
+     - Navbar, main cards and the login card are frosted panes: a milky
+       translucent tint with a fine grain (the matte texture), a soft
+       light edge and a soft shadow. No sheen and no hard top highlight:
+       with the former grey wallpaper those made the panes read as
+       brushed metal.
+     - The panes carry no backdrop-filter: over a wallpaper this soft a
+       blur changes nothing visible (under 0.4/255 on average), while a
+       blurred pane the size of the table made every scrolled frame cost
+       about 2.4 times a plain one.
      - Everything inside a pane is a plain tint; no glass inside glass.
      - Only what floats over content — the columns menu and the dialogs —
        blurs and saturates what lies beneath, like macOS menus and sheets.
    ======================================== */
 
 /* --- Wallpaper ---
-   Each glow fades to its own colour at zero alpha, not to `transparent`:
-   WebKit blends towards transparent black, which turned the light of the
-   light theme into a grey patch with a bright rim. */
+   Each spot fades to its own colour at zero alpha, not to `transparent`:
+   WebKit blends towards transparent black, which greys the edges. */
 html.glass-enabled.light body {
-  background-color: #d9dadd !important;
+  background-color: #e9edf2 !important;
   background-image: none !important;
 }
 html.glass-enabled.dark body {
-  background-color: #111113 !important;
+  background-color: #0d1016 !important;
   background-image: none !important;
 }
 html.glass-enabled body::before {
@@ -566,15 +570,19 @@ html.glass-enabled body::before {
 }
 html.glass-enabled.light body::before {
   background:
-    radial-gradient(85% 70% at 22% -12%, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0) 70%),
-    linear-gradient(118deg, rgba(255, 255, 255, 0) 32%, rgba(255, 255, 255, 0.32) 47%, rgba(255, 255, 255, 0) 62%),
-    radial-gradient(75% 65% at 105% 112%, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0) 70%);
+    radial-gradient(48% 52% at 8% 2%, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0) 70%),
+    radial-gradient(38% 44% at 88% 22%, rgba(170, 198, 240, 0.7), rgba(170, 198, 240, 0) 70%),
+    radial-gradient(36% 40% at 30% 58%, rgba(204, 196, 240, 0.55), rgba(204, 196, 240, 0) 70%),
+    radial-gradient(40% 42% at 78% 82%, rgba(182, 226, 212, 0.6), rgba(182, 226, 212, 0) 70%),
+    radial-gradient(34% 38% at 10% 96%, rgba(186, 206, 236, 0.6), rgba(186, 206, 236, 0) 70%);
 }
 html.glass-enabled.dark body::before {
   background:
-    radial-gradient(85% 70% at 22% -12%, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 70%),
-    linear-gradient(118deg, rgba(255, 255, 255, 0) 32%, rgba(255, 255, 255, 0.055) 47%, rgba(255, 255, 255, 0) 62%),
-    radial-gradient(75% 65% at 105% 112%, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0) 70%);
+    radial-gradient(48% 52% at 8% 2%, rgba(120, 150, 210, 0.26), rgba(120, 150, 210, 0) 70%),
+    radial-gradient(38% 44% at 88% 22%, rgba(56, 92, 170, 0.36), rgba(56, 92, 170, 0) 70%),
+    radial-gradient(36% 40% at 30% 58%, rgba(84, 70, 160, 0.28), rgba(84, 70, 160, 0) 70%),
+    radial-gradient(40% 42% at 78% 82%, rgba(30, 110, 104, 0.26), rgba(30, 110, 104, 0) 70%),
+    radial-gradient(34% 38% at 10% 96%, rgba(50, 70, 130, 0.3), rgba(50, 70, 130, 0) 70%);
 }
 
 /* The access check that covers the home and admin pages while they load
@@ -584,43 +592,55 @@ html.glass-enabled #login-redirect {
   background-color: transparent;
 }
 
+/* The footer sits on the wallpaper itself, where the default grey is too
+   faint on the light one (3.4:1 for the name). */
+html.glass-enabled.light footer > div > div {
+  color: #5c5c5c !important;
+}
+
 /* Make login page wrapper transparent so the wallpaper shows */
 html.glass-enabled .glass-login-wrapper {
   background: transparent !important;
 }
 
-/* --- Panes: navbar, main cards, login card --- */
+/* --- Panes: navbar, main cards, login card ---
+   The grain is fractal noise drawn once into a 160 px tile: dark specks
+   on the light panes, light specks on the dark ones. */
+html.glass-enabled {
+  --glass-grain-on-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.06 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --glass-grain-on-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0.045 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
 html.glass-enabled.light .glass-nav,
 html.glass-enabled.light .glass-card,
 html.glass-enabled.light .glass-login {
-  background: rgba(255, 255, 255, 0.56) !important;
-  border-color: rgba(0, 0, 0, 0.09) !important;
+  background-color: rgba(255, 255, 255, 0.6) !important;
+  background-image: var(--glass-grain-on-light) !important;
+  border-color: rgba(255, 255, 255, 0.75) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
     inset 0 0 0 1px rgba(255, 255, 255, 0.35),
-    0 1px 2px rgba(0, 0, 0, 0.06),
-    0 22px 44px -18px rgba(0, 0, 0, 0.28) !important;
+    0 1px 2px rgba(20, 28, 45, 0.05),
+    0 18px 44px -20px rgba(20, 28, 45, 0.25) !important;
 }
 html.glass-enabled.dark .glass-nav,
 html.glass-enabled.dark .glass-card,
 html.glass-enabled.dark .glass-login {
-  background: rgba(50, 50, 56, 0.44) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
+  background-color: rgba(22, 23, 28, 0.55) !important;
+  background-image: var(--glass-grain-on-dark) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.13),
-    0 0 0 1px rgba(0, 0, 0, 0.45),
-    0 24px 56px -20px rgba(0, 0, 0, 0.85) !important;
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 20px 50px -20px rgba(0, 0, 0, 0.8) !important;
 }
 
 /* --- Inside a pane: tints only --- */
 html.glass-enabled.light .glass-inner {
-  background: rgba(255, 255, 255, 0.42) !important;
-  border-color: rgba(0, 0, 0, 0.06) !important;
+  background: rgba(255, 255, 255, 0.34) !important;
+  border-color: rgba(255, 255, 255, 0.6) !important;
   box-shadow: none !important;
 }
 html.glass-enabled.dark .glass-inner {
   background: rgba(255, 255, 255, 0.025) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
   box-shadow: none !important;
 }
 
@@ -725,12 +745,12 @@ html.glass-enabled.dark #columns-btn:hover {
 
 /* Admin system rows */
 html.glass-enabled.light .draggable-item {
-  background: rgba(255, 255, 255, 0.5) !important;
-  border-color: rgba(0, 0, 0, 0.06) !important;
+  background: rgba(255, 255, 255, 0.45) !important;
+  border-color: rgba(255, 255, 255, 0.65) !important;
   box-shadow: none !important;
 }
 html.glass-enabled.light .draggable-item:hover {
-  background: rgba(255, 255, 255, 0.78) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
   border-color: rgba(0, 0, 0, 0.09) !important;
 }
 html.glass-enabled.dark .draggable-item {
