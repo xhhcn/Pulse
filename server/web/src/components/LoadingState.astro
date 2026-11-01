@@ -19,17 +19,11 @@
 //     variable was recomputed on data arrival the whole skeleton would
 //     snap sideways).
 //
-//   * Width behaviour:
-//       - Desktop (≥1024 px): the wrapper uses flex +
-//         `justify-content: center`, so the preview sits in the middle
-//         of the card and looks balanced and intentional on the wide
-//         layout.
-//       - Mobile / tablet (<1024 px): the table uses `min-w-[1000px]`
-//         with horizontal scroll, so centering inside that 1000 px box
-//         would push the preview to ~500 px — off-screen on a 375 px
-//         phone. A media query switches `justify-content` to
-//         `flex-start` so mobile users see the feedback at the
-//         left-edge of the visible viewport without having to scroll.
+//   * Width behaviour: the wrapper uses flex +
+//     `justify-content: center`, so the preview sits in the middle of
+//     the card at every width. (Phones and tablets once left-aligned it:
+//     the table was a 1000 px sideways scroller there. Phones now get
+//     cards and tablets a narrower table, both fitting the screen.)
 //
 //   * Timing:
 //       - The preview fades in 160 ms after mount. When SSE is fast
@@ -90,8 +84,8 @@
      a typical populated table so that when real rows land the table
      only grows downward (never jumps up), matching the dashboard's
      "content arrives from above" feel.
-     `justify-content: center` centres the preview inside the card on
-     desktop; `align-items: center` keeps it vertically centred within
+     `justify-content: center` centres the preview inside the card;
+     `align-items: center` keeps it vertically centred within
      the reserved height. As a bonus, when loadingIndicator.innerHTML
      is replaced with an error message (see loadData() catch branch
      in SystemTable.astro), that message is automatically centred in
@@ -101,20 +95,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  /* On viewports where the table's `min-w-[1000px]` forces a horizontal
-     scrollbar (phones, narrow tablets), the scroll container is wider
-     than the viewport, so centring the preview inside it parks the
-     content at ~500 px — off-screen on a 375 px phone. Falling back to
-     `flex-start` left-aligns the preview so mobile users see the
-     feedback immediately without scrolling sideways. The 1023 px
-     threshold matches Tailwind's `lg:` breakpoint, which is where the
-     1000 px min-width starts to overflow typical handheld viewports. */
-  @media (max-width: 1023px) {
-    #loading-indicator {
-      justify-content: flex-start;
-    }
   }
 
   /* Preview container. max-width caps the bar lengths so they don't

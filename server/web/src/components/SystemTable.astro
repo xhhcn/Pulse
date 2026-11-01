@@ -5307,24 +5307,4 @@ const apiBase = apiBaseProp ?? '';
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
   }
-
-  /* The three TCPing chart overlays (loading / no data / "this node cannot
-     reach this target") are `justify-center` inside the table's
-     `min-w-[1000px]` scroller. That scroller is wider than a phone viewport,
-     so centring parks their text at ~500 px — completely off-screen at
-     scrollLeft 0 on a 390 px handset, and the user just sees an empty box.
-     Left-align them below the `lg:` breakpoint, where the 1000 px min-width
-     starts to overflow, with a 1rem gutter so the text is not flush against
-     the card edge. Same treatment as #loading-indicator in LoadingState.astro.
-     Only the horizontal alignment changes — the fixed 200 px box is
-     untouched, so nothing reflows. */
-  @media (max-width: 1023px) {
-    [data-tcping-loading],
-    [data-tcping-no-data],
-    [data-tcping-unreachable] {
-      justify-content: flex-start;
-      padding-left: 1rem;
-      padding-right: 1rem;
-    }
-  }
 </style>
