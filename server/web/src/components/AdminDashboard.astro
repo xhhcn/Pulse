@@ -48,10 +48,10 @@ const customCodePlaceholder = [
           <Icon name="shield" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
         </button>
         <button id="navbar-config-btn" class="rounded-lg p-1.5 sm:p-2 text-[#525252] dark:text-[#a3a3a3] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-purple-400 dark:hover:text-purple-400 hover:text-purple-600" title="Customization Settings" aria-label="Customization Settings" data-title-en="Customization Settings" data-title-zh="自定义设置">
-          <Icon name="palette" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+          <Icon name="settings" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
         </button>
         <button id="tcping-config-btn" class="rounded-lg p-1.5 sm:p-2 text-[#525252] dark:text-[#a3a3a3] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-blue-400 dark:hover:text-blue-400 hover:text-blue-600" title="TCPing Settings" aria-label="TCPing Settings" data-title-en="TCPing Settings" data-title-zh="TCPing 设置">
-          <Icon name="settings" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+          <Icon name="activity" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
         </button>
         <button id="refresh-btn" class="rounded-lg p-1.5 sm:p-2 text-[#525252] dark:text-[#a3a3a3] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5]" title="Refresh" aria-label="Refresh" data-title-en="Refresh" data-title-zh="刷新">
           <Icon name="refresh-cw" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
@@ -265,7 +265,7 @@ const customCodePlaceholder = [
       </div>
 
       <!-- Scrollable Content -->
-      <div class="flex-1 overflow-y-auto overflow-x-hidden p-4 pt-4 sm:p-6 sm:pt-4 scrollbar-hide">
+      <div class="dialog-scroll flex-1 overflow-y-auto overflow-x-hidden p-4 pt-4 sm:p-6 sm:pt-4 pb-0 sm:pb-0">
         <form id="tcping-config-form" class="space-y-4">
           <div>
             <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]">
@@ -304,7 +304,11 @@ const customCodePlaceholder = [
 
           <div id="tcping-config-message" class="hidden text-sm"></div>
 
-          <div class="flex gap-3 pt-2">
+          <!-- Kept on screen at the bottom edge while the targets scroll (on a
+               phone three targets already push it below the fold); the bar
+               carries the scroll area's bottom padding, as in the settings
+               dialog. -->
+          <div class="modal-actions sticky bottom-0 z-10 -mx-4 sm:-mx-6 flex gap-3 border-t border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white px-4 sm:px-6 pt-4 pb-4 sm:pb-6">
             <button
               type="button"
               id="cancel-tcping-config-btn"
@@ -684,10 +688,58 @@ const customCodePlaceholder = [
     -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
     mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
   }
+
+  /* Rows from 640 to 1023 px. The address column was as wide as each row's
+     longest IPv6 address, so the columns started at a different x on every
+     row and a long address squeezed the name into a few letters a line. Now
+     the name takes 30 % of the row, the traffic totals 7.5rem and the
+     address the rest; a long IPv6 address ends in "…" (its tooltip and copy
+     button keep all of it). Below 768 px the traffic totals make room for
+     the other two. From 1024 px the template's lg: widths apply. The rows
+     are built by script, hence :global. */
+  @media (min-width: 640px) and (max-width: 1023.98px) {
+    #systems-list :global(.admin-name-col) { flex: 0 0 30% !important; }
+    #systems-list :global(.ip-info-container) { flex: 1 1 0; min-width: 0; }
+    #systems-list :global(.ip-info-container > div) { min-width: 0; }
+    #systems-list :global(.system-ipv4),
+    #systems-list :global(.system-ipv6) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #systems-list :global(.traffic-info-container) { flex: 0 0 7.5rem; }
+  }
+  @media (min-width: 640px) and (max-width: 767.98px) {
+    #systems-list :global(.admin-name-col) { flex-basis: 36% !important; }
+    #systems-list :global(.traffic-info-container) { display: none !important; }
+  }
   
-  /* Hide scrollbar for modal content */
-  [data-modal-content]::-webkit-scrollbar {
-    display: none;  /* Chrome, Safari and Opera */
+  /* A dialog that scrolls shows a thin grey scrollbar (it was hidden, so
+     nothing told that more was below). Standard properties for Firefox and
+     Chromium, ::-webkit-scrollbar for Safari. */
+  [data-modal-content],
+  .dialog-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.22) transparent;
+  }
+  [data-modal-content]::-webkit-scrollbar,
+  .dialog-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+  [data-modal-content]::-webkit-scrollbar-track,
+  .dialog-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  [data-modal-content]::-webkit-scrollbar-thumb,
+  .dialog-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.22);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+    border-radius: 8px;
+  }
+  :global(html.dark) [data-modal-content],
+  :global(html.dark) .dialog-scroll {
+    scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  }
+  :global(html.dark) [data-modal-content]::-webkit-scrollbar-thumb,
+  :global(html.dark) .dialog-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.22);
   }
 </style>
 
@@ -1324,7 +1376,7 @@ const customCodePlaceholder = [
             <!-- System Info -->
             <div class="flex-1 min-w-0 flex items-center gap-3">
               <!-- Left: Name -->
-              <div class="flex flex-col gap-1 flex-shrink-0 lg:w-[250px]" style="flex-shrink: 1; min-width: 0; max-width: 250px;">
+              <div class="admin-name-col flex flex-col gap-1 flex-shrink-0 lg:w-[250px]" style="flex-shrink: 1; min-width: 0; max-width: 250px;">
                 <span class="system-name text-sm font-semibold text-[#262626] dark:text-[#f5f5f5]" style="word-break: break-word; overflow-wrap: break-word; display: block;">${escapeHtml(system.name || '')}</span>
                 <!-- Other Info (Virtualization Type, OS) -->
                 <div class="flex flex-wrap gap-2 text-xs text-[#404040] dark:text-[#a3a3a3] min-h-[16px]">
@@ -1358,7 +1410,7 @@ const customCodePlaceholder = [
                 <!-- IPv6 Row -->
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
-                  <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(system.ipv6 || '')}</span>
+                  <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs" title="${escapeHtmlAttr(system.ipv6 || '')}">${escapeHtml(system.ipv6 || '')}</span>
                   <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#a3a3a3] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(system.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6" aria-label="Copy IPv6 address">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
@@ -1770,6 +1822,7 @@ const customCodePlaceholder = [
           const ipv6Span = ipv6Row.querySelector('.system-ipv6');
           if (ipv6Span) {
             ipv6Span.textContent = item.ipv6;
+            ipv6Span.title = item.ipv6;
           }
           const ipv6CopyBtn = ipv6Row.querySelector('[data-ip]');
           if (ipv6CopyBtn) {
@@ -1799,7 +1852,7 @@ const customCodePlaceholder = [
             const ipv6RowHTML = `
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#525252] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
-                <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv6 || '')}</span>
+                <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs" title="${escapeHtmlAttr(item.ipv6 || '')}">${escapeHtml(item.ipv6 || '')}</span>
                 <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#a3a3a3] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                   <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
@@ -1823,7 +1876,7 @@ const customCodePlaceholder = [
               <div class="ip-info-container hidden sm:flex lg:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
-                  <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv6 || '')}</span>
+                  <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs" title="${escapeHtmlAttr(item.ipv6 || '')}">${escapeHtml(item.ipv6 || '')}</span>
                   <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#a3a3a3] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
