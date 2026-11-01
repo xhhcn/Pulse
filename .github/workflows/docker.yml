@@ -146,30 +146,22 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} redesigns the optional glass appearance and polishes theme switching, keyboard use and the TCPing tooltip. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
+            v${{ steps.version.outputs.version }} matches the phone's address bar to the glass appearance and gives the login page a way back to the dashboard. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
 
             ### Highlights
 
-            - Web: the glass appearance (the "Glassmorphism Effect" switch in the admin settings) is redesigned as a graphite take on the macOS material, so it reads as an extension of the default theme. The page is a graphite wallpaper under a soft studio light instead of violet, pink and blue glows; the navbar, the main cards and the login card are frosted panes with a top highlight, a hairline edge and a soft lift; colour is left to the data. The columns menu and the dialogs blur and saturate what lies beneath them like macOS menus and sheets, and are opaque enough that the table no longer shows through their text.
-            - Web: glass mode scrolls as smoothly as the default theme. It used to stack backdrop blurs on every pane and row (330 on the home page), most of which could not even reach the page background, and scrolling took several times as long per frame.
-            - Web: switching between light and dark is one cross-fade again. The rule that pauses colour transitions during the switch only covered each page's own markup, so the table, the filter box and the navigation re-coloured in steps for about half a second afterwards (and browsers without View Transitions switched only part of the page at once).
-            - Web: the parts the browser draws itself (form controls, autofill, the phone's address bar) follow the theme chosen on the page instead of the system setting.
-            - Web: the TCPing tooltip reads "CU: 231.67 ms" instead of "CU (ms): 231.67 ms", and a target that timed out in the hovered minute is listed as "Timeout" instead of being left out.
-            - Web: rows can be reached with Tab and opened or closed with Enter or Space; a green ring marks the row with keyboard focus. Mouse and touch behave as before (Space after a click still scrolls the page).
-            - Web: when the system asks for reduced motion, rows open and close without sliding and the chart does not wait for a slide.
-            - Web (admin): from 1280 px the address column fits a full IPv6 address, so the traffic column lines up on every row; narrower screens are unchanged.
-            - Web: the footer tagline follows the interface language.
+            - Web: with the glass appearance on, the phone's address bar (the page's theme colour) takes the tone of the top of the graphite wallpaper, #eaebec in light and #242426 in dark. It used to keep the default theme's #fafafa / #151515, a brighter (light) or darker (dark) band above the page. It follows a theme switch; with the glass appearance off nothing changes.
+            - Web: the login page links back to the dashboard ("返回首页" / "Back to dashboard") under the login card. The link is shown only while the dashboard is public: in privacy mode the dashboard would just send the visitor back to the login page.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format changed.
-            - Existing `metrics.db` files remain readable; the glass switch keeps its setting.
+            - Existing `metrics.db` files remain readable.
 
             ### Verified
 
-            - Chromium, Firefox and WebKit, light and dark, on a copy of a 131-server production dataset: glass mode on the home, admin and login pages and in all eight admin dialogs (only the columns menu and the dialogs blur, the wallpaper renders alike in all three engines, no console errors); a theme switch on every page (one cross-fade with View Transitions, an instant switch without); the browser's colour scheme and theme colour match the shown theme in 18 of 18 combinations of system setting, chosen theme and page; keyboard use (Tab, Enter, Space, aria-expanded, the focus ring; Space after a click still scrolls); reduced motion (rows open in the first frame and the chart does not wait; with normal motion the slide is unchanged); the admin traffic column at one position from 1280 px without touching the CPU logo, and below 1280 px the same layout as v1.3.38.
-            - Regression: the 40 functional chart checks; the share-link and admin views of a privacy-mode instance and a deployment without targets; Chart.js unreachable or altered (integrity); a live refresh that only drops expired points. The TCPing chart is pixel-identical to v1.3.38 in 56 combinations of theme, width (390–1440 px), pixel ratio and browser, 10 of them built while the row was still opening.
-            - Glass mode scrolls at the frame time of the default theme (17 ms median on the test machine; 68 ms with the previous glass). The server code is unchanged from v1.3.34.
+            - Chromium, Firefox and WebKit, on a copy of a 131-server production dataset: the address-bar colour on the home, admin and login pages, light and dark, with the glass appearance on and off, before and after a theme switch; the login link in Chinese and English, reachable with Tab and showing the focus ring, opening the dashboard, and hidden in privacy mode (25 of 25 checks in each browser).
+            - Regression: glass mode on the three pages and in all eight admin dialogs (30 of 30); the browser's colour scheme matches the shown theme in 18 of 18 combinations of system setting, chosen theme and page; the 40 functional chart checks. The server code is unchanged from v1.3.34.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
