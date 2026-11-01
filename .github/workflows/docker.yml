@@ -146,26 +146,30 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} makes the TCPing chart of an expanded row appear sooner and draw in smoothly, and serves Chart.js from the dashboard itself. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
+            v${{ steps.version.outputs.version }} redesigns the optional glass appearance and polishes theme switching, keyboard use and the TCPing tooltip. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
 
             ### Highlights
 
-            - Web: a new chart draws in from left to right with a short rise, instead of Chart.js redrawing all of its points on every frame for a second. The finished chart is pixel-identical to before; with reduced motion it simply appears.
-            - Web: a row's history is requested as soon as the mouse is pressed on it or has rested on it for a moment, so after a short hover the chart is usually ready when the row has opened. A pointer that only passes over rows, or a finger that starts a scroll, requests nothing, and a request older than 10 s or older than the newest sample is not reused.
-            - Web: building the chart is quicker (no per-point animation setup, timestamps handed to Chart.js as numbers), and a chart built while its row is still opening takes the size measured when the row started to open instead of re-laying out the whole table mid-animation. On a device that builds charts slowly, the chart waits for the 0.3 s opening to finish instead of interrupting it.
-            - Web: the first live update after a row is opened no longer fetches the same history again.
-            - Web: Chart.js 4.4.0 and its date adapter ship with the dashboard (`server/web/vendor`: the unmodified npm release files, MIT) under content-hashed names that browsers cache for a year, still checked with Subresource Integrity. Nothing is loaded from jsdelivr or unpkg any more, so visitors whose network cannot reach those CDNs get the chart too; if the file ever fails to load, the next open or sample tries again.
+            - Web: the glass appearance (the "Glassmorphism Effect" switch in the admin settings) is redesigned as a graphite take on the macOS material, so it reads as an extension of the default theme. The page is a graphite wallpaper under a soft studio light instead of violet, pink and blue glows; the navbar, the main cards and the login card are frosted panes with a top highlight, a hairline edge and a soft lift; colour is left to the data. The columns menu and the dialogs blur and saturate what lies beneath them like macOS menus and sheets, and are opaque enough that the table no longer shows through their text.
+            - Web: glass mode scrolls as smoothly as the default theme. It used to stack backdrop blurs on every pane and row (330 on the home page), most of which could not even reach the page background, and scrolling took several times as long per frame.
+            - Web: switching between light and dark is one cross-fade again. The rule that pauses colour transitions during the switch only covered each page's own markup, so the table, the filter box and the navigation re-coloured in steps for about half a second afterwards (and browsers without View Transitions switched only part of the page at once).
+            - Web: the parts the browser draws itself (form controls, autofill, the phone's address bar) follow the theme chosen on the page instead of the system setting.
+            - Web: the TCPing tooltip reads "CU: 231.67 ms" instead of "CU (ms): 231.67 ms", and a target that timed out in the hovered minute is listed as "Timeout" instead of being left out.
+            - Web: rows can be reached with Tab and opened or closed with Enter or Space; a green ring marks the row with keyboard focus. Mouse and touch behave as before (Space after a click still scrolls the page).
+            - Web: when the system asks for reduced motion, rows open and close without sliding and the chart does not wait for a slide.
+            - Web (admin): from 1280 px the address column fits a full IPv6 address, so the traffic column lines up on every row; narrower screens are unchanged.
+            - Web: the footer tagline follows the interface language.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format changed.
-            - Existing `metrics.db` files remain readable.
+            - Existing `metrics.db` files remain readable; the glass switch keeps its setting.
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: rows opened by click, after a short hover and by tap on a phone; closing, reopening and rapid toggles; another row opened while one is open; target tabs; window sizes from 390 to 1366 px; light and dark; reduced motion; a theme switch after the draw-in; new samples arriving while a row is open, including a refresh that only drops expired points; the share-link and admin views of a privacy-mode instance; unreachable, empty, never-reporting and hidden-card rows; a deployment without targets; Chart.js unreachable or altered (integrity) on the first open and reachable afterwards. Every extra history request in these runs followed a newly announced sample.
-            - The finished chart is pixel-identical to v1.3.37 in 48 combinations of theme, width (390–1366 px) and pixel ratio, 21 of them built while the row was still opening. No request goes to another host.
-            - On a desktop the chart appears after about 0.4 s instead of 0.7 s (0.15–0.2 s after a short hover) and the opening's worst frame drops from 150–250 ms to 17–100 ms; with a 4× slower CPU the chart appears after 0.9 s instead of 2.3 s. The server code is unchanged from v1.3.34.
+            - Chromium, Firefox and WebKit, light and dark, on a copy of a 131-server production dataset: glass mode on the home, admin and login pages and in all eight admin dialogs (only the columns menu and the dialogs blur, the wallpaper renders alike in all three engines, no console errors); a theme switch on every page (one cross-fade with View Transitions, an instant switch without); the browser's colour scheme and theme colour match the shown theme in 18 of 18 combinations of system setting, chosen theme and page; keyboard use (Tab, Enter, Space, aria-expanded, the focus ring; Space after a click still scrolls); reduced motion (rows open in the first frame and the chart does not wait; with normal motion the slide is unchanged); the admin traffic column at one position from 1280 px without touching the CPU logo, and below 1280 px the same layout as v1.3.38.
+            - Regression: the 40 functional chart checks; the share-link and admin views of a privacy-mode instance and a deployment without targets; Chart.js unreachable or altered (integrity); a live refresh that only drops expired points. The TCPing chart is pixel-identical to v1.3.38 in 56 combinations of theme, width (390–1440 px), pixel ratio and browser, 10 of them built while the row was still opening.
+            - Glass mode scrolls at the frame time of the default theme (17 ms median on the test machine; 68 ms with the previous glass). The server code is unchanged from v1.3.34.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
