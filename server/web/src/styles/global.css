@@ -577,6 +577,13 @@ html.glass-enabled.dark body::before {
     radial-gradient(75% 65% at 105% 112%, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0) 70%);
 }
 
+/* The access check that covers the home and admin pages while they load
+   shows the wallpaper, not the plain theme colour, so the page does not
+   start bright and then dim to the graphite as the check fades out. */
+html.glass-enabled #login-redirect {
+  background-color: transparent;
+}
+
 /* Make login page wrapper transparent so the wallpaper shows */
 html.glass-enabled .glass-login-wrapper {
   background: transparent !important;

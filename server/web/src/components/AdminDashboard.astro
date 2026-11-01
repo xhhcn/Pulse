@@ -1277,12 +1277,12 @@ const customCodePlaceholder = [
   function renderSystemItem(system, index) {
     return `
         <div class="draggable-item rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4 cursor-move transition-colors duration-150 hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] min-h-[60px] relative" draggable="true" data-system-id="${escapeHtmlAttr(system.id || '')}" data-index="${index}">
-            <!-- CPU brand logo behind the row. From 1024 px the name and address columns are fixed (lg:w / lg:min-w below), so the address and traffic columns line up, and the logo sits in the free space left of the buttons instead of the centre, where the aligned columns would cover it. Narrower rows have no free space, so it is not shown there. -->
+            <!-- CPU brand logo behind the row. From 1024 px the name and address columns are fixed (lg:w / lg:min-w below; the address column fits a full IPv6 address), so the address and traffic columns line up on every row. Only from 1280 px is there free space left of the buttons for the logo; on narrower rows the traffic column would run into it, so it is not shown there. -->
             ${(() => {
               const cpuBrandIcon = getCPUBrandIcon(system.cpu_model);
               if (cpuBrandIcon) {
                 return `
-                <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden lg:flex lg:left-auto lg:right-[11.5rem] lg:translate-x-0 items-center justify-center pointer-events-none opacity-20" style="z-index: 0;">
+                <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden xl:flex xl:left-auto xl:right-[11.5rem] xl:translate-x-0 items-center justify-center pointer-events-none opacity-20" style="z-index: 0;">
                   <span class="cpu-brand-icon block leading-none" data-icon="${escapeHtmlAttr(cpuBrandIcon)}"></span>
                 </div>
                 `;
@@ -1293,7 +1293,7 @@ const customCodePlaceholder = [
             <div class="flex items-center gap-3 min-h-[28px] relative" style="z-index: 1;">
             <!-- Edit Button -->
             <button 
-              class="edit-btn shrink-0 rounded-lg p-2 text-[#525252] dark:text-[#737373] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-blue-400 dark:hover:text-blue-400 hover:text-blue-600 self-center"
+              class="edit-btn shrink-0 rounded-lg p-2 text-[#525252] dark:text-[#a3a3a3] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-blue-400 dark:hover:text-blue-400 hover:text-blue-600 self-center"
               data-system='${escapeHtmlAttr(JSON.stringify(system))}'
               data-edit-key='${escapeHtmlAttr(
                 String(system.id || '') + '|' +
@@ -1323,7 +1323,7 @@ const customCodePlaceholder = [
               <div class="flex flex-col gap-1 flex-shrink-0 lg:w-[250px]" style="flex-shrink: 1; min-width: 0; max-width: 250px;">
                 <span class="system-name text-sm font-semibold text-[#262626] dark:text-[#f5f5f5]" style="word-break: break-word; overflow-wrap: break-word; display: block;">${escapeHtml(system.name || '')}</span>
                 <!-- Other Info (Virtualization Type, OS) -->
-                <div class="flex flex-wrap gap-2 text-xs text-[#404040] dark:text-[#737373] min-h-[16px]">
+                <div class="flex flex-wrap gap-2 text-xs text-[#404040] dark:text-[#a3a3a3] min-h-[16px]">
                   ${system.virtualization_type ? `<span class="system-virtualization-type">${escapeHtml(system.virtualization_type)}</span>` : ''}
                   ${system.os ? `<span class="system-os">• ${escapeHtml(system.os)}</span>` : ''}
                   ${!system.virtualization_type && !system.os ? '<span class="invisible">-</span>' : ''}
@@ -1331,15 +1331,15 @@ const customCodePlaceholder = [
               </div>
               
               ${(system.ipv4 || system.ipv6) ? `
-              <!-- IP Addresses - Hidden on mobile. From 1280 px the column fits a full
+              <!-- IP Addresses - Hidden on mobile. From 1024 px the column fits a full
                    IPv6 address, so the traffic column lines up on every row. -->
-              <div class="ip-info-container hidden sm:flex lg:min-w-[11rem] xl:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
+              <div class="ip-info-container hidden sm:flex lg:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
                 ${system.ipv4 ? `
                 <!-- IPv4 Row -->
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv4:</span>
                   <span class="system-ipv4 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(system.ipv4 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(system.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4" aria-label="Copy IPv4 address">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#a3a3a3] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(system.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4" aria-label="Copy IPv4 address">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1355,7 +1355,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
                   <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(system.ipv6 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(system.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6" aria-label="Copy IPv6 address">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#a3a3a3] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(system.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6" aria-label="Copy IPv6 address">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1369,7 +1369,7 @@ const customCodePlaceholder = [
                 <!-- IPv6 Row (placeholder) -->
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
-                  <span class="text-[#404040] dark:text-[#737373]">-</span>
+                  <span class="text-[#404040] dark:text-[#a3a3a3]">-</span>
                 </div>
                 ` : ''}
               </div>
@@ -1383,12 +1383,12 @@ const customCodePlaceholder = [
               <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center" style="font-variant-numeric: tabular-nums; min-width: 110px;">
                 ${system.total_net_in_bytes ? `
                 <div class="traffic-row-in flex items-center min-h-[22px]">
-                  <span class="system-total-net-in text-[#525252] dark:text-[#737373]">In: ${formatBytes(system.total_net_in_bytes)}</span>
+                  <span class="system-total-net-in text-[#525252] dark:text-[#a3a3a3]">In: ${formatBytes(system.total_net_in_bytes)}</span>
                 </div>
                 ` : '<div class="traffic-row-in flex items-center min-h-[22px]"></div>'}
                 ${system.total_net_out_bytes ? `
                 <div class="traffic-row-out flex items-center min-h-[22px]">
-                  <span class="system-total-net-out text-[#525252] dark:text-[#737373]">Out: ${formatBytes(system.total_net_out_bytes)}</span>
+                  <span class="system-total-net-out text-[#525252] dark:text-[#a3a3a3]">Out: ${formatBytes(system.total_net_out_bytes)}</span>
                 </div>
                 ` : '<div class="traffic-row-out flex items-center min-h-[22px]"></div>'}
               </div>
@@ -1397,7 +1397,7 @@ const customCodePlaceholder = [
 
             <!-- Copy Linux Install Command Button (mingcute:linux-fill) -->
             <button 
-              class="copy-linux-cmd-btn shrink-0 rounded-lg p-2 text-[#525252] dark:text-[#737373] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-orange-400 dark:hover:text-orange-400 hover:text-orange-600 self-center"
+              class="copy-linux-cmd-btn shrink-0 rounded-lg p-2 text-[#525252] dark:text-[#a3a3a3] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-orange-400 dark:hover:text-orange-400 hover:text-orange-600 self-center"
               data-system-id="${escapeHtmlAttr(system.id || '')}"
               title="${adminT('copyLinuxCommand')}" data-title-en="Copy Linux install command" data-title-zh="复制 Linux 安装命令"
               aria-label="${adminT('copyLinuxCommand')}"
@@ -1412,7 +1412,7 @@ const customCodePlaceholder = [
 
             <!-- Copy Windows Install Command Button (mingcute:windows-fill) -->
             <button 
-              class="copy-windows-cmd-btn shrink-0 rounded-lg p-2 text-[#525252] dark:text-[#737373] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-blue-400 dark:hover:text-blue-400 hover:text-blue-600 self-center"
+              class="copy-windows-cmd-btn shrink-0 rounded-lg p-2 text-[#525252] dark:text-[#a3a3a3] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-blue-400 dark:hover:text-blue-400 hover:text-blue-600 self-center"
               data-system-id="${escapeHtmlAttr(system.id || '')}"
               title="${adminT('copyWindowsCommand')}" data-title-en="Copy Windows install command" data-title-zh="复制 Windows 安装命令"
               aria-label="${adminT('copyWindowsCommand')}"
@@ -1427,7 +1427,7 @@ const customCodePlaceholder = [
 
             <!-- Delete Button -->
             <button 
-              class="delete-btn shrink-0 rounded-lg p-2 text-[#525252] dark:text-[#737373] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-red-400 dark:hover:text-red-400 hover:text-red-600 self-center"
+              class="delete-btn shrink-0 rounded-lg p-2 text-[#525252] dark:text-[#a3a3a3] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-red-400 dark:hover:text-red-400 hover:text-red-600 self-center"
               data-system-id="${escapeHtmlAttr(system.id || '')}"
               data-system-name="${escapeHtmlAttr(system.name || '')}"
               title="${adminT('deleteSystem')}" data-title-en="Delete Service" data-title-zh="删除服务"
@@ -1564,7 +1564,7 @@ const customCodePlaceholder = [
             } else {
               // Create new icon container in the center (absolute positioning, background)
               const iconContainer = document.createElement('div');
-              iconContainer.className = 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden lg:flex lg:left-auto lg:right-[11.5rem] lg:translate-x-0 items-center justify-center pointer-events-none opacity-20';
+              iconContainer.className = 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden xl:flex xl:left-auto xl:right-[11.5rem] xl:translate-x-0 items-center justify-center pointer-events-none opacity-20';
               iconContainer.style.zIndex = '0';
               const iconSpan = document.createElement('span');
               iconSpan.className = 'cpu-brand-icon block leading-none';
@@ -1664,7 +1664,7 @@ const customCodePlaceholder = [
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#525252] dark:text-[#a3a3a3] shrink-0">IPv4:</span>
                 <span class="system-ipv4 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
-                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
+                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#a3a3a3] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                   <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1692,15 +1692,15 @@ const customCodePlaceholder = [
             const ipv6Placeholder = (!item.ipv6) ? `
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
-                  <span class="text-[#525252] dark:text-[#737373]">-</span>
+                  <span class="text-[#525252] dark:text-[#a3a3a3]">-</span>
                 </div>
             ` : '';
             const ipContainerHTML = `
-              <div class="ip-info-container hidden sm:flex lg:min-w-[11rem] xl:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
+              <div class="ip-info-container hidden sm:flex lg:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv4:</span>
                   <span class="system-ipv4 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#a3a3a3] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1796,7 +1796,7 @@ const customCodePlaceholder = [
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#525252] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
                 <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv6 || '')}</span>
-                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
+                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#a3a3a3] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                   <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1816,11 +1816,11 @@ const customCodePlaceholder = [
           } else if (nameAndIpContainerForIPv6) {
             // No container exists, need to create it
             const ipContainerHTML = `
-              <div class="ip-info-container hidden sm:flex lg:min-w-[11rem] xl:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
+              <div class="ip-info-container hidden sm:flex lg:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
                   <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv6 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#737373] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#525252] dark:text-[#a3a3a3] hover:text-[#262626] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1870,7 +1870,7 @@ const customCodePlaceholder = [
             const placeholderHTML = `
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
-                <span class="text-[#525252] dark:text-[#737373]">-</span>
+                <span class="text-[#525252] dark:text-[#a3a3a3]">-</span>
               </div>
             `;
             const tempDiv = document.createElement('div');
@@ -1889,7 +1889,7 @@ const customCodePlaceholder = [
             const placeholderHTML = `
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
-                <span class="text-[#525252] dark:text-[#737373]">-</span>
+                <span class="text-[#525252] dark:text-[#a3a3a3]">-</span>
               </div>
             `;
             const tempDiv = document.createElement('div');
@@ -1923,12 +1923,12 @@ const customCodePlaceholder = [
           <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center" style="font-variant-numeric: tabular-nums; min-width: 110px;">
             ${item.total_net_in_bytes ? `
             <div class="traffic-row-in flex items-center min-h-[22px]">
-              <span class="system-total-net-in text-[#525252] dark:text-[#737373]">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
+              <span class="system-total-net-in text-[#525252] dark:text-[#a3a3a3]">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
             </div>
             ` : '<div class="traffic-row-in flex items-center min-h-[22px]"></div>'}
             ${item.total_net_out_bytes ? `
             <div class="traffic-row-out flex items-center min-h-[22px]">
-              <span class="system-total-net-out text-[#525252] dark:text-[#737373]">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
+              <span class="system-total-net-out text-[#525252] dark:text-[#a3a3a3]">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
             </div>
             ` : '<div class="traffic-row-out flex items-center min-h-[22px]"></div>'}
           </div>
@@ -1956,7 +1956,7 @@ const customCodePlaceholder = [
           } else if (inRow) {
             // Create the span if it doesn't exist
             netInSpan = document.createElement('span');
-            netInSpan.className = 'system-total-net-in text-[#525252] dark:text-[#737373]';
+            netInSpan.className = 'system-total-net-in text-[#525252] dark:text-[#a3a3a3]';
             netInSpan.textContent = `In: ${formattedIn}`;
             inRow.appendChild(netInSpan);
           }
@@ -1986,12 +1986,12 @@ const customCodePlaceholder = [
           <div class="traffic-info-container hidden sm:flex flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center" style="font-variant-numeric: tabular-nums; min-width: 110px;">
             ${item.total_net_in_bytes ? `
             <div class="traffic-row-in flex items-center min-h-[22px]">
-              <span class="system-total-net-in text-[#525252] dark:text-[#737373]">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
+              <span class="system-total-net-in text-[#525252] dark:text-[#a3a3a3]">In: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_in_bytes) : '0 B'}</span>
             </div>
             ` : '<div class="traffic-row-in flex items-center min-h-[22px]"></div>'}
             ${item.total_net_out_bytes ? `
             <div class="traffic-row-out flex items-center min-h-[22px]">
-              <span class="system-total-net-out text-[#525252] dark:text-[#737373]">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
+              <span class="system-total-net-out text-[#525252] dark:text-[#a3a3a3]">Out: ${typeof formatBytes === 'function' ? formatBytes(item.total_net_out_bytes) : '0 B'}</span>
             </div>
             ` : '<div class="traffic-row-out flex items-center min-h-[22px]"></div>'}
           </div>
@@ -2016,7 +2016,7 @@ const customCodePlaceholder = [
           } else if (outRow) {
             // Create the span if it doesn't exist
             netOutSpan = document.createElement('span');
-            netOutSpan.className = 'system-total-net-out text-[#525252] dark:text-[#737373]';
+            netOutSpan.className = 'system-total-net-out text-[#525252] dark:text-[#a3a3a3]';
             netOutSpan.textContent = `Out: ${formattedOut}`;
             outRow.appendChild(netOutSpan);
           }

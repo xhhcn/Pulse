@@ -301,7 +301,11 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <div id="login-redirect" class="fixed inset-0 z-50 flex items-center justify-center bg-[#fafafa] dark:bg-[#151515] transition-opacity duration-200 ease-out">
       <div class="text-center animate-page-in">
         <div class="w-8 h-8 border-[3px] border-[#d4d4d4] dark:border-[#404040] border-t-[#525252] dark:border-t-[#d4d4d4] rounded-full animate-spin-smooth mx-auto mb-4"></div>
-        <p class="text-sm text-[#525252] dark:text-[#a3a3a3]">Checking access...</p>
+        <p id="access-check-text" class="text-sm text-[#525252] dark:text-[#a3a3a3]">Checking access...</p>
+        <script is:inline>
+          // <head> has set the page language by now; the check speaks it too.
+          if ((document.documentElement.lang || '').indexOf('zh') === 0) document.getElementById('access-check-text').textContent = '正在检查访问权限...';
+        </script>
       </div>
     </div>
   </body>
