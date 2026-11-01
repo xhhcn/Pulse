@@ -950,7 +950,7 @@ const apiBase = apiBaseProp ?? '';
     const safeNameAttr = escapeHtmlAttr(item.name || 'unknown');
     return `
     <div class="system-row" data-system-id="${safeId}">
-      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}" style="grid-template-columns: var(--first-col-width, 100px) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr);">
+      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}" tabindex="0" aria-expanded="false" style="grid-template-columns: var(--first-col-width, 100px) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-red-400' : 'bg-emerald-400'} shrink-0"></span>
           <span class="row-name text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>
@@ -1255,6 +1255,8 @@ const apiBase = apiBaseProp ?? '';
     // Summary value for a skipped target — never "0.00 ms" / "0.00%", which
     // would read as "perfect link" / "total loss" respectively.
     'notApplicable': { en: 'N/A', zh: '不适用' },
+    // Tooltip line of a target whose probe failed at the hovered time.
+    'tcpingTimeout': { en: 'Timeout', zh: '超时' },
   };
 
   // [title, hint] of the empty table: no services at all / none match the filter.
@@ -2763,7 +2765,8 @@ const apiBase = apiBaseProp ?? '';
       }
       
       datasets.push({
-        label: `${targetConfig.name || targetConfig.address} (ms)`,
+        // The tooltip adds the unit to each value ("CU: 231.67 ms").
+        label: targetConfig.name || targetConfig.address,
         data: chartData,
         borderColor: borderColor,
         backgroundColor: selectedTarget === null ? `${borderColor}20` : 'rgba(34, 197, 94, 0.1)', // Semi-transparent version of border color when all colored
@@ -3312,7 +3315,7 @@ const apiBase = apiBaseProp ?? '';
                   const datasetLabel = item.dataset.label || '';
                   const value = item.parsed.y;
                   if (value === null || value === undefined) {
-                    return `${datasetLabel}: Timeout/Failure`;
+                    return `${datasetLabel}: ${translations.tcpingTimeout[getCurrentLanguage()]}`;
                   }
                   return `${datasetLabel}: ${value.toFixed(2)} ms`;
                 };
@@ -3351,6 +3354,38 @@ const apiBase = apiBaseProp ?? '';
                 
                 // Return null to hide this label (duplicate for same target)
                 return null;
+              },
+              // A target that timed out in this minute has no point here:
+              // Chart.js leaves empty values out when it collects the tooltip
+              // items, so the target was simply missing from the list. Name
+              // it after the measured ones.
+              afterBody: function(items) {
+                if (!items.length) return [];
+                const chart = items[0].chart;
+                const x = items[0].parsed.x;
+                const listed = new Set(items.map((item) => item.datasetIndex));
+                const activeTargetInfo = tcpingActiveTargets.get(canvas.dataset.tcpingChart);
+                const selectedTarget = activeTargetInfo ? activeTargetInfo.target : null;
+                const lines = [];
+                chart.data.datasets.forEach((dataset, i) => {
+                  if (listed.has(i) || !chart.isDatasetVisible(i)) return;
+                  if (selectedTarget !== null && dataset.targetAddress !== selectedTarget) return;
+                  // Nearest sample in time (points are in time order).
+                  const points = dataset.data;
+                  let lo = 0, hi = points.length - 1;
+                  while (lo < hi) {
+                    const mid = (lo + hi) >> 1;
+                    if (points[mid].x < x) lo = mid + 1; else hi = mid;
+                  }
+                  const near = [points[lo], points[lo - 1]].filter(Boolean)
+                    .sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x))[0];
+                  // Half a probe interval: a target with no sample at all
+                  // around this time is not reported as a timeout.
+                  if (near && near.y === null && Math.abs(near.x - x) <= 30000) {
+                    lines.push(`${dataset.label}: ${translations.tcpingTimeout[getCurrentLanguage()]}`);
+                  }
+                });
+                return lines;
               }
             }
           }
@@ -3759,6 +3794,9 @@ const apiBase = apiBaseProp ?? '';
       if (detailsSection) {
         // Toggle visibility with animation
         const isExpanding = detailsSection.classList.contains('hidden');
+        // With reduced motion the section neither slides nor waits for a
+        // slide (see the CSS at the end): it is shown and hidden at once.
+        const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         
         if (isExpanding) {
           // (a row whose TCPing card the admin hid has no history to show)
@@ -3798,7 +3836,7 @@ const apiBase = apiBaseProp ?? '';
                 if (otherSystemId) {
                   cleanupTCPingChart(otherSystemId);
                 }
-              }, 250);
+              }, reducedMotion ? 0 : 250);
               
               // Update aria-expanded attribute
               if (otherRowElement) {
@@ -3826,7 +3864,7 @@ const apiBase = apiBaseProp ?? '';
           if (tcpingCanvas && tcpingCanvas.parentElement) {
             tcpingCanvas._presize = tcpingCanvas.parentElement.getBoundingClientRect();
           }
-          detailsSection._slideEndsAt = performance.now() + 320;
+          detailsSection._slideEndsAt = performance.now() + (reducedMotion ? 0 : 320);
           
           // Initialize TCPing tabs and start animation in parallel for better UX
           // Start tabs initialization (don't wait)
@@ -3890,7 +3928,7 @@ const apiBase = apiBaseProp ?? '';
             detailsSection.style.opacity = '';
             detailsSection.style.transition = '';
             cleanupTCPingChart(systemId);
-          }, 250);
+          }, reducedMotion ? 0 : 250);
           
           rowElement.setAttribute('aria-expanded', 'false');
         }
@@ -4049,6 +4087,25 @@ const apiBase = apiBaseProp ?? '';
       }
       
       handleRowToggle(e);
+    });
+
+    // Enter opens and closes a focused row, and so does Space when the row
+    // was reached by keyboard: after a mouse click or a tap Space still
+    // scrolls the page (:focus-visible cannot tell, any key press sets it).
+    container.addEventListener('pointerdown', (e) => {
+      const rowElement = e.target.closest && e.target.closest('.system-row > [data-system-id]');
+      if (rowElement) rowElement._pointerFocus = true;
+    });
+    container.addEventListener('focusout', (e) => {
+      if (e.target._pointerFocus) e.target._pointerFocus = false;
+    });
+    container.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const rowElement = e.target;
+      if (!rowElement.matches || !rowElement.matches('.system-row > [data-system-id]')) return;
+      if (e.key === ' ' && rowElement._pointerFocus) return;
+      e.preventDefault();
+      handleRowToggle({ target: rowElement, currentTarget: container, preventDefault: () => {}, stopPropagation: () => {} });
     });
   };
   
@@ -5118,6 +5175,20 @@ const apiBase = apiBaseProp ?? '';
   [data-tcping-chart].tcping-new:not(.opacity-0) { animation: tcping-reveal 900ms cubic-bezier(0.16, 1, 0.3, 1); }
   @media (prefers-reduced-motion: reduce) {
     [data-tcping-chart].tcping-new:not(.opacity-0) { animation: none; }
+    /* Rows open and close without the slide (beats the inline transition
+       handleRowToggle sets; its timers still tidy up afterwards). */
+    .system-details { transition: none !important; }
+  }
+
+  /* A row reached with Tab (Enter/Space opens it) shows a ring in the
+     accent green; mouse and touch never show it. */
+  .system-row > [data-system-id]:focus-visible {
+    outline: 2px solid rgba(16, 185, 129, 0.6);
+    outline-offset: -2px;
+    border-radius: 0.5rem;
+  }
+  .system-row > [data-system-id]:focus:not(:focus-visible) {
+    outline: none;
   }
 
   /* TCPing target tabs — faster taps on mobile (no double-tap zoom delay). */

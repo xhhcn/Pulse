@@ -28,8 +28,10 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <link rel="mask-icon" href="/favicon.svg" color="#24292f" />
     <title>Login · Pulse Monitor</title>
-    <!-- View Transitions API styling for smooth theme switching -->
-    <style>
+    <!-- View Transitions API styling for smooth theme switching. Global: the
+         theme-switching rule has to reach the components' elements too (a
+         scoped one only covered this page's own markup). -->
+    <style is:global>
       /* View Transitions API support for smooth cross-fade */
       ::view-transition-old(root),
       ::view-transition-new(root) {
@@ -102,6 +104,16 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
           html.classList.add('light');
           html.classList.remove('dark');
         }
+        // Browser-drawn parts (form controls, autofill, the phone's address
+        // bar) follow the page's theme rather than the OS setting.
+        html.style.colorScheme = theme;
+        document.querySelectorAll('meta[name="color-scheme"]').forEach(function (m) {
+          m.setAttribute('content', theme);
+        });
+        document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+          m.removeAttribute('media');
+          m.setAttribute('content', theme === 'dark' ? '#151515' : '#fafafa');
+        });
         
         // Apply theme to body when it's available
         function applyThemeToBody() {

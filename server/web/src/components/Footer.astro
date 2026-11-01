@@ -23,7 +23,7 @@
           />
         </svg>
         <span class="font-medium whitespace-nowrap">Pulse</span>
-        <span class="opacity-70 truncate hidden sm:inline">Lightweight server monitoring</span>
+        <span id="footer-tagline" class="opacity-70 truncate hidden sm:inline">Lightweight server monitoring</span>
       </div>
       <div class="flex items-center gap-3 opacity-70 hover:opacity-100 transition-opacity flex-shrink-0">
         <a
@@ -41,3 +41,15 @@
     </div>
   </div>
 </footer>
+
+<script>
+  import { getLanguage } from '../utils/i18n';
+
+  // The tagline follows the page language like the rest of the interface.
+  function updateTagline() {
+    const el = document.getElementById('footer-tagline');
+    if (el) el.textContent = getLanguage() === 'zh' ? '轻量级服务器监控' : 'Lightweight server monitoring';
+  }
+  updateTagline();
+  window.addEventListener('languagechange', updateTagline);
+</script>

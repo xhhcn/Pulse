@@ -256,14 +256,33 @@ const { isAdmin = false } = Astro.props;
           body.classList.add('light');
           body.classList.remove('dark');
         }
+        // Browser-drawn parts (form controls, autofill, the phone's address
+        // bar) follow the page's theme rather than the OS setting.
+        html.style.colorScheme = theme;
+        document.querySelectorAll('meta[name="color-scheme"]').forEach((m) => {
+          m.setAttribute('content', theme);
+        });
+        document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
+          m.removeAttribute('media');
+          m.setAttribute('content', theme === 'dark' ? '#151515' : '#fafafa');
+        });
       };
-      
+
       // Check if View Transitions API is supported for smooth cross-fade effect
       if (document.startViewTransition) {
-        // Use View Transitions API for smooth theme switch with cross-fade
-        document.startViewTransition(() => {
+        // Use View Transitions API for smooth theme switch with cross-fade.
+        // The cross-fade already animates every colour; the elements' own
+        // colour transitions would run again after it, one slow frame at a
+        // time on a long table (the background stepped to the new colour
+        // over ~0.5 s). They stay off until the new state has been captured.
+        // Switched off together with the theme change, after the old state
+        // has been captured, so it costs no extra style pass before the fade.
+        const transition = document.startViewTransition(() => {
+          html.classList.add('theme-switching');
           applyThemeClasses();
         });
+        const restoreTransitions = () => html.classList.remove('theme-switching');
+        transition.ready.then(restoreTransitions, restoreTransitions);
       } else {
         // Fallback: Disable ALL transitions temporarily for instant theme switch
         // Add theme-switching class to disable all transitions via CSS

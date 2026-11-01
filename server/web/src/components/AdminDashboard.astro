@@ -1331,8 +1331,9 @@ const customCodePlaceholder = [
               </div>
               
               ${(system.ipv4 || system.ipv6) ? `
-              <!-- IP Addresses - Hidden on mobile -->
-              <div class="ip-info-container hidden sm:flex lg:min-w-[11rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
+              <!-- IP Addresses - Hidden on mobile. From 1280 px the column fits a full
+                   IPv6 address, so the traffic column lines up on every row. -->
+              <div class="ip-info-container hidden sm:flex lg:min-w-[11rem] xl:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
                 ${system.ipv4 ? `
                 <!-- IPv4 Row -->
                 <div class="flex items-center gap-1.5 min-h-[22px]">
@@ -1695,7 +1696,7 @@ const customCodePlaceholder = [
                 </div>
             ` : '';
             const ipContainerHTML = `
-              <div class="ip-info-container hidden sm:flex lg:min-w-[11rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
+              <div class="ip-info-container hidden sm:flex lg:min-w-[11rem] xl:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv4:</span>
                   <span class="system-ipv4 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
@@ -1815,7 +1816,7 @@ const customCodePlaceholder = [
           } else if (nameAndIpContainerForIPv6) {
             // No container exists, need to create it
             const ipContainerHTML = `
-              <div class="ip-info-container hidden sm:flex lg:min-w-[11rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
+              <div class="ip-info-container hidden sm:flex lg:min-w-[11rem] xl:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#404040] dark:text-[#a3a3a3] shrink-0">IPv6:</span>
                   <span class="system-ipv6 text-[#262626] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv6 || '')}</span>
