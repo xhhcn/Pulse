@@ -146,27 +146,30 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} makes the TCPing chart easier to read and to use, lines up the admin rows on tablets, and keeps dialog buttons in view. Existing clients and databases stay compatible; agents do not need an update (they report 1.3.34).
+            v${{ steps.version.outputs.version }} fixes what three independent reviews of the server, the agent and the pages found, keeps the dashboard table inside its card at every width, and adds an optional sticky table header. Existing clients and databases stay compatible; agents 1.3.45 measure TCPing and traffic more accurately.
 
             ### Highlights
 
-            - Web (chart): the target tabs look like controls: each has a hairline border and the selected one a light tint. A selected target keeps its own colour instead of turning green; the others turn grey as before.
-            - Web (chart): the tooltip shows each target's colour dot, the gridlines are hairlines in both themes, and on narrow charts the lines are thinner, so three targets no longer run together on a phone.
-            - Web (chart): time labels fall on round steps counted from midnight. A phone showed 04:00, 09:00, 14:00, and a few hours of data could give 17:47, 18:46; now 06:00, 12:00, 18:00 or 17:00, 18:00.
-            - Web: the network column header has no ⇅ icon any more (it looked like a sort control); its tooltip says it is download + upload speed.
-            - Web (admin): between 640 and 1023 px the name, address and traffic columns line up on every row. A long IPv6 address no longer squeezes the name into a few letters a line: it ends in "…", with the full address in its tooltip and the copy button. Below 768 px the traffic totals make room for the other two.
-            - Web (admin): the TCPing settings keep Cancel and Save on screen while the targets scroll, and dialogs that scroll show a thin scrollbar (Chrome and Safari still hid it).
-            - Web (admin): the gear in the toolbar opens the general settings, an activity icon the TCPing settings (the gear used to open TCPing, and the palette the general settings).
+            - Agent 1.3.45: a TCPing sample is the TCP handshake only. With a host-name target the agent also timed the DNS lookup (tens of milliseconds on a host that asks a public resolver), and a failed lookup counted as packet loss.
+            - Agent 1.3.45 (Linux): traffic totals and speeds count the host's own interfaces only. Docker and other bridges, veth/tap ends, tunnels (tun, WireGuard, Tailscale, ZeroTier), Kubernetes overlays and ifb mirrors are skipped: a container's download was counted up to three times, and the totals dropped when a container stopped.
+            - Web: the login form never puts the password into the address bar. Pressing Enter before the page script was ready (a slow link) submitted the form natively as a GET, with ?password=… in the URL, the history and access logs. A network error or a 5xx now says the server could not be reached instead of "invalid password".
+            - Web: a signed-in admin's dashboard uses the public, compressed stream unless privacy mode needs the session. The admin view carries every server's addresses and secret, is never compressed (about six times the bytes) and put the session token into every stream URL. In privacy mode, a session or share link that ends now sends the page to the login screen instead of leaving it frozen, and a dead share link no longer logs out an admin whose session is still valid.
+            - Web: the table no longer cuts off its last column at 768-783 and 1024-1046 px (the Offline chip had widened the name column); a very long name gets an ellipsis instead.
+            - Web: filtering and sorting no longer download the whole list on every keystroke; icons no longer hold up row clicks and live updates (the largest flags come from api.iconify.design); the stream reconnects as soon as the network returns or the tab is shown again.
+            - Web (admin): settings dialogs cannot be saved before their current values have loaded (a blank form erased the TCPing targets, the custom code and the shared secret, or the share link). Revoke Share Link revokes at once (it only cleared the form). Custom JavaScript with a top-level `const root` no longer stops the admin page. Buttons stay in the page's language after an action, and field labels are tied to their fields.
+            - Web: new option Sticky Table Header in the general settings, off by default: the column names stay at the top of the window while a long list scrolls.
+            - Web: pages keep working when the browser blocks site data, and the favicon is a static icon (Chrome showed the first, faint frame of its animation).
+            - Server: a push whose write failed is stored when the agent sends it again (it was taken for a duplicate and dropped); registration ignores unspecified, loopback and private IPv6 addresses (`::` made the server poll its own loopback); the TCPing interval is capped at 24 h (a huge value crashed the pollers on every start); a push in flight writes no history for a system just deleted; database compaction peaks at about 47 MB of memory instead of 330 MB; login and token checks count an IPv6 /64 as one client.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format changed.
-            - Existing `metrics.db` files remain readable.
+            - Existing `metrics.db` files remain readable; the new `sticky_header` setting is off until it is switched on.
 
             ### Verified
 
-            - Chromium, Firefox and WebKit, 59 checks each: tab borders and sizes, the selected target's colour, tooltip dots, gridlines across a theme switch, round time steps on desktop and phone and for a short history, line widths, the network header in both languages, the admin rows at six widths from 700 to 1023 px, the TCPing dialog on a phone in both themes, and the toolbar icons.
-            - Regression: the round-12 checks (57 each), the 40 functional chart checks, the chart gap rule, the share-link and admin views of a privacy-mode instance, the glass appearance on every page and dialog, and Chart.js unreachable or altered, in all three engines where they apply. The server code is unchanged from v1.3.34.
+            - Go: the server and agent suites with the race detector, staticcheck and govulncheck; a new test for each server fix, failing on v1.3.44.
+            - Chromium, Firefox and WebKit: the table at 153 widths from 768 to 1920 px in both languages, the sticky header option, the round-10/12/13 checks, the chart functions and gap rule, the share-link and admin views of a privacy-mode instance, the glass pages and dialogs, and a reproduction of every fixed issue.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
