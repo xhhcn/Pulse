@@ -146,30 +146,27 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} fixes what three independent reviews of the server, the agent and the pages found, keeps the dashboard table inside its card at every width, and adds an optional sticky table header. Existing clients and databases stay compatible; agents 1.3.45 measure TCPing and traffic more accurately.
+            v${{ steps.version.outputs.version }} finishes the review of v1.3.45: open dashboards follow tag and TCPing changes, the admin dialogs work from the keyboard, the dashboard says when its connection is lost, and agents ask for their public address less often. Existing clients and databases stay compatible; agents 1.3.46 update by themselves.
 
             ### Highlights
 
-            - Agent 1.3.45: a TCPing sample is the TCP handshake only. With a host-name target the agent also timed the DNS lookup (tens of milliseconds on a host that asks a public resolver), and a failed lookup counted as packet loss.
-            - Agent 1.3.45 (Linux): traffic totals and speeds count the host's own interfaces only. Docker and other bridges, veth/tap ends, tunnels (tun, WireGuard, Tailscale, ZeroTier), Kubernetes overlays and ifb mirrors are skipped: a container's download was counted up to three times, and the totals dropped when a container stopped.
-            - Web: the login form never puts the password into the address bar. Pressing Enter before the page script was ready (a slow link) submitted the form natively as a GET, with ?password=… in the URL, the history and access logs. A network error or a 5xx now says the server could not be reached instead of "invalid password".
-            - Web: a signed-in admin's dashboard uses the public, compressed stream unless privacy mode needs the session. The admin view carries every server's addresses and secret, is never compressed (about six times the bytes) and put the session token into every stream URL. In privacy mode, a session or share link that ends now sends the page to the login screen instead of leaving it frozen, and a dead share link no longer logs out an admin whose session is still valid.
-            - Web: the table no longer cuts off its last column at 768-783 and 1024-1046 px (the Offline chip had widened the name column); a very long name gets an ellipsis instead.
-            - Web: filtering and sorting no longer download the whole list on every keystroke; icons no longer hold up row clicks and live updates (the largest flags come from api.iconify.design); the stream reconnects as soon as the network returns or the tab is shown again.
-            - Web (admin): settings dialogs cannot be saved before their current values have loaded (a blank form erased the TCPing targets, the custom code and the shared secret, or the share link). Revoke Share Link revokes at once (it only cleared the form). Custom JavaScript with a top-level `const root` no longer stops the admin page. Buttons stay in the page's language after an action, and field labels are tied to their fields.
-            - Web: new option Sticky Table Header in the general settings, off by default: the column names stay at the top of the window while a long list scrolls.
-            - Web: pages keep working when the browser blocks site data, and the favicon is a static icon (Chrome showed the first, faint frame of its animation).
-            - Server: a push whose write failed is stored when the agent sends it again (it was taken for a duplicate and dropped); registration ignores unspecified, loopback and private IPv6 addresses (`::` made the server poll its own loopback); the TCPing interval is capped at 24 h (a huge value crashed the pollers on every start); a push in flight writes no history for a system just deleted; database compaction peaks at about 47 MB of memory instead of 330 MB; login and token checks count an IPv6 /64 as one client.
+            - Agent 1.3.46: the public address is looked up every 10 minutes instead of every minute. Each lookup asks up to seven HTTPS echo services (about 36 KB on the wire, 1.6 GB a month per agent at the old rate, and the services had begun to answer 429). After a lookup that found nothing it is retried after a minute, and a known address is kept through two failed lookups.
+            - Web: when no update has arrived for 12 seconds (the server sends one every 3), a grey notice "Connection lost, reconnecting…" joins the summary beside the title, and it goes with the next update. The table used to keep showing the last data as if it were live.
+            - Web: tag edits reach open dashboards, and the TCPing panel appears in every row when the first target is added (both needed a reload).
+            - Web (admin): dialogs are announced as dialogs with their title, keyboard focus moves into a dialog when it opens, stays in it while Tab is pressed, and returns to the button that opened it.
+            - Web (admin): with no TCPing targets yet, the interval can be saved (the empty placeholder row blocked it); a target name without an address is pointed out instead of being dropped.
+            - Web: the login page goes straight back to the dashboard when the stored session is still valid (after a network error while the admin page was checking it, the password was asked for again).
+            - Server: a backup download that stops moving ends after a minute instead of holding the database snapshot open indefinitely.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format changed.
-            - Existing `metrics.db` files remain readable; the new `sticky_header` setting is off until it is switched on.
+            - Existing `metrics.db` files remain readable.
 
             ### Verified
 
-            - Go: the server and agent suites with the race detector, staticcheck and govulncheck; a new test for each server fix, failing on v1.3.44.
-            - Chromium, Firefox and WebKit: the table at 153 widths from 768 to 1920 px in both languages, the sticky header option, the round-10/12/13 checks, the chart functions and gap rule, the share-link and admin views of a privacy-mode instance, the glass pages and dialogs, and a reproduction of every fixed issue.
+            - Go: the server and agent suites with the race detector and staticcheck; new tests for the backup stall and the address lookup interval, the backup one failing on v1.3.45.
+            - Chromium, Firefox and WebKit: the connection notice against a real outage (none in 20 s of normal operation), live tag and first-target changes, dialog names, focus and Tab, the login page with a valid and a dead session, the TCPing interval without targets, and the full regression of v1.3.45.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
