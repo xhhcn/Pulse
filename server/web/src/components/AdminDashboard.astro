@@ -76,7 +76,7 @@ const customCodePlaceholder = [
   </div>
 
   <!-- Add System Modal -->
-  <div id="add-system-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" data-modal>
+  <div id="add-system-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="add-new-system-title" data-modal>
     <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-6 shadow-2xl" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="add-new-system-title" class="text-xl font-semibold text-[#262626] dark:text-[#f5f5f5]" data-translate="addNewSystem">Add New System</h2>
@@ -128,7 +128,7 @@ const customCodePlaceholder = [
   </div>
 
   <!-- Edit System Modal -->
-  <div id="edit-system-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" data-modal>
+  <div id="edit-system-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="edit-system-title" data-modal>
     <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-6 shadow-2xl" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="edit-system-title" class="text-xl font-semibold text-[#262626] dark:text-[#f5f5f5]" data-translate="editSystem">Edit System</h2>
@@ -217,7 +217,7 @@ const customCodePlaceholder = [
   </div>
 
   <!-- Delete Confirmation Modal -->
-  <div id="delete-confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" data-modal>
+  <div id="delete-confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="delete-system-title" data-modal>
     <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-6 shadow-2xl" data-modal-content>
       <div class="mb-4">
         <div class="mb-3 flex items-center gap-3">
@@ -254,7 +254,7 @@ const customCodePlaceholder = [
   </div>
 
   <!-- TCPing Config Modal -->
-  <div id="tcping-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm overflow-hidden" data-modal>
+  <div id="tcping-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="tcping-config-title" data-modal>
     <div class="mx-2 sm:mx-4 w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white shadow-2xl overflow-hidden" data-modal-content>
       <!-- Header - Fixed -->
       <div class="flex items-center justify-between p-4 pb-0 sm:p-6 sm:pb-0 shrink-0">
@@ -330,7 +330,7 @@ const customCodePlaceholder = [
   </div>
 
   <!-- Change Password Modal -->
-  <div id="change-password-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" data-modal>
+  <div id="change-password-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="change-password-title" data-modal>
     <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-6 shadow-2xl" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="change-password-title" class="text-xl font-semibold text-[#262626] dark:text-[#f5f5f5]" data-translate="changePassword">Change Password</h2>
@@ -402,7 +402,7 @@ const customCodePlaceholder = [
   </div>
 
   <!-- Navbar Config Modal -->
-  <div id="navbar-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" data-modal>
+  <div id="navbar-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="navbar-config-title" data-modal>
     <div class="mx-4 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-6 sm:p-7 pb-0 sm:pb-0 shadow-2xl" data-modal-content>
       <div class="mb-5 flex items-center justify-between">
         <h2 id="navbar-config-title" class="text-xl font-semibold text-[#262626] dark:text-[#f5f5f5]" data-translate="customizationSettings">Customization Settings</h2>
@@ -535,10 +535,10 @@ const customCodePlaceholder = [
   </div>
 
   <!-- Regenerate Secret Confirmation Modal -->
-  <div id="regenerate-secret-confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" data-modal>
+  <div id="regenerate-secret-confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="regenerate-secret-title" data-modal>
     <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-6 shadow-2xl" data-modal-content>
       <div class="mb-4">
-        <h2 class="text-xl font-semibold text-[#262626] dark:text-[#f5f5f5]" data-translate="confirmRegenerateTitle">Regenerate Shared Secret?</h2>
+        <h2 id="regenerate-secret-title" class="text-xl font-semibold text-[#262626] dark:text-[#f5f5f5]" data-translate="confirmRegenerateTitle">Regenerate Shared Secret?</h2>
       </div>
 
       <div class="mb-6">
@@ -573,7 +573,7 @@ const customCodePlaceholder = [
   </div>
 
   <!-- Privacy Config Modal -->
-  <div id="privacy-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" data-modal>
+  <div id="privacy-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 dark:bg-black/50 bg-black/30 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="privacy-config-title" data-modal>
     <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-6 shadow-2xl" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="privacy-config-title" class="text-xl font-semibold text-[#262626] dark:text-[#f5f5f5]" data-translate="privacySettings">Privacy Settings</h2>
@@ -781,10 +781,50 @@ const customCodePlaceholder = [
   const modalOriginalParents = new Map();
   
   // Open modal with animation - moves modal to body to avoid transform issues
+  // Keyboard focus follows the dialogs: into a dialog when it opens (it used
+  // to stay on the page behind the backdrop, hundreds of Tab presses away),
+  // and back to the control that opened it when it closes.
+  const MODAL_FOCUSABLE = [
+    'input:not([type="hidden"])', 'select', 'textarea', 'button', 'a[href]',
+    '[tabindex]:not([tabindex="-1"])',
+  ].map((s) => s + ':not([disabled])').join(', ');
+
+  function modalFocusables(modal) {
+    const scope = modal.querySelector('[data-modal-content]') || modal;
+    return Array.from(scope.querySelectorAll(MODAL_FOCUSABLE)).filter((el) =>
+      !el.hidden && !el.closest('[hidden]') && (el.offsetParent !== null || el === document.activeElement));
+  }
+
+  function focusFirstInModal(modal) {
+    const target = modalFocusables(modal)[0];
+    if (target) {
+      try { target.focus({ preventScroll: true }); } catch (_) { target.focus(); }
+      return;
+    }
+    if (!modal.hasAttribute('tabindex')) modal.setAttribute('tabindex', '-1');
+    try { modal.focus({ preventScroll: true }); } catch (_) { modal.focus(); }
+  }
+
+  function restoreFocusAfterModal(modal) {
+    const prev = modal._restoreFocus;
+    modal._restoreFocus = null;
+    if (!prev || typeof prev.focus !== 'function') return;
+    // The opener can be gone (the systems list re-renders on save/delete).
+    if (!prev.isConnected) return;
+    try { prev.focus({ preventScroll: true }); } catch (_) { prev.focus(); }
+  }
+
   function openModalWithAnimation(modal) {
     if (!modal) return;
     
     const content = modal.querySelector('[data-modal-content]');
+
+    // Remember the control that opened this dialog so closing it can hand
+    // focus back (not when it is reopened while open).
+    const opener = document.activeElement;
+    if (opener && opener !== document.body && !modal.contains(opener)) {
+      modal._restoreFocus = opener;
+    }
     
     // Store original parent if not already stored
     if (!modalOriginalParents.has(modal) && modal.parentElement) {
@@ -813,6 +853,8 @@ const customCodePlaceholder = [
     if (content) {
       content.classList.add('modal-content-enter');
     }
+
+    focusFirstInModal(modal);
     
     // Clean up animation classes after animation completes
     setTimeout(() => {
@@ -828,6 +870,11 @@ const customCodePlaceholder = [
     if (!modal) return;
     
     const content = modal.querySelector('[data-modal-content]');
+
+    // Hand focus back to the opener before the dialog is hidden (focus on a
+    // control that turns display:none falls to <body>).
+    if (modal.contains(document.activeElement)) restoreFocusAfterModal(modal);
+    else modal._restoreFocus = null;
     
     // Apply exit animations
     modal.classList.add('modal-backdrop-exit');
@@ -878,6 +925,23 @@ const customCodePlaceholder = [
   // we close only the last one in DOM order — the one visually on
   // top — and leave the underlying modal open. This matches the
   // user expectation of "Escape closes the thing I just opened".
+  // Tab stays inside the topmost open dialog (aria-modal): past its last
+  // control it used to walk on through the page behind the backdrop.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const open = Array.from(document.querySelectorAll('[data-modal]')).filter((m) => !m.classList.contains('hidden'));
+    const top = open[open.length - 1];
+    if (!top) return;
+    const items = modalFocusables(top);
+    if (items.length === 0) return;
+    const first = items[0], last = items[items.length - 1];
+    const active = document.activeElement;
+    if (!top.contains(active) || (e.shiftKey ? active === first : active === last)) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+    }
+  });
+
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     const openModals = Array.from(document.querySelectorAll('[data-modal]'))
@@ -3541,14 +3605,12 @@ const customCodePlaceholder = [
         data-placeholder-en="Target Name"
         data-placeholder-zh="目标名称"
         value="${escapeHtmlAttr(target.name || '')}"
-        required
       />
       <input
         type="text"
         class="target-address-input w-full sm:flex-1 min-w-0 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
         placeholder="8.8.8.8:53"
         value="${escapeHtmlAttr(target.address || '')}"
-        required
       />
       <button
         type="button"
@@ -4400,6 +4462,17 @@ const customCodePlaceholder = [
         } else if (address) {
           // If only address is provided, use address as name
           targets.push({ name: address, address });
+        } else if (name) {
+          // The inputs are not "required" (an empty row is simply skipped,
+          // and used to block saving the interval when there were no
+          // targets yet), so a name without an address is reported here.
+          const messageEl = document.getElementById('tcping-config-message');
+          if (messageEl) {
+            messageEl.textContent = adminT('targetAddressMissing');
+            messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+          }
+          addressInput.focus();
+          return;
         }
       }
     }
@@ -4785,6 +4858,7 @@ const customCodePlaceholder = [
     'cancel': { en: 'Cancel', zh: '取消' },
     'updateSystem': { en: 'Update Service', zh: '更新服务' },
     'updating': { en: 'Updating...', zh: '更新中...' },
+    'targetAddressMissing': { en: 'Enter an address for each target that has a name.', zh: '有名称的目标请填写地址。' },
     'settingsLoadFailed': { en: 'Could not load the current settings. Close this window and try again; saving now would overwrite them.', zh: '无法读取当前设置。请关闭窗口后重试，现在保存会覆盖原有设置。' },
     'saving': { en: 'Saving...', zh: '保存中...' },
     'deleting': { en: 'Deleting...', zh: '删除中...' },
