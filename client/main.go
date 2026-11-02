@@ -94,15 +94,21 @@ var (
 	locationCache string
 	locationOnce  sync.Once
 
-	// Cache for IP addresses (changes rarely, refresh every 60 seconds)
+	// Cache for the public addresses. They rarely change, and a refresh asks
+	// up to seven HTTPS echo services (about 36 KB on the wire: every 60 s
+	// that was 1.6 GB a month per agent, and the services began to answer
+	// 429), so it runs every 10 minutes; after a refresh that found nothing
+	// (the network may not have been up when the agent started) it is
+	// retried after a minute.
 	ipv4Cache    string
 	ipv6Cache    string
 	ipCacheTime  time.Time
 	ipCacheMutex sync.RWMutex
-	ipCacheTTL   = 60 * time.Second // Refresh IP every 60 seconds (IP rarely changes)
+	ipCacheTTL   = 10 * time.Minute
+	ipRetryTTL   = 60 * time.Second
 	// How long a previously detected address is still reported while every
-	// refresh fails (see getIPAddresses).
-	ipKeepStaleFor = 10 * time.Minute
+	// refresh fails (see getIPAddresses): two failed refreshes keep it.
+	ipKeepStaleFor = 30 * time.Minute
 	ipDetectedAt   time.Time
 	// ipRefreshInFlight is true while a background refresh goroutine is running.
 	// Without it every caller that sees a stale cache starts its own refresh,
@@ -1610,7 +1616,7 @@ func collectSystemMetrics() metricPayload {
 		NetOutMBps:         netOut,
 		TotalNetInBytes:    totalNetInBytes,
 		TotalNetOutBytes:   totalNetOutBytes,
-		AgentVersion:       "1.3.45",
+		AgentVersion:       "1.3.46",
 		Alert:              false, // Can be enhanced with actual alert logic
 	}
 }
@@ -1907,7 +1913,11 @@ func isPrivateIP(ip net.IP) bool {
 func getIPAddresses() (ipv4, ipv6 string) {
 	ipCacheMutex.RLock()
 	v4, v6 := ipv4Cache, ipv6Cache
-	cacheOk := !ipCacheTime.IsZero() && time.Since(ipCacheTime) < ipCacheTTL
+	ttl := ipCacheTTL
+	if v4 == "" && v6 == "" {
+		ttl = ipRetryTTL
+	}
+	cacheOk := !ipCacheTime.IsZero() && time.Since(ipCacheTime) < ttl
 	coldStart := ipCacheTime.IsZero()
 	ipCacheMutex.RUnlock()
 

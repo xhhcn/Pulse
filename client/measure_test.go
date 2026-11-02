@@ -3,7 +3,9 @@ package main
 import (
 	"net"
 	"strconv"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // A TCPing sample is the TCP handshake alone: a host name's lookup is not
@@ -48,5 +50,66 @@ func TestVirtualInterfacesAreNotCounted(t *testing.T) {
 		if isVirtualInterface(name) {
 			t.Errorf("%s should be counted", name)
 		}
+	}
+}
+
+// A known address is looked up again after ipCacheTTL; when the last lookup
+// found nothing it is retried after ipRetryTTL.
+func TestPublicAddressRefreshInterval(t *testing.T) {
+	ipCacheMutex.Lock()
+	origV4, origV6, origTime, origDetected := ipv4Cache, ipv6Cache, ipCacheTime, ipDetectedAt
+	ipCacheMutex.Unlock()
+	origFn := detectIPAddressesFn
+	t.Cleanup(func() {
+		detectIPAddressesFn = origFn
+		ipCacheMutex.Lock()
+		ipv4Cache, ipv6Cache, ipCacheTime, ipDetectedAt = origV4, origV6, origTime, origDetected
+		ipRefreshInFlight = false
+		ipCacheMutex.Unlock()
+	})
+	var detections int32
+	detectIPAddressesFn = func() (string, string) {
+		atomic.AddInt32(&detections, 1)
+		return "203.0.113.5", ""
+	}
+	set := func(v4 string, age time.Duration) {
+		ipCacheMutex.Lock()
+		ipv4Cache, ipv6Cache = v4, ""
+		ipCacheTime = time.Now().Add(-age)
+		ipDetectedAt = ipCacheTime
+		ipRefreshInFlight = false
+		ipCacheMutex.Unlock()
+	}
+	waitIdle := func() {
+		for i := 0; i < 200; i++ {
+			ipCacheMutex.RLock()
+			busy := ipRefreshInFlight
+			ipCacheMutex.RUnlock()
+			if !busy {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	set("198.51.100.7", 2*time.Minute)
+	getIPAddresses()
+	waitIdle()
+	if n := atomic.LoadInt32(&detections); n != 0 {
+		t.Fatalf("a known address two minutes old was looked up again (%d lookups)", n)
+	}
+
+	set("", 2*time.Minute)
+	getIPAddresses()
+	waitIdle()
+	if n := atomic.LoadInt32(&detections); n != 1 {
+		t.Fatalf("an empty cache two minutes old: %d lookups, want 1", n)
+	}
+
+	set("198.51.100.7", ipCacheTTL+time.Minute)
+	getIPAddresses()
+	waitIdle()
+	if n := atomic.LoadInt32(&detections); n != 2 {
+		t.Fatalf("a known address older than ipCacheTTL: %d lookups in total, want 2", n)
 	}
 }
