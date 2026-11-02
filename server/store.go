@@ -303,8 +303,11 @@ const (
 	// and we don't want to spin into a compact-loop on a healthy DB.
 	compactRatio = 2.0
 	// Cap the per-tx size to keep compaction's transient RAM footprint
-	// bounded even on multi-GB databases.
-	compactTxMaxBytes int64 = 64 << 20
+	// bounded even on multi-GB databases. A transaction holds every page it
+	// writes in memory, several times the bytes copied: on a 700 MB file
+	// 64 MB transactions peaked at ~330 MB of heap, 8 MB ones at ~47 MB,
+	// and finished sooner (4.1 s instead of 5.5 s).
+	compactTxMaxBytes int64 = 8 << 20
 )
 
 func (s *Store) maybeCompact(dbPath string) (string, int64, int64, error) {
@@ -1053,7 +1056,10 @@ func (s *Store) SaveClientPushBatch(metric SystemMetric, tcpingResults []TCPingR
 			return err
 		}
 
-		if len(tcpingResults) == 0 {
+		// putAgentMetric drops the write for a system the admin deleted
+		// while this push was in flight; its samples are dropped as well, or
+		// they would outlive the deletion (and return if the id came back).
+		if len(tcpingResults) == 0 || systems.Get([]byte(metric.ID)) == nil {
 			return nil
 		}
 		tcping := tx.Bucket([]byte(tcpingBucket))
@@ -1429,6 +1435,8 @@ func normalizeTCPingTargets(config *TCPingConfig) {
 	// the process.
 	if config.IntervalSecs < 1 {
 		config.IntervalSecs = 60
+	} else if config.IntervalSecs > maxTCPingIntervalSecs {
+		config.IntervalSecs = maxTCPingIntervalSecs
 	}
 	kept := config.Targets[:0]
 	for _, t := range config.Targets {

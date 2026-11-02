@@ -78,6 +78,10 @@ func TestSaveClientPushBatchIgnoresResentMeasurements(t *testing.T) {
 	lat := 12.5
 	batch := []TCPingResult{{ClientID: "agent", Target: "1.1.1.1:443", Latency: &lat, Timestamp: measured, ExactTimestamp: true}}
 	metric := SystemMetric{ID: "agent", Name: "agent"}
+	// Agent writes never create a system; the admin-created record exists first.
+	if err := store.Upsert(metric); err != nil {
+		t.Fatalf("Upsert() error = %v", err)
+	}
 
 	// First push commits; the agent times out waiting and re-sends the same
 	// measurement on its next push.
@@ -470,8 +474,14 @@ func TestDeleteTCPingKeysChunksLargeSets(t *testing.T) {
 	for i := 0; i < 2*tcpingDeleteChunk+7; i++ {
 		batch = append(batch, TCPingResult{ClientID: "big", Target: "t:1", Latency: &lat, Timestamp: now.Add(-time.Duration(i) * time.Second), ExactTimestamp: true})
 	}
+	if err := store.Upsert(SystemMetric{ID: "big", Name: "big"}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
 	if err := store.SaveClientPushBatch(SystemMetric{ID: "big", Name: "big"}, batch); err != nil {
 		t.Fatalf("SaveClientPushBatch: %v", err)
+	}
+	if r, _ := store.GetTCPingResults("big"); len(r) != len(batch) {
+		t.Fatalf("%d of %d records stored before the delete", len(r), len(batch))
 	}
 	if err := store.DeleteTCPingResultsByClient("big"); err != nil {
 		t.Fatalf("DeleteTCPingResultsByClient: %v", err)

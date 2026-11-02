@@ -460,6 +460,10 @@ const (
 	// list would be silently cut on every push-mode agent, so the admin is
 	// told at save time instead.
 	maxTCPingTargets = 64
+	// maxTCPingIntervalSecs mirrors the agent's cap too. Without an upper
+	// bound a huge interval overflowed time.Duration into a negative value
+	// and time.NewTicker panicked, again on every restart.
+	maxTCPingIntervalSecs = 86400
 )
 
 // iconNameRe is the iconify "set:name" form the agent emits (e.g.
@@ -1542,6 +1546,7 @@ func main() {
 
 	// Initialize client registry
 	clientRegistry := NewClientRegistry()
+	globalClientRegistry = clientRegistry
 
 	// Initialize IP country cache
 	ipCache := NewIPCountryCache()
@@ -2985,6 +2990,11 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 		if parsedIP == nil || parsedIP.To4() != nil {
 			// Invalid IPv6 format or it's actually an IPv4 address, clear it
 			ipv6 = ""
+		} else if isPrivateIP(parsedIP) {
+			// The server polls this address as well, so the IPv4 rule
+			// applies: no local, private or unspecified address ("::"
+			// would reach the server's own loopback).
+			ipv6 = ""
 		}
 	}
 
@@ -3196,8 +3206,10 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	// after the server had already committed it. With skew != 0 the stored
 	// timestamps differ between the two deliveries, so the idempotent key
 	// cannot catch the retry; a per-client signature of the raw batch does.
-	if tcpingBatchSeen(clientID, payload.TCPingResults) {
+	deliveredTCPing := payload.TCPingResults
+	if tcpingBatchSeen(clientID, deliveredTCPing) {
 		payload.TCPingResults = nil
+		deliveredTCPing = nil
 	}
 	// Drop "latest" entries for targets the admin has removed: the copy of
 	// existing.TCPingData above would otherwise write them back after
@@ -3348,6 +3360,10 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	}
 
 	if err := store.SaveClientPushBatch(metric, batchedResults); err != nil {
+		// Nothing was stored: forget the batch's signature, or the agent's
+		// unchanged retry would be taken for a duplicate and its samples
+		// dropped on both sides.
+		tcpingBatchForget(clientID, deliveredTCPing)
 		http.Error(w, "failed to save metrics", http.StatusInternalServerError)
 		return
 	}
@@ -3384,7 +3400,6 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 var globalClientRegistry *ClientRegistry
 
 func startClientPolling(ctx context.Context, store *Store, broker *SSEBroker, registry *ClientRegistry, ipCache *IPCountryCache) {
-	globalClientRegistry = registry
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
@@ -4023,8 +4038,17 @@ func isPrivateIP(ip net.IP) bool {
 		return true
 	}
 
+	// Unspecified (0.0.0.0, ::): dialling it reaches this host's loopback
+	if ip.IsUnspecified() {
+		return true
+	}
+
 	// Check IPv4 private ranges
 	if ip4 := ip.To4(); ip4 != nil {
+		// "This network": 0.0.0.0/8
+		if ip4[0] == 0 {
+			return true
+		}
 		// Loopback: 127.0.0.0/8
 		if ip4[0] == 127 {
 			return true
@@ -5164,8 +5188,8 @@ func handleSetTCPingConfig(store *Store, broker *SSEBroker, registry *ClientRegi
 	}
 
 	// Validate config
-	if config.IntervalSecs < 1 {
-		http.Error(w, "interval_secs must be at least 1", http.StatusBadRequest)
+	if config.IntervalSecs < 1 || config.IntervalSecs > maxTCPingIntervalSecs {
+		http.Error(w, fmt.Sprintf("interval_secs must be between 1 and %d", maxTCPingIntervalSecs), http.StatusBadRequest)
 		return
 	}
 	// Allow empty targets list (default state)
@@ -5417,6 +5441,20 @@ func tcpingBatchSeen(clientID string, results []ClientTCPingResult) bool {
 		}
 	}
 	return ok && last.sig == sig && now.Sub(last.at) < tcpingBatchDedupeWindow
+}
+
+// tcpingBatchForget drops the mark tcpingBatchSeen left for a batch that
+// could not be stored, so its retry is written instead of skipped.
+func tcpingBatchForget(clientID string, results []ClientTCPingResult) {
+	sig := tcpingBatchSignature(results)
+	if sig == "" {
+		return
+	}
+	tcpingBatchMu.Lock()
+	defer tcpingBatchMu.Unlock()
+	if m, ok := tcpingBatchLast[clientID]; ok && m.sig == sig {
+		delete(tcpingBatchLast, clientID)
+	}
 }
 
 // Shared HTTP client for TCPing operations (connection pooling)
@@ -6098,12 +6136,12 @@ func getClientIP(r *http.Request) string {
 // handleAuthLogin authenticates and returns a token
 func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 	// SECURITY: Rate limiting to prevent brute force attacks
-	clientIP := getClientIP(r)
+	limitKey := rateLimitKey(getClientIP(r))
 	loginAttemptsMu.Lock()
-	attempt, exists := loginAttempts[clientIP]
+	attempt, exists := loginAttempts[limitKey]
 	if !exists {
 		attempt = &loginAttempt{count: 0, lastAttempt: time.Now()}
-		loginAttempts[clientIP] = attempt
+		loginAttempts[limitKey] = attempt
 	}
 
 	// Check if IP is locked due to too many failed attempts
@@ -6187,6 +6225,18 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// rateLimitKey is the address the login and verification limits count
+// against. An IPv6 host usually holds a whole /64, so a single address per
+// attempt would never reach a lockout, and every new address added an entry
+// to the limiter maps; the /64 is counted as one client.
+func rateLimitKey(clientIP string) string {
+	ip := net.ParseIP(clientIP)
+	if ip == nil || ip.To4() != nil {
+		return clientIP
+	}
+	return ip.Mask(net.CIDRMask(64, 128)).String() + "/64"
+}
+
 // verifyRateLimited counts a token-verification attempt for clientIP and
 // reports whether the caller has exceeded 30 attempts per minute. Shared by
 // /api/auth/verify and /api/privacy/verify-token so both yes/no oracles are
@@ -6195,7 +6245,7 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 // Each oracle has its own bucket per address, so a burst against one cannot
 // starve the other (visitors behind a shared CDN edge share an address).
 func verifyRateLimited(kind, clientIP string) bool {
-	key := kind + "|" + clientIP
+	key := kind + "|" + rateLimitKey(clientIP)
 	verifyAttemptsMu.Lock()
 	defer verifyAttemptsMu.Unlock()
 	attempt, exists := verifyAttempts[key]
