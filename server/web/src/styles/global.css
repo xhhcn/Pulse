@@ -975,3 +975,13 @@ html.dark .cpu-brand-icon[data-icon="logos:intel"] svg {
 html.dark .os-icon[data-icon="devicon:debian"] svg path {
   fill: #d70a53;
 }
+
+/* Phones: 100vh is the viewport with the browser's bars hidden, so a page
+   with min-h-screen scrolled by the bars' height although everything fit,
+   and the login card sat below the middle of what is visible. dvh is the
+   viewport as it is shown; browsers without it keep 100vh. */
+@supports (min-height: 100dvh) {
+  .min-h-screen {
+    min-height: 100dvh;
+  }
+}

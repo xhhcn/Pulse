@@ -87,8 +87,8 @@ const customCodePlaceholder = [
 
       <form id="add-system-form" class="space-y-4">
         <div>
-          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="systemName">System Name</span> <span class="text-red-500 dark:text-red-400">*</span></label>
-          <input
+          <label for="add-system-name-input" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="systemName">System Name</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <input id="add-system-name-input"
             type="text"
             name="name"
             required
@@ -141,8 +141,8 @@ const customCodePlaceholder = [
         <input type="hidden" name="original-id" value="" />
         
         <div>
-          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="systemName">System Name</span> <span class="text-red-500 dark:text-red-400">*</span></label>
-          <input
+          <label for="edit-system-name-input" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="systemName">System Name</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <input id="edit-system-name-input"
             type="text"
             name="name"
             required
@@ -154,7 +154,7 @@ const customCodePlaceholder = [
         </div>
 
         <div>
-          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="tags">Tags</span> <span class="text-xs text-[#737373] dark:text-[#a3a3a3]" data-translate="tagsCommaSeparated">(comma-separated)</span></label>
+          <label for="edit-tags-input" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="tags">Tags</span> <span class="text-xs text-[#737373] dark:text-[#a3a3a3]" data-translate="tagsCommaSeparated">(comma-separated)</span></label>
           <input
             type="text"
             name="tags"
@@ -268,7 +268,7 @@ const customCodePlaceholder = [
       <div class="dialog-scroll flex-1 overflow-y-auto overflow-x-hidden p-4 pt-4 sm:p-6 sm:pt-4 pb-0 sm:pb-0">
         <form id="tcping-config-form" class="space-y-4">
           <div>
-            <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]">
+            <label for="tcping-interval" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]">
               <span data-translate="pollingInterval">Polling Interval</span> <span class="text-red-500 dark:text-red-400">*</span>
             </label>
             <div class="flex items-center gap-2">
@@ -277,6 +277,7 @@ const customCodePlaceholder = [
                 id="tcping-interval"
                 name="interval"
                 min="1"
+                max="86400"
                 required
                 class="w-full rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
@@ -340,8 +341,8 @@ const customCodePlaceholder = [
 
       <form id="change-password-form" class="space-y-4">
         <div>
-          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="currentPassword">Current Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
-          <input
+          <label for="current-password-input" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="currentPassword">Current Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <input id="current-password-input"
             type="password"
             name="currentPassword"
             required
@@ -353,8 +354,8 @@ const customCodePlaceholder = [
         </div>
 
         <div>
-          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="newPassword">New Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
-          <input
+          <label for="new-password-input" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="newPassword">New Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <input id="new-password-input"
             type="password"
             name="newPassword"
             required
@@ -367,8 +368,8 @@ const customCodePlaceholder = [
         </div>
 
         <div>
-          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="confirmNewPassword">Confirm New Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
-          <input
+          <label for="confirm-new-password-input" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="confirmNewPassword">Confirm New Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <input id="confirm-new-password-input"
             type="password"
             name="confirmNewPassword"
             required
@@ -412,7 +413,7 @@ const customCodePlaceholder = [
 
       <form id="navbar-config-form" class="space-y-5">
         <div>
-          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="navbarText">Navbar Text</span></label>
+          <label for="navbar-text-input" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="navbarText">Navbar Text</span></label>
           <input
             type="text"
             name="text"
@@ -424,7 +425,7 @@ const customCodePlaceholder = [
         </div>
 
         <div>
-          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="navbarLogo">Navbar Logo</span></label>
+          <label for="navbar-logo-input" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="navbarLogo">Navbar Logo</span></label>
           <input
             type="text"
             name="logo"
@@ -438,7 +439,7 @@ const customCodePlaceholder = [
         </div>
 
         <div>
-          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="sharedSecret">Shared Secret</span></label>
+          <label for="navbar-shared-secret-input" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="sharedSecret">Shared Secret</span></label>
           <div class="flex items-center gap-2">
             <input
               type="text"
@@ -460,7 +461,7 @@ const customCodePlaceholder = [
         <!-- Show Traffic Toggle -->
         <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
           <div class="flex-1">
-            <label class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4] mb-1" data-translate="showTrafficLabel">Show Traffic Info</label>
+            <label for="show-traffic-toggle" class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4] mb-1" data-translate="showTrafficLabel">Show Traffic Info</label>
             <p class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="showTrafficDesc">Display real-time and total traffic in the detail dropdown section</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer ml-3">
@@ -472,7 +473,7 @@ const customCodePlaceholder = [
         <!-- Glassmorphism Toggle -->
         <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
           <div class="flex-1">
-            <label class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4] mb-1" data-translate="showGlassLabel">Glassmorphism Effect</label>
+            <label for="show-glass-toggle" class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4] mb-1" data-translate="showGlassLabel">Glassmorphism Effect</label>
             <p class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="showGlassDesc">Enable frosted glass visual effect on navbar and cards</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer ml-3">
@@ -481,9 +482,21 @@ const customCodePlaceholder = [
           </label>
         </div>
 
+        <!-- Sticky table header toggle (off by default) -->
+        <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
+          <div class="flex-1">
+            <label for="sticky-header-toggle" class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4] mb-1" data-translate="stickyHeaderLabel">Sticky Table Header</label>
+            <p class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="stickyHeaderDesc">Keep the column names at the top of the window while a long list scrolls</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer ml-3">
+            <input type="checkbox" id="sticky-header-toggle" name="sticky_header" class="sr-only peer">
+            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-purple-500/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+          </label>
+        </div>
+
         <!-- Custom CSS & JavaScript -->
         <div>
-          <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="customCode">Custom CSS & JavaScript</span></label>
+          <label for="navbar-custom-code-input" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]"><span data-translate="customCode">Custom CSS & JavaScript</span></label>
           <textarea
             id="navbar-custom-code-input"
             rows="10"
@@ -573,7 +586,7 @@ const customCodePlaceholder = [
         <!-- Privacy Mode Toggle -->
         <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
           <div class="flex-1">
-            <label class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4] mb-1" data-translate="enablePrivacyMode">Enable Privacy Mode</label>
+            <label for="privacy-enabled" class="block text-sm font-medium text-[#262626] dark:text-[#d4d4d4] mb-1" data-translate="enablePrivacyMode">Enable Privacy Mode</label>
             <p class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate="privacyModeDesc">When enabled, login page will appear before index page. Admin page does not require login.</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
@@ -591,7 +604,7 @@ const customCodePlaceholder = [
 
           <!-- Current Share Link -->
           <div id="current-share-link-container" class="hidden">
-            <label class="mb-1 block text-xs font-medium text-[#525252] dark:text-[#a3a3a3]" data-translate="currentShareLink">Current Share Link</label>
+            <label for="current-share-link" class="mb-1 block text-xs font-medium text-[#525252] dark:text-[#a3a3a3]" data-translate="currentShareLink">Current Share Link</label>
             <div class="flex items-center gap-2">
               <input
                 type="text"
@@ -610,7 +623,7 @@ const customCodePlaceholder = [
 
           <!-- Generate New Share Link -->
           <div>
-            <label class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]" data-translate="expirationHours">Expiration (Hours)</label>
+            <label for="token-expires-hours" class="mb-1 block text-sm font-medium text-[#525252] dark:text-[#a3a3a3]" data-translate="expirationHours">Expiration (Hours)</label>
             <input
               type="number"
               id="token-expires-hours"
@@ -744,6 +757,12 @@ const customCodePlaceholder = [
 </style>
 
 <script is:inline>
+  // Everything here runs in its own scope. This is a classic script, and so
+  // is the site's custom code (run in <head>): a top-level `const root` in
+  // the custom code and the declarations below used to collide, and the
+  // whole dashboard failed to start ("Identifier 'root' has already been
+  // declared"), the dialog where the custom code is edited included.
+  (() => {
   const root = document.getElementById('admin-root');
   
   const getApiBase = () => {
@@ -1153,7 +1172,7 @@ const customCodePlaceholder = [
         const submitBtn = form.querySelector('button[type="submit"]');
         if (submitBtn) {
           submitBtn.disabled = false;
-          submitBtn.textContent = adminT('updateSystem');
+          setButtonLabel(submitBtn, 'updateSystem');
         }
       }
     });
@@ -1202,7 +1221,7 @@ const customCodePlaceholder = [
     // Disable button during request
     if (confirmDeleteBtn) {
       confirmDeleteBtn.disabled = true;
-      confirmDeleteBtn.textContent = 'Deleting...';
+      setButtonLabel(confirmDeleteBtn, 'deleting');
     }
 
     try {
@@ -1222,7 +1241,7 @@ const customCodePlaceholder = [
     } finally {
       if (confirmDeleteBtn) {
         confirmDeleteBtn.disabled = false;
-        confirmDeleteBtn.textContent = 'Delete';
+        setButtonLabel(confirmDeleteBtn, 'delete');
       }
     }
   });
@@ -2133,7 +2152,7 @@ const customCodePlaceholder = [
     if (!Array.isArray(data) || data.length === 0) {
       container.innerHTML = `
         <div class="flex items-center justify-center py-12 text-center">
-          <p class="text-sm text-[#737373]">No systems found</p>
+          <p class="text-sm text-[#737373]">${adminT('noSystems')}</p>
         </div>
       `;
       currentData.clear();
@@ -3179,7 +3198,7 @@ const customCodePlaceholder = [
       // Disable submit button during request
       if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Updating...';
+        setButtonLabel(submitBtn, 'updating');
       }
 
       // Parse tags from comma-separated string
@@ -3224,7 +3243,7 @@ const customCodePlaceholder = [
         // Re-enable submit button
         if (submitBtn) {
           submitBtn.disabled = false;
-          submitBtn.textContent = adminT('updateSystem');
+          setButtonLabel(submitBtn, 'updateSystem');
         }
       }
     });
@@ -3560,6 +3579,7 @@ const customCodePlaceholder = [
       const res = await fetch(`${apiBase}/api/tcping/config`);
       if (res.ok) {
         const config = await res.json();
+        if (!config || typeof config !== 'object') return false;
         
         // Set interval (default: 60 seconds)
         const intervalInput = document.getElementById('tcping-interval');
@@ -3587,17 +3607,39 @@ const customCodePlaceholder = [
             targetsContainer.appendChild(createTargetInput());
           }
         }
+        return true;
       }
     } catch (err) {
-      // Config load failed silently
+      // Reported by guardSettingsDialog
     }
+    return false;
   }
 
   function openTCPingConfigModal() {
     if (tcpingConfigModal) {
-      loadTCPingConfig();
+      guardSettingsDialog(tcpingConfigForm, 'tcping-config-message', loadTCPingConfig());
       openModalWithAnimation(tcpingConfigModal);
     }
+  }
+
+  // A settings dialog saves everything its form holds, so it must not be
+  // saved before the current settings are in it. Save waits for the load; a
+  // failed load says so and keeps Save off (a blank form erased the TCPing
+  // targets, the custom code and the shared secret, or the privacy link).
+  function guardSettingsDialog(form, messageId, loading) {
+    const submitBtn = form && form.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+    loading.then((ok) => {
+      if (ok) {
+        if (submitBtn) submitBtn.disabled = false;
+        return;
+      }
+      const messageEl = document.getElementById(messageId);
+      if (messageEl) {
+        messageEl.textContent = adminT('settingsLoadFailed');
+        messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+      }
+    });
   }
 
   function closeTCPingConfigModal() {
@@ -3633,6 +3675,7 @@ const customCodePlaceholder = [
       const res = await fetch(`${apiBase}/api/navbar/config`);
       if (res.ok) {
         const config = await res.json();
+        if (!config || typeof config !== 'object') return false;
         
         const textInput = document.getElementById('navbar-text-input');
         const logoInput = document.getElementById('navbar-logo-input');
@@ -3677,15 +3720,21 @@ const customCodePlaceholder = [
         if (showGlassToggle) {
           showGlassToggle.checked = config.show_glass || false;
         }
+        const stickyHeaderToggle = document.getElementById('sticky-header-toggle');
+        if (stickyHeaderToggle) {
+          stickyHeaderToggle.checked = config.sticky_header === true;
+        }
+        return true;
       }
     } catch (err) {
-      // Config load failed silently
+      // Reported by guardSettingsDialog
     }
+    return false;
   }
 
   function openNavbarConfigModal() {
     if (navbarConfigModal) {
-      loadNavbarConfig();
+      guardSettingsDialog(navbarConfigForm, 'navbar-config-message', loadNavbarConfig());
       openModalWithAnimation(navbarConfigModal);
     }
   }
@@ -3870,11 +3919,13 @@ const customCodePlaceholder = [
       const res = await fetch(`${apiBase}/api/privacy/config`);
       if (res.ok) {
         const config = await res.json();
+        if (!config || typeof config !== 'object') return false;
         
         // Update privacy enabled checkbox
         if (privacyEnabledCheckbox) {
           privacyEnabledCheckbox.checked = config.enabled || false;
         }
+        lastLoadedPrivacyEnabled = config.enabled === true;
         
         // Update expiration hours input with saved value (convert seconds to hours)
         if (tokenExpiresHoursInput) {
@@ -3933,15 +3984,17 @@ const customCodePlaceholder = [
             currentShareLinkContainer.classList.add('hidden');
           }
         }
+        return true;
       }
     } catch (err) {
-      // Config load failed silently
+      // Reported by guardSettingsDialog
     }
+    return false;
   }
 
   function openPrivacyConfigModal() {
     if (privacyConfigModal) {
-      loadPrivacyConfig();
+      guardSettingsDialog(privacyConfigForm, 'privacy-config-message', loadPrivacyConfig());
       openModalWithAnimation(privacyConfigModal);
     }
   }
@@ -4047,8 +4100,36 @@ const customCodePlaceholder = [
     }
   });
 
-  // Revoke share link (just clears UI, requires save to take effect)
-  revokeShareLinkBtn?.addEventListener('click', () => {
+  // The stored privacy switch, so revoking the link does not also save an
+  // unsaved change of the switch.
+  let lastLoadedPrivacyEnabled = false;
+
+  // Revoke the share link at once, as the button says. It used to clear the
+  // form only: unless the admin also pressed Save, a leaked link stayed
+  // valid until it expired.
+  revokeShareLinkBtn?.addEventListener('click', async () => {
+    const messageEl = document.getElementById('privacy-config-message');
+    revokeShareLinkBtn.disabled = true;
+    try {
+      const res = await fetch(`${apiBase}/api/privacy/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: lastLoadedPrivacyEnabled, share_token: '', expires_in_seconds: 0 }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      if (messageEl) {
+        messageEl.textContent = adminT('shareLinkRevokeFailed');
+        messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+      }
+      revokeShareLinkBtn.disabled = false;
+      return;
+    }
+    revokeShareLinkBtn.disabled = false;
+    if (messageEl) {
+      messageEl.textContent = adminT('shareLinkRevoked');
+      messageEl.className = 'text-sm text-emerald-600 dark:text-emerald-400';
+    }
     // Hide share link container
     if (currentShareLinkContainer) {
       currentShareLinkContainer.classList.add('hidden');
@@ -4095,12 +4176,7 @@ const customCodePlaceholder = [
     // Set button to saving state
     if (submitBtn) {
       submitBtn.disabled = true;
-      const saveSpan = submitBtn.querySelector('span');
-      if (saveSpan) {
-        saveSpan.textContent = 'Saving...';
-      } else {
-        submitBtn.textContent = 'Saving...';
-      }
+      setButtonLabel(submitBtn, 'saving');
     }
 
     try {
@@ -4111,6 +4187,7 @@ const customCodePlaceholder = [
       });
 
       if (res.ok) {
+        lastLoadedPrivacyEnabled = data.enabled;
         // Get the saved config from response to update UI with server-calculated expiration
         const responseData = await res.json();
         if (responseData.config && responseData.config.share_token && responseData.config.token_expires) {
@@ -4151,12 +4228,7 @@ const customCodePlaceholder = [
         // Reset button state before closing modal
         if (submitBtn) {
           submitBtn.disabled = false;
-          const saveSpan = submitBtn.querySelector('span');
-          if (saveSpan) {
-            saveSpan.textContent = 'Save';
-          } else {
-            submitBtn.textContent = 'Save';
-          }
+          setButtonLabel(submitBtn, 'save');
         }
         // Close modal immediately on success
         closePrivacyConfigModal();
@@ -4170,12 +4242,7 @@ const customCodePlaceholder = [
       // Reset button state on error
       if (submitBtn) {
         submitBtn.disabled = false;
-        const saveSpan = submitBtn.querySelector('span');
-        if (saveSpan) {
-          saveSpan.textContent = 'Save';
-        } else {
-          submitBtn.textContent = 'Save';
-        }
+        setButtonLabel(submitBtn, 'save');
       }
       if (messageEl) {
         messageEl.className = 'text-sm text-red-500 dark:text-red-400';
@@ -4254,6 +4321,7 @@ const customCodePlaceholder = [
     
     const showTrafficToggle = document.getElementById('show-traffic-toggle');
     const showGlassToggle = document.getElementById('show-glass-toggle');
+    const stickyHeaderToggle = document.getElementById('sticky-header-toggle');
     const data = {
       text: formData.get('text')?.trim() || 'Pulse',
       logo: formData.get('logo')?.trim() || '',
@@ -4262,17 +4330,13 @@ const customCodePlaceholder = [
       custom_js: customJS.trim(),
       show_traffic: showTrafficToggle?.checked || false,
       show_glass: showGlassToggle?.checked || false,
+      sticky_header: stickyHeaderToggle?.checked || false,
     };
 
     // Set button to saving state
     if (submitBtn) {
       submitBtn.disabled = true;
-      const saveSpan = submitBtn.querySelector('span');
-      if (saveSpan) {
-        saveSpan.textContent = 'Saving...';
-      } else {
-        submitBtn.textContent = 'Saving...';
-      }
+      setButtonLabel(submitBtn, 'saving');
     }
 
     try {
@@ -4295,12 +4359,7 @@ const customCodePlaceholder = [
       // Reset button state on error
       if (submitBtn) {
         submitBtn.disabled = false;
-        const saveSpan = submitBtn.querySelector('span');
-        if (saveSpan) {
-          saveSpan.textContent = 'Save';
-        } else {
-          submitBtn.textContent = 'Save';
-        }
+        setButtonLabel(submitBtn, 'save');
       }
       if (messageEl) {
         messageEl.className = 'text-sm text-red-500 dark:text-red-400';
@@ -4356,7 +4415,7 @@ const customCodePlaceholder = [
     const submitBtn = tcpingConfigForm.querySelector('button[type="submit"]');
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Saving...';
+      setButtonLabel(submitBtn, 'saving');
     }
     
     try {
@@ -4388,7 +4447,7 @@ const customCodePlaceholder = [
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Save';
+        setButtonLabel(submitBtn, 'save');
       }
     }
   });
@@ -4725,6 +4784,11 @@ const customCodePlaceholder = [
     'tagsHint': { en: 'Enter tags separated by commas (e.g., Python, traffic:in, speed:in, spr:VIP, spy:staff, spb:pro). Prefix with spr:/spy:/spb: for a red/amber/blue gradient badge.', zh: '输入标签，用逗号分隔（例如：Python, traffic:in, speed:in, spr:VIP, spy:staff, spb:pro）。前缀 spr:/spy:/spb: 分别表示红色 / 金色 / 蓝色起始的渐变彩色徽章。' },
     'cancel': { en: 'Cancel', zh: '取消' },
     'updateSystem': { en: 'Update Service', zh: '更新服务' },
+    'updating': { en: 'Updating...', zh: '更新中...' },
+    'settingsLoadFailed': { en: 'Could not load the current settings. Close this window and try again; saving now would overwrite them.', zh: '无法读取当前设置。请关闭窗口后重试，现在保存会覆盖原有设置。' },
+    'saving': { en: 'Saving...', zh: '保存中...' },
+    'deleting': { en: 'Deleting...', zh: '删除中...' },
+    'noSystems': { en: 'No services found', zh: '未找到服务' },
     'areYouSureYouWantToDelete': { en: 'Are you sure you want to delete', zh: '您确定要删除' },
     'thisActionCannotBeUndone': { en: 'This action cannot be undone.', zh: '此操作无法撤销。' },
     'delete': { en: 'Delete', zh: '删除' },
@@ -4788,6 +4852,8 @@ const customCodePlaceholder = [
     'expirationHours': { en: 'Expiration (Hours)', zh: '有效期（小时）' },
     'expirationHoursHint': { en: 'Number of hours until the share link expires (1-720, max 30 days)', zh: '分享链接过期前的小时数（1-720，最多 30 天）' },
     'generateShareLink': { en: 'Generate Share Link', zh: '生成分享链接' },
+    'shareLinkRevoked': { en: 'The share link has been stopped; it no longer opens the dashboard.', zh: '分享链接已停止，原链接无法再打开面板。' },
+    'shareLinkRevokeFailed': { en: 'Could not stop the share link. Please try again.', zh: '停止分享链接失败，请重试。' },
     'revokeShareLink': { en: 'Revoke Share Link', zh: '立即停止分享链接' },
     'copy': { en: 'Copy', zh: '复制' },
     'customCode': { en: 'Custom CSS & JavaScript', zh: '自定义 CSS 和 JavaScript' },
@@ -4797,6 +4863,8 @@ const customCodePlaceholder = [
     'showTrafficDesc': { en: 'Display real-time and total traffic in the detail dropdown section', zh: '在下拉详情部分显示实时流量和总流量' },
     'showGlassLabel': { en: 'Glassmorphism Effect', zh: '毛玻璃特效' },
     'showGlassDesc': { en: 'Enable frosted glass visual effect on navbar and cards', zh: '为导航栏和卡片启用毛玻璃视觉效果' },
+    'stickyHeaderLabel': { en: 'Sticky Table Header', zh: '表头吸顶' },
+    'stickyHeaderDesc': { en: 'Keep the column names at the top of the window while a long list scrolls', zh: '滚动长列表时，列名固定在页面顶部' },
   };
 
   // The visitor's stored choice, else the language the page head picked for
@@ -4810,6 +4878,17 @@ const customCodePlaceholder = [
   // One adminTranslations entry in the page's language.
   function adminT(key) {
     return adminTranslations[key][adminLang()];
+  }
+
+  // A button's label is a [data-translate] span, so a language switch finds
+  // it later; writing textContent onto the button dropped the span, and an
+  // English 'Save' / 'Delete' then stayed for the rest of the visit.
+  function setButtonLabel(btn, key) {
+    if (!btn) return;
+    const span = document.createElement('span');
+    span.setAttribute('data-translate', key);
+    span.textContent = adminT(key);
+    btn.replaceChildren(span);
   }
 
   function updateAdminTranslations() {
@@ -4870,4 +4949,5 @@ const customCodePlaceholder = [
   } else {
     updateAdminTranslations();
   }
+  })();
 </script>

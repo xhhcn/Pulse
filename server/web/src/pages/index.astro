@@ -76,6 +76,27 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <!-- Preload Chart.js for faster TCPing chart rendering -->
     <link rel="preload" href={chartJsUrl} as="script" crossorigin="anonymous" integrity="sha384-FcQlsUOd0TJjROrBxhJdUhXTUgNJQxTMcxZe6nHbaEfFL1zjQ+bq/uRoBQxb0KMo" />
     <link rel="preload" href={chartJsAdapterUrl} as="script" crossorigin="anonymous" integrity="sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws" />
+    <!-- Site data blocked by the browser: reading localStorage throws, and
+         that stopped every script on the page. An in-memory stand-in keeps
+         the page working; choices then last until a reload. -->
+    <script is:inline>
+      (function () {
+        try { window.localStorage.getItem('_'); return; } catch (_) {}
+        // The login form says so: a session kept here would not reach the next page.
+        window.__pulseStorageBlocked = true;
+        var mem = {};
+        try {
+          Object.defineProperty(window, 'localStorage', { configurable: true, value: {
+            getItem: function (k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
+            setItem: function (k, v) { mem[k] = String(v); },
+            removeItem: function (k) { delete mem[k]; },
+            clear: function () { mem = {}; },
+            key: function (i) { return Object.keys(mem)[i] || null; },
+            get length() { return Object.keys(mem).length; }
+          } });
+        } catch (_) {}
+      })();
+    </script>
     <!-- Initialize language and theme before page render to prevent FOUC -->
     <script is:inline>
       (function() {
@@ -191,6 +212,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
                 document.documentElement.classList.add('glass-enabled');
                 if (window.__pulseSyncThemeColor) window.__pulseSyncThemeColor();
               }
+              // Optional sticky table header (自定义设置 → 表头吸顶)
+              if (config.sticky_header === true) document.documentElement.classList.add('sticky-table-header');
               // Dispatch event when config is ready
               window.dispatchEvent(new CustomEvent('navbarconfigready', { detail: config }));
             }
@@ -218,6 +241,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
               document.documentElement.classList.add('glass-enabled');
               if (window.__pulseSyncThemeColor) window.__pulseSyncThemeColor();
             }
+            // Optional sticky table header (自定义设置 → 表头吸顶)
+            if (config.sticky_header === true) document.documentElement.classList.add('sticky-table-header');
             
             // Inject CSS if exists
             if (config.custom_css && config.custom_css.trim()) {
@@ -357,9 +382,11 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     
     // Check privacy config
     try {
-      const privacyRes = await fetch(`${apiBase}/api/privacy/config`);
-      if (privacyRes.ok) {
-        const privacyConfig = await privacyRes.json();
+      // Shared with the table (SystemTable), which needs the same answer.
+      window.__pulsePrivacyConfig = window.__pulsePrivacyConfig
+        || fetch(`${apiBase}/api/privacy/config`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      const privacyConfig = await window.__pulsePrivacyConfig;
+      if (privacyConfig) {
         
         // If privacy is not enabled, allow access
         if (!privacyConfig.enabled) {

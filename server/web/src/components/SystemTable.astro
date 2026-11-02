@@ -24,14 +24,16 @@ const apiBase = apiBaseProp ?? '';
       }
       /* CSS variable --first-col-width is now defined inline on #monitor-root element
          This avoids timing issues between <style> rules and inline style modifications */
-      /* A row's grid needs the name column (it grows with the longest name)
-         plus the other columns' minimums, the gaps and the left padding:
-         705 + 42 + 24 px (the right padding may shrink, as it already does
-         on desktop). With min-w-[1000px] alone a long name pushed the last
+      /* A row's grid needs the name column plus the other columns'
+         minimums, the gaps and the left padding: 705 + 42 + 24 px. The name
+         column is as wide as the longest name (--first-col-width) when there
+         is room, and gives way down to 160 px, with an ellipsis, before the
+         last columns would be pushed past the card's edge; below that the
+         table scrolls. With min-w-[1000px] alone a long name pushed the last
          columns past the rows' borders, backgrounds and detail panels on
          screens narrower than the table. */
       #monitor-root .table-scroll-content {
-        min-width: max(1000px, calc(var(--first-col-width) + 771px));
+        min-width: max(1000px, calc(min(var(--first-col-width), 160px) + 771px));
       }
     </style>
     <div class="min-w-[1000px] table-scroll-content">
@@ -60,11 +62,19 @@ const apiBase = apiBaseProp ?? '';
     return window.location.origin;
   };
 
+  // The admin session goes along only when the dashboard is private
+  // (privacy mode). The server answers it with the admin view: every
+  // server's addresses and secret, never compressed (about six times the
+  // bytes of the public stream), and the session token in every stream URL;
+  // this page shows none of it. A refused request (401) switches it on.
+  let sessionNeeded = false;
+  const storedAdminToken = () => localStorage.getItem('admin_auth_token');
+  const urlShareToken = () => new URLSearchParams(window.location.search).get('token');
+
   // Helper function to get authentication info (share token or admin token)
   const getAuthInfo = () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const shareToken = urlParams.get('token');
-    const adminToken = localStorage.getItem('admin_auth_token');
+    const shareToken = urlShareToken();
+    const adminToken = sessionNeeded ? storedAdminToken() : null;
     return { shareToken, adminToken };
   };
 
@@ -85,6 +95,26 @@ const apiBase = apiBaseProp ?? '';
     
     return { url: requestUrl, headers };
   };
+
+  // fetch with the share link's token, or with the admin session when
+  // privacy mode asks for it: a 401 to a request without the session sends
+  // it again with the session (privacy switched on while the page is open).
+  // sentSession says whether the answer is to a request that carried the
+  // session — a parallel request may have switched it on in the meantime.
+  async function authedFetch(url, init = {}) {
+    await sessionDecision;
+    const attempt = async () => {
+      const { url: authUrl, headers } = buildAuthOptions(url);
+      const res = await fetch(authUrl, { ...init, headers: { ...(init.headers || {}), ...headers } });
+      return { res, sentSession: !!headers['Authorization'] };
+    };
+    let answer = await attempt();
+    if (answer.res.status === 401 && !answer.sentSession && !urlShareToken() && storedAdminToken()) {
+      sessionNeeded = true;
+      answer = await attempt();
+    }
+    return answer;
+  }
 
   // Global flag to control traffic display in detail section
   let showTrafficInfo = false;
@@ -109,27 +139,23 @@ const apiBase = apiBaseProp ?? '';
   }
 
   const fetchSystemMetrics = async (apiBase) => {
-    // Build request URL with token if available
-    let requestUrl = `${apiBase}/api/metrics`;
-    const headers = { 'Cache-Control': 'no-store' };
-    
-    const { shareToken, adminToken } = getAuthInfo();
-    if (shareToken) {
-      // Use share token from URL
-      requestUrl += `?token=${encodeURIComponent(shareToken)}`;
-    } else if (adminToken) {
-      // Use admin token in Authorization header
-      headers['Authorization'] = `Bearer ${adminToken}`;
-    }
-    
-    const res = await fetch(requestUrl, { 
+    const { res, sentSession } = await authedFetch(`${apiBase}/api/metrics`, {
       cache: 'no-store',
-      headers: headers
+      headers: { 'Cache-Control': 'no-store' }
     });
     if (!res.ok) {
-      // If 401 Unauthorized, redirect to login page
       if (res.status === 401) {
-        localStorage.removeItem('admin_auth_token');
+        if (urlShareToken() && storedAdminToken()) {
+          // The share link has ended, but this browser holds an admin
+          // session: open the dashboard without the link instead of
+          // logging the admin out.
+          const url = new URL(window.location.href);
+          url.searchParams.delete('token');
+          window.location.replace(url.toString());
+          throw new Error('Share link ended - reopening without it');
+        }
+        // The session (if this request sent it) was refused: drop it and log in.
+        if (sentSession) localStorage.removeItem('admin_auth_token');
         window.location.href = '/login?redirect=/';
         throw new Error('Unauthorized - redirecting to login');
       }
@@ -353,6 +379,9 @@ const apiBase = apiBaseProp ?? '';
   }
 
   const iconSvgCache = new Map();
+  // An icon request that hangs (api.iconify.design unreachable) is given up
+  // after this long and tried again on a later render.
+  const ICON_FETCH_TIMEOUT_MS = 8000;
   const fetchIconSvg = (iconName, height) => {
     const url = iconSvgUrl(iconName, height);
     if (!url) return Promise.resolve(null);
@@ -360,8 +389,10 @@ const apiBase = apiBaseProp ?? '';
     let pending = iconSvgCache.get(key);
     if (pending) return pending;
     pending = (async () => {
+      const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = ctrl ? setTimeout(() => ctrl.abort(), ICON_FETCH_TIMEOUT_MS) : null;
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, ctrl ? { signal: ctrl.signal } : undefined);
         // A missing icon stays missing for the session (no refetch on every
         // render); a network error or 5xx is dropped below and retried.
         if (response.status === 404) return '';
@@ -369,6 +400,8 @@ const apiBase = apiBaseProp ?? '';
         return await response.text();
       } catch (e) {
         return null;
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     })();
     pending = pending.then((svg) => { if (svg == null) iconSvgCache.delete(key); return svg; });
@@ -452,6 +485,19 @@ const apiBase = apiBaseProp ?? '';
 
   const root = document.getElementById('monitor-root');
   const apiBase = getApiBase(root);
+
+  // A signed-in admin first learns whether the dashboard is private, so no
+  // request goes out without the session only to be refused (a 401 in the
+  // console and a round trip lost). One /api/privacy/config request per
+  // page, shared with the page's access check.
+  const privacyConfigOnce = () => {
+    window.__pulsePrivacyConfig = window.__pulsePrivacyConfig
+      || fetch(`${apiBase}/api/privacy/config`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    return window.__pulsePrivacyConfig;
+  };
+  const sessionDecision = (!urlShareToken() && storedAdminToken())
+    ? privacyConfigOnce().then((cfg) => { if (cfg && cfg.enabled) sessionNeeded = true; })
+    : Promise.resolve();
 
   const body = document.getElementById('systems-body');
   const loadingIndicator = document.getElementById('loading-indicator');
@@ -681,7 +727,7 @@ const apiBase = apiBaseProp ?? '';
           currentSort.direction = 'asc'; // Reset to ascending for new field
         }
         updateSortUI();
-        loadData(); // Reload with new sort
+        rerenderForView(); // Re-render with the new sort
       }
     });
   });
@@ -964,11 +1010,11 @@ const apiBase = apiBaseProp ?? '';
     const safeNameAttr = escapeHtmlAttr(item.name || 'unknown');
     return `
     <div class="system-row${isOffline ? ' is-offline' : ''}" data-system-id="${safeId}">
-      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}" tabindex="0" aria-expanded="false" style="grid-template-columns: var(--first-col-width, 100px) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr);">
+      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-red-400' : 'bg-emerald-400'} shrink-0"></span>
           <span class="row-name text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>${isOffline ? offlineChip() : ''}
-          <button class="copy-btn text-[#525252] dark:text-[#737373] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
+          <button class="copy-btn text-[#525252] dark:text-[#737373] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
@@ -2134,8 +2180,7 @@ const apiBase = apiBaseProp ?? '';
     // Start loading
     tcpingConfigLoading = (async () => {
       try {
-        const { url, headers } = buildAuthOptions(`${apiBase}/api/tcping/config`);
-        const res = await fetch(url, { headers });
+        const { res } = await authedFetch(`${apiBase}/api/tcping/config`);
         if (res.ok) {
           const config = await res.json();
           cachedTCPingConfig = config;
@@ -2168,14 +2213,29 @@ const apiBase = apiBaseProp ?? '';
   // expanded we don't need to do anything — they'll read the new cache
   // naturally the first time the user opens them.
   let tcpingConfigUpdatePending = false;
+  // A change announced while the previous one is still being applied runs
+  // again afterwards instead of being dropped.
+  let tcpingConfigUpdateAgain = false;
   async function handleTCPingConfigUpdated() {
-    if (tcpingConfigUpdatePending) return;
+    if (tcpingConfigUpdatePending) {
+      tcpingConfigUpdateAgain = true;
+      return;
+    }
     tcpingConfigUpdatePending = true;
     try {
       // 1) Force-refresh the cached config. After this await the fresh
       //    config is already stored in cachedTCPingConfig for all the
       //    code paths that read it directly.
       const fresh = await loadTCPingConfig(true);
+
+      // A selected target that was removed or given another address left
+      // its chart with no tab selected and every line grey; a renamed one
+      // keeps its selection under the new name.
+      const namesByAddress = new Map(((fresh && fresh.targets) || []).map((t) => [t.address, t.name]));
+      for (const [id, info] of tcpingActiveTargets) {
+        if (!info || !namesByAddress.has(info.target)) tcpingActiveTargets.delete(id);
+        else info.targetName = namesByAddress.get(info.target) || info.targetName;
+      }
 
       // 2) Per-system caches (tcpingConfigs, tcpingDataSignatures) also
       //    need to be invalidated; otherwise the "signature unchanged"
@@ -2218,6 +2278,10 @@ const apiBase = apiBaseProp ?? '';
       });
     } finally {
       tcpingConfigUpdatePending = false;
+      if (tcpingConfigUpdateAgain) {
+        tcpingConfigUpdateAgain = false;
+        handleTCPingConfigUpdated();
+      }
     }
   }
 
@@ -2346,8 +2410,7 @@ const apiBase = apiBaseProp ?? '';
   async function fetchTCPingHistory(clientID, target) {
     try {
       let url = `${apiBase}/api/tcping/history?client_id=${encodeURIComponent(clientID)}${target ? `&target=${encodeURIComponent(target)}` : ''}`;
-      const { url: authUrl, headers } = buildAuthOptions(url);
-      const res = await fetch(authUrl, { headers });
+      const { res } = await authedFetch(url);
       if (res.ok) {
         const data = await res.json();
         return data;
@@ -2435,6 +2498,8 @@ const apiBase = apiBaseProp ?? '';
       ? (isActive ? TCPING_TAB_SKIPPED_ACTIVE : TCPING_TAB_SKIPPED_INACTIVE)
       : (isActive ? TCPING_TAB_ACTIVE : TCPING_TAB_INACTIVE);
     tab.className = `${TCPING_TAB_BASE} ${variant}`;
+    // The selected target, for screen readers too (not by colour only).
+    tab.setAttribute('aria-pressed', String(!!isActive));
     if (isSkipped) {
       tab.setAttribute('data-translate-title', 'tcpingUnreachable');
       tab.setAttribute('title', translations.tcpingUnreachable[getCurrentLanguage()] || translations.tcpingUnreachable.en);
@@ -4300,10 +4365,14 @@ const apiBase = apiBaseProp ?? '';
         });
       }
 
-      await loadOSIcons();
-      await loadFlagIcons();
       setupCopyButtons(body);
       setupRowClickHandlers(body);
+      // Icons fill in on their own. Waiting for them here held the click
+      // handlers and every later update (renderData stays locked while this
+      // runs) until the slowest icon arrived; the largest flags come from
+      // api.iconify.design and can take seconds.
+      loadOSIcons().catch(() => {});
+      loadFlagIcons().catch(() => {});
       // Update translations after DOM is ready
       setTimeout(() => updateTranslations(), 0);
       return;
@@ -4472,10 +4541,11 @@ const apiBase = apiBaseProp ?? '';
         }
       });
       
-      await loadOSIcons();
-      await loadFlagIcons();
       setupCopyButtons(body);
       setupRowClickHandlers(body);
+      // Icons fill in on their own (see the first render above).
+      loadOSIcons().catch(() => {});
+      loadFlagIcons().catch(() => {});
       // Update translations after DOM is ready
       setTimeout(() => updateTranslations(), 0);
       // Recalculate column width when new rows are added (names might be longer)
@@ -4646,10 +4716,22 @@ const apiBase = apiBaseProp ?? '';
   // below to decide whether to fall back to a one-shot GET.
   let initialDataRendered = false;
 
+  // The last payload painted, unfiltered. Filtering and sorting re-render
+  // it: the stream keeps it current, and each keystroke in the filter box
+  // used to download the whole list again.
+  let lastRenderedPayload = null;
+  function rerenderForView() {
+    // A copy: the stream's own payload object would be taken for a stale
+    // stream frame right after a reconnect, and not repainted.
+    if (lastRenderedPayload) renderData(lastRenderedPayload.slice());
+    else loadData();
+  }
+
   // Internal render implementation — assumed to be called serially from
   // renderData() only. Never call this directly.
   async function renderDataInternal(data) {
     initialDataRendered = true;
+    lastRenderedPayload = data;
     // Admin per-system toggle: `hide_on_home` systems stay in the API and
     // the admin page but never reach the public table.
     data = data.filter((sys) => !(sys && sys.hide_on_home === true));
@@ -4829,7 +4911,9 @@ const apiBase = apiBaseProp ?? '';
   let sseReconnectTimer = null;
   const SSE_WATCHDOG_MS = 45_000;
 
+  let lastSSEActivityAt = Date.now();
   function markSSEAlive() {
+    lastSSEActivityAt = Date.now();
     if (sseWatchdogTimer) {
       clearTimeout(sseWatchdogTimer);
     }
@@ -4878,10 +4962,9 @@ const apiBase = apiBaseProp ?? '';
       sseReconnectTimer = null;
     }
 
-    // Get token from URL parameter (for share links) or admin token
-    const urlParams = new URLSearchParams(window.location.search);
-    const shareToken = urlParams.get('token');
-    const adminToken = localStorage.getItem('admin_auth_token');
+    // Share link token, or the admin session when privacy mode needs it
+    // (see sessionNeeded): EventSource cannot send headers.
+    const { shareToken, adminToken } = getAuthInfo();
     
     // Build SSE URL with token if available (EventSource doesn't support custom headers)
     let sseUrl = `${apiBase}/api/events`;
@@ -5038,7 +5121,30 @@ const apiBase = apiBaseProp ?? '';
         sseWatchdogTimer = null;
       }
       scheduleSSEReconnect();
+      checkAccessAfterStreamError();
     };
+  }
+
+  // EventSource reports a refused stream (401: the session or share link has
+  // ended, or privacy mode needs the session) only as an error, and used to
+  // retry forever behind a table that no longer changed. A plain request
+  // tells: fetchSystemMetrics sends a refusal to the login page, switches the
+  // session on when privacy mode asks for it, and otherwise repaints.
+  let lastStreamAccessCheck = 0;
+  function checkAccessAfterStreamError() {
+    const now = Date.now();
+    if (now - lastStreamAccessCheck < 15_000) return;
+    lastStreamAccessCheck = now;
+    const hadSession = sessionNeeded;
+    loadData().then(() => {
+      // The stream needs the session now: reconnect with it at once rather
+      // than after the backoff.
+      if (!hadSession && sessionNeeded && sseReconnectTimer) {
+        clearTimeout(sseReconnectTimer);
+        sseReconnectTimer = null;
+        connectSSE();
+      }
+    });
   }
 
   // Setup filter input handler - prevent duplicate event listeners
@@ -5049,15 +5155,14 @@ const apiBase = apiBaseProp ?? '';
 
     const inputHandler = (e) => {
       currentFilter = e.target.value;
-      // Reload data to apply filter
-      loadData();
+      rerenderForView();
     };
 
     const keydownHandler = (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         currentFilter = e.target.value;
-        loadData();
+        rerenderForView();
       }
     };
 
@@ -5074,9 +5179,34 @@ const apiBase = apiBaseProp ?? '';
   // short grace window (proxy that strips SSE, firewall, or server hiccup),
   // in which case we fall back to a single GET /api/metrics.
   const INITIAL_SSE_FALLBACK_MS = 2500;
+  // Sticky header option: a sentinel just above the header row tells when the
+  // header is stuck to the top of the window (see the CSS above).
+  function setupStickyHeader() {
+    if (!document.documentElement.classList.contains('sticky-table-header')) return;
+    const headerRow = document.getElementById('system-table-header-row');
+    if (!headerRow || typeof IntersectionObserver !== 'function') return;
+    const sentinel = document.createElement('div');
+    sentinel.setAttribute('aria-hidden', 'true');
+    sentinel.style.cssText = 'height: 1px; margin-bottom: -1px;';
+    headerRow.before(sentinel);
+    new IntersectionObserver(([entry]) => {
+      headerRow.classList.toggle('is-stuck', !entry.isIntersecting && entry.boundingClientRect.top < 0);
+    }).observe(sentinel);
+    // Safari ignores scroll-padding when focus scrolls a row into view, so a
+    // row reached with Tab could end up under the stuck header.
+    document.getElementById('systems-body')?.addEventListener('focusin', (e) => {
+      const row = e.target && e.target.closest ? e.target.closest('[data-system-id]') : null;
+      if (!row || !headerRow.classList.contains('is-stuck')) return;
+      const overlap = headerRow.getBoundingClientRect().bottom - row.getBoundingClientRect().top;
+      if (overlap > 0) window.scrollBy(0, -(overlap + 8));
+    });
+  }
+
   async function bootstrap() {
     setupFilterInput();
+    setupStickyHeader();
     await loadTrafficSetting();
+    await sessionDecision;
     connectSSE();
     updateTranslations();
     preloadTCPingConfig();
@@ -5145,6 +5275,23 @@ const apiBase = apiBaseProp ?? '';
     }
     sseReconnectAttempt = 0;
     connectSSE();
+  });
+
+  // The network came back, or a tab whose stream went quiet is shown
+  // again: reconnect now instead of when the 45 s watchdog or the backoff
+  // next fires (that took up to half a minute).
+  function reconnectIfQuiet(force) {
+    if (!force && eventSource && Date.now() - lastSSEActivityAt < 10_000) return;
+    if (sseReconnectTimer) {
+      clearTimeout(sseReconnectTimer);
+      sseReconnectTimer = null;
+    }
+    sseReconnectAttempt = 0;
+    connectSSE();
+  }
+  window.addEventListener('online', () => reconnectIfQuiet(true));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') reconnectIfQuiet(false);
   });
 
   window.addEventListener('beforeunload', () => {
@@ -5242,26 +5389,62 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .system-details .details-content { padding-left: 14px; padding-right: 14px; }
   }
 
+  /* Optional sticky column header (自定义设置 → 表头吸顶, off by default):
+     on tables from 768 px the header stays at the top of the window while
+     a long list scrolls under it. clip, not hidden/auto, on the body and the
+     table box: those make a scroll container, and a sticky header inside
+     one sticks to that box instead of the window. Browsers without clip
+     keep the static header. A sentinel above the header marks it .is-stuck
+     (setupStickyHeader) for a soft shadow and, with glass, an opaque frosted
+     ground, since rows passing under a translucent pane showed through. */
+  @supports (overflow: clip) {
+    @media (min-width: 768px) {
+      html.sticky-table-header body.overflow-x-hidden { overflow-x: clip; }
+      html.sticky-table-header { scroll-padding-top: 56px; }
+      html.sticky-table-header #monitor-root .glass-inner.overflow-x-auto { overflow-x: clip; }
+      html.sticky-table-header #monitor-root #system-table-header-row { position: sticky; top: 0; z-index: 5; }
+      html.sticky-table-header #monitor-root #system-table-header-row.is-stuck { box-shadow: 0 6px 12px -10px rgba(0, 0, 0, 0.25); }
+      html.sticky-table-header.dark #monitor-root #system-table-header-row.is-stuck { box-shadow: 0 6px 14px -10px rgba(0, 0, 0, 0.8); }
+      html.sticky-table-header.glass-enabled.light #monitor-root #system-table-header-row.is-stuck {
+        background-color: #f6f8fb !important;
+        background-image: var(--glass-grain-on-light) !important;
+      }
+      html.sticky-table-header.glass-enabled.dark #monitor-root #system-table-header-row.is-stuck {
+        background-color: #15171d !important;
+        background-image: var(--glass-grain-on-dark) !important;
+      }
+    }
+  }
+
+  /* The name column's ellipsis (see .table-scroll-content above). */
+  @media (min-width: 768px) {
+    #monitor-root .system-row .cell-name { min-width: 0; }
+    #monitor-root .system-row .row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  }
+
   /* Tablets and small laptops (768-1279 px): the table fits the card
      instead of scrolling sideways behind a hidden scrollbar. The scroller
-     reserves the name column (--first-col-width) plus the other columns'
-     minimums, 6 px gaps and the 24 px left padding: 771 px from 1280 px
-     (bars at 130 px). Here the three bar columns go down to 116 px — the
-     40 px percentage, a 2 px gap, the bar's 60 px minimum and the cell's
-     12 px padding, without the bar's own 12 px right padding — and below
-     1024 px the least important columns go: location and OS, then the
-     uptime as well below 900 px. The rows' and the header's templates are
-     inline styles, hence !important. */
+     reserves the name column (at most 160 px of it, see above) plus the
+     other columns' minimums, 6 px gaps and the 24 px left padding: 771 px
+     from 1280 px (bars at 130 px). Here the three bar columns go down to
+     116 px — the 40 px percentage, a 2 px gap, the bar's 60 px minimum and
+     the cell's 12 px padding, without the bar's own 12 px right padding —
+     and to 108 px below 900 px (a 52 px bar); uptime and location need no
+     more than 72 px for "447d" or a flag. Below 1024 px the least
+     important columns go: location and OS, then the uptime as well below
+     900 px. A long name, or the 离线/Offline chip, no longer pushes the
+     last column past the card at 768 or 1024 px. The rows' and the
+     header's templates are inline styles, hence !important. */
   @media (min-width: 768px) and (max-width: 1279.98px) {
     #monitor-root .cell-cpu > div,
     #monitor-root .cell-memory > div,
     #monitor-root .cell-disk > div { padding-right: 0; }
   }
   @media (min-width: 1024px) and (max-width: 1279.98px) {
-    #monitor-root .table-scroll-content { min-width: calc(var(--first-col-width) + 729px) !important; }
+    #monitor-root .table-scroll-content { min-width: calc(min(var(--first-col-width), 160px) + 698px) !important; }
     #monitor-root .system-row > [data-system-id],
     #monitor-root #system-table-header-row {
-      grid-template-columns: var(--first-col-width, 100px) minmax(85px,1fr) minmax(90px,1fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr) !important;
+      grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(72px,1fr) minmax(72px,1fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr) !important;
     }
   }
   @media (min-width: 768px) and (max-width: 1023.98px) {
@@ -5271,18 +5454,19 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root #system-table-header-row > :nth-child(8) { display: none !important; }
   }
   @media (min-width: 900px) and (max-width: 1023.98px) {
-    #monitor-root .table-scroll-content { min-width: calc(var(--first-col-width) + 557px) !important; }
+    #monitor-root .table-scroll-content { min-width: calc(min(var(--first-col-width), 160px) + 557px) !important; }
     #monitor-root .system-row > [data-system-id],
     #monitor-root #system-table-header-row {
-      grid-template-columns: var(--first-col-width, 100px) minmax(85px,1fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) !important;
+      grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(85px,1fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) !important;
     }
   }
   @media (min-width: 768px) and (max-width: 899.98px) {
-    #monitor-root .table-scroll-content { min-width: calc(var(--first-col-width) + 466px) !important; }
+    #monitor-root .table-scroll-content { min-width: calc(min(var(--first-col-width), 160px) + 442px) !important; }
     #monitor-root .system-row > [data-system-id],
     #monitor-root #system-table-header-row {
-      grid-template-columns: var(--first-col-width, 100px) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) !important;
+      grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(108px,1.8fr) minmax(108px,1.8fr) minmax(108px,1.8fr) minmax(70px,0.9fr) !important;
     }
+    #monitor-root .system-row .progress-track { min-width: 52px; }
     #monitor-root .cell-uptime,
     #monitor-root #system-table-header-row > :nth-child(2) { display: none !important; }
   }

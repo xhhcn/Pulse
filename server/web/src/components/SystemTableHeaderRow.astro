@@ -2,7 +2,7 @@
 import Icon from './Icon.astro';
 ---
 
-<div id="system-table-header-row" class="grid items-center gap-1.5 border-b border-[#404040]/50 dark:border-[#404040]/50 border-[#e5e5e5] bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-medium tracking-wide text-[#525252] dark:text-[#a3a3a3]" style="grid-template-columns: var(--first-col-width, 100px) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr); display: none; opacity: 0; transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+<div id="system-table-header-row" class="grid items-center gap-1.5 border-b border-[#404040]/50 dark:border-[#404040]/50 border-[#e5e5e5] bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-medium tracking-wide text-[#525252] dark:text-[#a3a3a3]" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr); display: none; opacity: 0; transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
   <div class="h-5 flex items-center gap-1">
     <Icon name="server" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
     <span data-translate="system">Service</span>

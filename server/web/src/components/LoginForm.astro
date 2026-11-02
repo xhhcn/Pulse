@@ -22,7 +22,10 @@
       </div>
 
       <!-- Login Form -->
-      <form id="login-form" class="space-y-4">
+      <!-- method="post": a submit before the script is ready (slow link,
+           script blocked) reloads this page instead of putting the
+           password into the address bar, history and access logs. -->
+      <form id="login-form" method="post" class="space-y-4">
         <div class="animate-form-field" style="animation-delay: 0.2s;">
           <label for="password" class="block text-sm font-medium text-[#525252] dark:text-[#a3a3a3] mb-2" data-translate-login="password">Password</label>
           <input
@@ -104,6 +107,8 @@
       setupSubtitle: 'Set up your admin password (first time only)',
       error: 'Error',
       invalidPassword: 'Invalid password',
+      serverUnreachable: 'Could not reach the server, please try again',
+      storageBlocked: 'This browser blocks site data for this page, so the login cannot be kept. Allow cookies and site data for this site.',
       passwordMismatch: 'Passwords do not match',
       passwordTooShort: 'Password must be at least 6 characters',
       setupSuccess: 'Password set successfully! Redirecting...',
@@ -122,6 +127,8 @@
       setupSubtitle: '设置您的管理员密码（仅首次）',
       error: '错误',
       invalidPassword: '密码错误',
+      serverUnreachable: '无法连接服务器，请稍后再试',
+      storageBlocked: '浏览器禁止了本站存储数据，无法保持登录。请允许本站使用 Cookie 和网站数据。',
       passwordMismatch: '密码不匹配',
       passwordTooShort: '密码至少需要 6 个字符',
       setupSuccess: '密码设置成功！正在跳转...',
@@ -139,8 +146,13 @@
     return 'en';
   }
 
+  // Reading storage throws when the browser blocks site data.
+  function readStored(key) {
+    try { return localStorage.getItem(key); } catch (_) { return null; }
+  }
+
   function getCurrentLanguage() {
-    const stored = localStorage.getItem('preferred-language');
+    const stored = readStored('preferred-language');
     if (stored === 'zh' || stored === 'en') {
       return stored;
     }
@@ -233,27 +245,36 @@
     }
   }
 
-  // Login with password
+  // Login with password. Returns true, or the message to show: only a 4xx
+  // answer means a wrong password (the server answers a lockout the same
+  // way); a dropped request or a 5xx from the server or a CDN does not.
   async function login(password) {
+    const lang = getCurrentLanguage();
+    let res;
     try {
-      const res = await fetch(`${apiBase}/api/auth/login`, {
+      res = await fetch(`${apiBase}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
       });
-      
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          // Store auth token
-          localStorage.setItem('admin_auth_token', data.token);
-          return true;
-        }
-      }
-      return false;
     } catch (err) {
-      return false;
+      return translations[lang].serverUnreachable;
     }
+    if (!res.ok) {
+      return res.status >= 400 && res.status < 500 ? translations[lang].invalidPassword : translations[lang].serverUnreachable;
+    }
+    let data = null;
+    try { data = await res.json(); } catch (_) { /* not the API */ }
+    if (!data || !data.success) return translations[lang].serverUnreachable;
+    // Site data blocked: the session could not reach the admin page, which
+    // would send the visitor straight back here without a word.
+    if (window.__pulseStorageBlocked) return translations[lang].storageBlocked;
+    try {
+      localStorage.setItem('admin_auth_token', data.token);
+    } catch (_) {
+      return translations[lang].storageBlocked;
+    }
+    return true;
   }
 
   function showError(message) {
@@ -282,7 +303,7 @@
   }
 
   function getCurrentTheme() {
-    const stored = localStorage.getItem('preferred-theme');
+    const stored = readStored('preferred-theme');
     if (stored === 'dark' || stored === 'light') {
       return stored;
     }
@@ -327,8 +348,15 @@
         if (!privacy || !privacy.enabled) document.getElementById('login-home')?.classList.remove('hidden');
       });
 
-    let isPasswordSet = await checkPasswordStatus();
+    // The real submit handler is attached once /api/auth/status has
+    // answered; a submit (Enter after autofill) before that is held here
+    // and replayed, instead of being sent natively.
     const form = document.getElementById('login-form');
+    let heldSubmit = false;
+    const holdSubmit = (e) => { e.preventDefault(); heldSubmit = true; };
+    form.addEventListener('submit', holdSubmit);
+
+    let isPasswordSet = await checkPasswordStatus();
     const passwordField = document.getElementById('password');
     const confirmPasswordField = document.getElementById('confirm-password-field');
     const confirmPasswordInput = document.getElementById('confirm-password');
@@ -397,7 +425,7 @@
           if (result && result.success) {
             // After setup, automatically login
             const loginResult = await login(password);
-            if (loginResult) {
+            if (loginResult === true) {
               // SECURITY: Validate redirect parameter to prevent open redirect
               const urlParams = new URLSearchParams(window.location.search);
               const redirect = validateRedirect(urlParams.get('redirect') || '/admin');
@@ -408,8 +436,7 @@
               // /api/auth/setup, and say so instead of bouncing off /admin.
               isPasswordSet = true;
               applyLoginMode(false);
-              const lang = getCurrentLanguage();
-              showError(translations[lang].invalidPassword);
+              showError(loginResult);
             }
           } else {
             const lang = getCurrentLanguage();
@@ -419,11 +446,12 @@
               // exists, so fall back to login mode and try the password.
               isPasswordSet = true;
               applyLoginMode(false);
-              if (await login(password)) {
+              const retry = await login(password);
+              if (retry === true) {
                 const urlParams = new URLSearchParams(window.location.search);
                 window.location.href = validateRedirect(urlParams.get('redirect') || '/admin');
               } else {
-                showError(translations[lang].invalidPassword);
+                showError(retry);
               }
             } else {
               showError(errorMsg);
@@ -432,14 +460,13 @@
         } else {
           // Login
           const success = await login(password);
-          if (success) {
+          if (success === true) {
             // SECURITY: Validate redirect parameter to prevent open redirect
             const urlParams = new URLSearchParams(window.location.search);
             const redirect = validateRedirect(urlParams.get('redirect') || '/admin');
             window.location.href = redirect;
           } else {
-            const lang = getCurrentLanguage();
-            showError(translations[lang].invalidPassword);
+            showError(success);
           }
         }
       } finally {
@@ -448,5 +475,10 @@
         submitButton.classList.remove('opacity-60', 'cursor-not-allowed');
       }
     });
+    form.removeEventListener('submit', holdSubmit);
+    if (heldSubmit) {
+      if (form.requestSubmit) form.requestSubmit();
+      else form.dispatchEvent(new Event('submit', { cancelable: true }));
+    }
   })();
 </script>

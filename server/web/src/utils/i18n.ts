@@ -117,9 +117,12 @@ export function initI18n(): void {
     // English while the navbar followed the browser.)
     currentLanguage = getLanguage();
     
-    // Listen for language changes
+    // Listen for language changes. The navbar's switch carries the language;
+    // the browser fires a plain 'languagechange' of its own when the user
+    // changes the browser's languages, which is not a choice for this page.
     window.addEventListener('languagechange', (e: any) => {
-      const newLang = e.detail?.language || 'en';
+      const newLang = e.detail?.language;
+      if (newLang !== 'zh' && newLang !== 'en') return;
       setLanguage(newLang as Language);
       // Trigger translation update
       window.dispatchEvent(new CustomEvent('translate'));
