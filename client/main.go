@@ -1216,17 +1216,38 @@ func classifyDialError(err error) (skipped bool) {
 // classifyDialError; the message text is unchanged from the %v form that the
 // /tcping response has always reported.
 func executeTCPing(target string) (float64, error) {
-	// Use net.DialTimeout to measure TCP connection latency
-	// Use shorter timeout (3 seconds) to avoid blocking the HTTP request handler too long
-	start := time.Now()
-	conn, err := net.DialTimeout("tcp", target, 3*time.Second)
+	// The latency is the TCP handshake alone. Targets are often host names,
+	// and the lookup runs inside the dial: without a local DNS cache every
+	// sample carried a resolver round trip (tens of ms on a VPS that asks
+	// 8.8.8.8). Control runs right before connect(2) for each address tried,
+	// so the connection that won is timed from its own start.
+	// Short timeout (3 seconds) so the HTTP request handler is not blocked long.
+	var startsMu sync.Mutex
+	starts := make(map[string]time.Time, 2)
+	dialer := net.Dialer{
+		Timeout: 3 * time.Second,
+		Control: func(_, address string, _ syscall.RawConn) error {
+			startsMu.Lock()
+			starts[address] = time.Now()
+			startsMu.Unlock()
+			return nil
+		},
+	}
+	begin := time.Now()
+	conn, err := dialer.Dial("tcp", target)
 	if err != nil {
 		return 0, fmt.Errorf("connection failed: %w", err)
 	}
+	end := time.Now()
 	defer conn.Close()
 
-	latency := time.Since(start).Seconds() * 1000 // Convert to milliseconds
-	return latency, nil
+	startsMu.Lock()
+	start, ok := starts[conn.RemoteAddr().String()]
+	startsMu.Unlock()
+	if !ok {
+		start = begin
+	}
+	return float64(end.Sub(start).Nanoseconds()) / 1e6, nil // milliseconds
 }
 
 // pushHTTPClient is a dedicated HTTP client for push requests.
@@ -1589,7 +1610,7 @@ func collectSystemMetrics() metricPayload {
 		NetOutMBps:         netOut,
 		TotalNetInBytes:    totalNetInBytes,
 		TotalNetOutBytes:   totalNetOutBytes,
-		AgentVersion:       "1.3.34",
+		AgentVersion:       "1.3.45",
 		Alert:              false, // Can be enhanced with actual alert logic
 	}
 }
@@ -2759,6 +2780,26 @@ type netInterfaceStats struct {
 	TxBytes uint64
 }
 
+// virtualInterfacePrefixes name interfaces whose traffic is already counted
+// on a real one: container and VM bridges and their veth/tap ends, tunnels
+// and overlay networks (their packets cross the uplink as well), and ifb
+// shaping mirrors. Summing them counted a container's download three times
+// (veth, docker0, eth0) and made the totals drop when a container stopped.
+var virtualInterfacePrefixes = []string{
+	"lo", "docker", "br-", "veth", "virbr", "vmbr", "vmnet", "vnet", "lxcbr", "tap", "tun",
+	"wg", "tailscale", "zt", "kube", "cni", "flannel", "cali", "cilium", "vxlan", "ifb",
+}
+
+func isVirtualInterface(name string) bool {
+	name = strings.ToLower(name)
+	for _, p := range virtualInterfacePrefixes {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
+
 func getNetworkStats() (inMBps, outMBps float64, totalRxBytes, totalTxBytes uint64) {
 	netStatsMutex.Lock()
 	defer netStatsMutex.Unlock()
@@ -2848,8 +2889,8 @@ func getNetworkStats() (inMBps, outMBps float64, totalRxBytes, totalTxBytes uint
 		}
 
 		interfaceName := strings.TrimSpace(parts[0])
-		// Skip loopback interface
-		if interfaceName == "lo" {
+		// Skip loopback and virtual interfaces
+		if isVirtualInterface(interfaceName) {
 			continue
 		}
 
