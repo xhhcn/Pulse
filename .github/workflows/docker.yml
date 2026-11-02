@@ -146,17 +146,11 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} finishes the review of v1.3.45: open dashboards follow tag and TCPing changes, the admin dialogs work from the keyboard, the dashboard says when its connection is lost, and agents ask for their public address less often. Existing clients and databases stay compatible; agents 1.3.46 update by themselves.
+            v${{ steps.version.outputs.version }} is a small follow-up to v1.3.46: service names on the dashboard keep the full shape of their letters again. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Agent 1.3.46: the public address is looked up every 10 minutes instead of every minute. Each lookup asks up to seven HTTPS echo services (about 36 KB on the wire, 1.6 GB a month per agent at the old rate, and the services had begun to answer 429). After a lookup that found nothing it is retried after a minute, and a known address is kept through two failed lookups.
-            - Web: when no update has arrived for 12 seconds (the server sends one every 3), a grey notice "Connection lost, reconnecting…" joins the summary beside the title, and it goes with the next update. The table used to keep showing the last data as if it were live.
-            - Web: tag edits reach open dashboards, and the TCPing panel appears in every row when the first target is added (both needed a reload).
-            - Web (admin): dialogs are announced as dialogs with their title, keyboard focus moves into a dialog when it opens, stays in it while Tab is pressed, and returns to the button that opened it.
-            - Web (admin): with no TCPing targets yet, the interval can be saved (the empty placeholder row blocked it); a target name without an address is pointed out instead of being dropped.
-            - Web: the login page goes straight back to the dashboard when the stored session is still valid (after a network error while the admin page was checking it, the password was asked for again).
-            - Server: a backup download that stops moving ends after a minute instead of holding the database snapshot open indefinitely.
+            - Web: the dashboard no longer cuts a pixel off the edge of a service name, such as the hook of a J, the bar of a T or the tail of an r. In the table it came with the ellipsis for long names in v1.3.45; the phone cards, which limit a name to two lines, had it as well. Layout, line breaks and the ellipsis are unchanged.
 
             ### Compatibility
 
@@ -165,8 +159,8 @@ jobs:
 
             ### Verified
 
-            - Go: the server and agent suites with the race detector and staticcheck; new tests for the backup stall and the address lookup interval, the backup one failing on v1.3.45.
-            - Chromium, Firefox and WebKit: the connection notice against a real outage (none in 20 s of normal operation), live tag and first-target changes, dialog names, focus and Tab, the login page with a valid and a dead session, the TCPing interval without targets, and the full regression of v1.3.45.
+            - Chromium: pixel comparison with v1.3.46 on frozen data, light, dark and glass, from phone to desktop: only the restored letter edges differ. A scan that unclips every clipping element on the dashboard, login and admin pages finds no other cut-off text.
+            - Chromium, Firefox and WebKit: the table at 153 widths from 768 to 1920 px in both languages; the phone cards from 320 to 767 px with short, long, two-line and clamped names.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
