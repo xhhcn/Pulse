@@ -5414,6 +5414,9 @@ const apiBase = apiBaseProp ?? '';
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
       overflow: hidden;
+      /* room for a glyph's overhang, as in the table (see .row-name below) */
+      padding-inline: 1px;
+      margin-inline: -1px;
       font-size: 13px;
       line-height: 1.3;
     }
@@ -5474,10 +5477,12 @@ const apiBase = apiBaseProp ?? '';
     }
   }
 
-  /* The name column's ellipsis (see .table-scroll-content above). */
+  /* The name column's ellipsis (see .table-scroll-content above). The 1 px
+     padding inside an equal negative margin leaves the layout as it was but
+     keeps the clip off the overhang of a glyph like J or T. */
   @media (min-width: 768px) {
     #monitor-root .system-row .cell-name { min-width: 0; }
-    #monitor-root .system-row .row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    #monitor-root .system-row .row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-inline: 1px; margin-inline: -1px; }
   }
 
   /* Tablets and small laptops (768-1279 px): the table fits the card
