@@ -6435,7 +6435,15 @@ func handleAdminBackup(store *Store, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("Cache-Control", "no-store")
 
-	n, err := store.Snapshot(w)
+	// The snapshot is one read transaction for the whole download. A
+	// download that stops moving (a paused or dead client) used to hold it
+	// open indefinitely: freed pages could not be reused meanwhile, and a
+	// remap of a growing file had to wait for it. Each write gets its own
+	// deadline, so a slow download takes as long as it needs and a stalled
+	// one ends.
+	rc := http.NewResponseController(w)
+	defer rc.SetWriteDeadline(time.Time{})
+	n, err := store.Snapshot(stallLimitedWriter{w: w, rc: rc})
 	if err != nil {
 		// If streaming has already begun, headers are committed and we
 		// can't switch to a JSON error; log it so operators notice the
@@ -6446,6 +6454,21 @@ func handleAdminBackup(store *Store, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("✅ Admin backup streamed %d bytes to %s", n, getClientIP(r))
+}
+
+// backupStallTimeout is how long a backup download may make no progress.
+var backupStallTimeout = time.Minute
+
+// stallLimitedWriter re-arms the response's write deadline before every
+// write (see handleAdminBackup).
+type stallLimitedWriter struct {
+	w  io.Writer
+	rc *http.ResponseController
+}
+
+func (s stallLimitedWriter) Write(b []byte) (int, error) {
+	_ = s.rc.SetWriteDeadline(time.Now().Add(backupStallTimeout))
+	return s.w.Write(b)
 }
 
 // isAuthenticated checks if request is authenticated

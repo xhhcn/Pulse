@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -195,5 +197,54 @@ func TestRateLimitKeyGroupsIPv6Prefix(t *testing.T) {
 	}
 	if code := login("[2001:db8:77:2::1]:4000", "right-password"); code != http.StatusOK {
 		t.Fatalf("a different /64 must not be locked: HTTP %d", code)
+	}
+}
+
+// A backup download that stops moving ends instead of holding the
+// snapshot's read transaction open.
+func TestStalledBackupReleasesItsTransaction(t *testing.T) {
+	store := newTestStore(t)
+	// Some 24 MB of data, more than the socket buffers can absorb.
+	blob := bytes.Repeat([]byte("x"), 1<<20)
+	if err := store.db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte("stall-test-padding"))
+		if err != nil {
+			return err
+		}
+		for i := 0; i < 24; i++ {
+			if err := b.Put([]byte{byte(i)}, blob); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	withAdminToken(t, "backup-admin")
+	prev := backupStallTimeout
+	backupStallTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { backupStallTimeout = prev })
+
+	done := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(done)
+		handleAdminBackup(store, w, r)
+	}))
+	defer srv.Close()
+
+	conn, err := net.Dial("tcp", srv.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	// Ask for the backup, then never read the answer.
+	fmt.Fprintf(conn, "GET /api/admin/backup HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer backup-admin\r\n\r\n")
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the backup handler was still writing to a client that stopped reading")
+	}
+	if open := store.db.Stats().OpenTxN; open != 0 {
+		t.Fatalf("%d read transaction(s) still open after the stalled download ended", open)
 	}
 }
