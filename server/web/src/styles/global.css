@@ -6,11 +6,22 @@
   color-scheme: dark light;
 }
 
+/* Inter, as in Beszel: Latin letters and figures look the same on every
+   platform. Chinese has no glyphs in it and falls through to the system
+   font (PingFang, Microsoft YaHei…). The pages preload the file. Inter 4.1,
+   SIL Open Font License (assets/fonts/LICENSE-Inter.txt). */
+@font-face {
+  font-family: InterVariable;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../assets/fonts/InterVariable.woff2') format('woff2');
+}
+
 body {
   background: #151515;
   color: #e5e7eb;
-  /* The system UI font of each platform (Segoe UI, SF, Roboto…). */
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -31,6 +42,109 @@ body.light {
 body.dark {
   background: #151515;
   color: #e5e7eb;
+}
+
+/* The theme button shows the choice (NavBar updateThemeIcon): sun, moon,
+   or sun-and-moon for "follow the system", which is also what a page with
+   no data-theme-pref yet shows. */
+#theme-btn .theme-icon { display: none; }
+html[data-theme-pref="light"] #theme-btn .theme-icon-sun,
+html[data-theme-pref="dark"] #theme-btn .theme-icon-moon,
+html[data-theme-pref="system"] #theme-btn .theme-icon-system,
+html:not([data-theme-pref]) #theme-btn .theme-icon-system { display: block; }
+/* Beszel's input and outline button: 40 px high (36 on phones), a 10 px
+   radius, the hairline border, and the page's own ground, so they sit a
+   step below the card (the dashboard's filter and view button, the login
+   fields). */
+.toolbar-control {
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #dadada;
+  background-color: #fafafa;
+  color: #262626;
+  outline: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+html.dark .toolbar-control {
+  border-color: #2b2b2b;
+  background-color: #161616;
+  color: #f5f5f5;
+}
+@media (min-width: 640px) {
+  .toolbar-control { height: 40px; }
+}
+.toolbar-icon-btn { width: 36px; }
+@media (min-width: 640px) {
+  .toolbar-icon-btn { width: 40px; }
+}
+.toolbar-control::placeholder { color: #737373; }
+html.dark .toolbar-control::placeholder { color: #a3a3a3; }
+.toolbar-control:focus-visible,
+.toolbar-icon-btn[aria-expanded="true"] {
+  border-color: #a3a3a3;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
+}
+html.dark .toolbar-control:focus-visible,
+html.dark .toolbar-icon-btn[aria-expanded="true"] {
+  border-color: #525252;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+}
+.toolbar-icon-btn:hover { background-color: #f0f0f0; }
+html.dark .toolbar-icon-btn:hover { background-color: #222222; }
+
+/* Tooltips of icon-only controls (utils/tooltip.ts), Beszel's: the card
+   ground, a hairline border, 14 px text, a small arrow, a quick fade and
+   zoom from 95 %. */
+.pulse-tooltip {
+  position: fixed;
+  z-index: 1000;
+  display: none;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #dadada;
+  background: #ffffff;
+  color: #262626;
+  font-size: 14px;
+  line-height: 1.4;
+  text-wrap: balance;
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.16);
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+html.dark .pulse-tooltip {
+  border-color: #2b2b2b;
+  background: #161616;
+  color: #f5f5f5;
+  box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.6);
+}
+.pulse-tooltip.is-open { opacity: 1; transform: none; }
+.pulse-tooltip[data-side="bottom"] { transform-origin: top center; }
+.pulse-tooltip[data-side="top"] { transform-origin: bottom center; }
+.pulse-tooltip-arrow {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  background: inherit;
+  border: inherit;
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+.pulse-tooltip[data-side="bottom"] .pulse-tooltip-arrow { top: -6px; clip-path: polygon(0 0, 100% 0, 0 100%); }
+.pulse-tooltip[data-side="top"] .pulse-tooltip-arrow { bottom: -6px; clip-path: polygon(100% 0, 100% 100%, 0 100%); }
+@media (prefers-reduced-motion: reduce) {
+  .pulse-tooltip { transition: none; transform: none; }
+}
+
+@keyframes theme-icon-in {
+  from { opacity: 0; transform: rotate(-30deg) scale(0.9); }
+}
+#theme-btn .theme-icon-in { animation: theme-icon-in 200ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  #theme-btn .theme-icon-in { animation: none; }
 }
 
 .icon-btn {
@@ -807,11 +921,11 @@ html.glass-enabled.dark [data-modal-content] {
 }
 
 /* Sort option buttons and column toggles in the menu */
-html.glass-enabled.light .sort-option:hover,
+html.glass-enabled.light .view-menu-item:hover,
 html.glass-enabled.light #columns-dropdown label:hover {
   background-color: rgba(0, 0, 0, 0.05) !important;
 }
-html.glass-enabled.dark .sort-option:hover,
+html.glass-enabled.dark .view-menu-item:hover,
 html.glass-enabled.dark #columns-dropdown label:hover {
   background-color: rgba(255, 255, 255, 0.06) !important;
 }

@@ -8,7 +8,7 @@ interface Props {
 const { isAdmin = false } = Astro.props;
 ---
 
-<nav class="glass-nav mx-auto mt-2 sm:mt-4 max-w-7xl flex items-center justify-between rounded-xl border border-[#404040]/50 bg-[#1c1c1c] dark:border-[#404040]/50 dark:bg-[#1c1c1c] border-[#d4d4d4]/50 bg-white px-3 sm:px-4 md:px-6 py-2 sm:py-3">
+<nav class="glass-nav mx-auto mt-2 sm:mt-4 max-w-[1500px] flex items-center justify-between rounded-xl border border-[#404040]/50 bg-[#1c1c1c] dark:border-[#404040]/50 dark:bg-[#1c1c1c] border-[#d4d4d4]/50 bg-white px-3 sm:px-4 md:px-6 py-2 sm:py-3">
   <!-- Logo -->
   <a href="/" class="flex items-center gap-1.5 sm:gap-2">
     <!-- Logo Container -->
@@ -29,58 +29,64 @@ const { isAdmin = false } = Astro.props;
   <div id="navbar-icons-container" class="flex items-center gap-0.5 sm:gap-1" style="opacity: 0;">
     <button
       id="language-btn"
-      class="rounded-lg p-1.5 sm:p-2 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
+      class="rounded-lg p-1.5 sm:p-2.5 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
       aria-label="Toggle language"
       title="Toggle language"
     >
-      <Icon name="languages" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px] transition-transform duration-200" />
+      <Icon name="languages" size={16} class="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200" />
     </button>
     <button
       id="theme-btn"
-      class="rounded-lg p-1.5 sm:p-2 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
+      class="rounded-lg p-1.5 sm:p-2.5 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
       aria-label="Toggle theme"
       title="Toggle theme"
     >
       <Icon
-        id="theme-icon-moon"
         name="moon"
         size={16}
-        class="w-4 h-4 sm:w-[18px] sm:h-[18px] hidden dark:block transition-all duration-300"
+        class="theme-icon theme-icon-moon w-4 h-4 sm:w-5 sm:h-5 transition-all duration-300"
       />
       <Icon
-        id="theme-icon-sun"
         name="sun"
         size={16}
-        class="w-4 h-4 sm:w-[18px] sm:h-[18px] block dark:hidden transition-all duration-300"
+        class="theme-icon theme-icon-sun w-4 h-4 sm:w-5 sm:h-5 transition-all duration-300"
+      />
+      <Icon
+        name="sun-moon"
+        size={16}
+        class="theme-icon theme-icon-system w-4 h-4 sm:w-5 sm:h-5 transition-all duration-300"
       />
     </button>
     {isAdmin ? (
       <a
         id="navbar-home-link"
         href="/"
-        class="rounded-lg p-1.5 sm:p-2 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
+        class="rounded-lg p-1.5 sm:p-2.5 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
         aria-label="Home"
         title="Home"
         data-nav-link="home"
       >
-        <Icon name="home" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px] transition-transform duration-200" />
+        <Icon name="home" size={16} class="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200" />
       </a>
     ) : (
       <a
         id="navbar-admin-link"
         href="/admin"
-        class="rounded-lg p-1.5 sm:p-2 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
+        class="rounded-lg p-1.5 sm:p-2.5 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
         aria-label="Admin"
         title="Admin"
         data-nav-link="admin"
       >
-        <Icon name="user" size={16} class="w-4 h-4 sm:w-[18px] sm:h-[18px] transition-transform duration-200" />
+        <Icon name="user" size={16} class="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200" />
       </a>
     )}
     </div>
   </nav>
 
 <script>
+  // Beszel-style tooltips for every icon-only control on the page.
+  import '../utils/tooltip.ts';
+
   /* Navbar logo SVG comes from admin input and ends up in the page.
      Accept only a plain <svg> tree: drop scripts, foreignObject, event
      handler attributes and non-image hrefs. Returns null when anything
@@ -177,24 +183,30 @@ const { isAdmin = false } = Astro.props;
       return localStorage.getItem('preferred-theme');
     }
 
-    function setTheme(theme) {
-      localStorage.setItem('preferred-theme', theme);
-      applyTheme(theme);
+    // The choice: 'light', 'dark' or 'system' (follow the system, the
+    // default; nothing stored). The button steps through them in that
+    // order, as in Beszel.
+    function getThemePreference() {
+      const stored = getStoredTheme();
+      return stored === 'dark' || stored === 'light' ? stored : 'system';
     }
 
+    function setThemePreference(preference) {
+      if (preference === 'system') localStorage.removeItem('preferred-theme');
+      else localStorage.setItem('preferred-theme', preference);
+      document.documentElement.dataset.themePref = preference;
+      applyTheme(preference === 'system' ? getSystemTheme() : preference);
+    }
+
+    // The theme in effect: the choice, or the system's.
     function getCurrentTheme() {
-      const stored = getStoredTheme();
-      if (stored === 'dark' || stored === 'light') {
-        return stored;
-      }
-      // Default to system theme
-      return getSystemTheme();
+      const preference = getThemePreference();
+      return preference === 'system' ? getSystemTheme() : preference;
     }
 
     function toggleTheme() {
-      const current = getCurrentTheme();
-      const newTheme = current === 'dark' ? 'light' : 'dark';
-      setTheme(newTheme);
+      const order = ['light', 'dark', 'system'];
+      setThemePreference(order[(order.indexOf(getThemePreference()) + 1) % order.length]);
       updateThemeButton();
     }
 
@@ -226,15 +238,12 @@ const { isAdmin = false } = Astro.props;
     function updateThemeButton() {
       const btn = document.getElementById('theme-btn');
       if (!btn) return;
-      const currentLang = getCurrentLanguage();
-      const currentTheme = getCurrentTheme();
-      const nextIsDark = currentTheme !== 'dark';
-      let label;
-      if (currentLang === 'zh') {
-        label = nextIsDark ? '切换到深色模式' : '切换到浅色模式';
-      } else {
-        label = nextIsDark ? 'Switch to dark mode' : 'Switch to light mode';
-      }
+      const labels = {
+        light: { zh: '切换到深色模式', en: 'Switch to dark mode' },
+        dark: { zh: '跟随系统主题', en: 'Use the system theme' },
+        system: { zh: '切换到浅色模式', en: 'Switch to light mode' },
+      };
+      const label = labels[getThemePreference()][getCurrentLanguage() === 'zh' ? 'zh' : 'en'];
       btn.setAttribute('aria-label', label);
       btn.setAttribute('title', label);
     }
@@ -305,37 +314,30 @@ const { isAdmin = false } = Astro.props;
       window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: theme } }));
     }
 
+    // The button shows the choice: sun, moon, or sun-and-moon for "follow
+    // the system". data-theme-pref on <html> (set in the page head) places
+    // the icon before the first paint; a change swaps it at once and the new
+    // one turns in (theme-icon-in in global.css), as in Beszel. A timed
+    // swap waited behind the restyle of a long table.
+    let shownThemeIcon = null;
     function updateThemeIcon(theme) {
-      const moonIcon = document.getElementById('theme-icon-moon');
-      const sunIcon = document.getElementById('theme-icon-sun');
-      if (moonIcon && sunIcon) {
-        // Add rotation animation on switch
-        const showIcon = theme === 'dark' ? moonIcon : sunIcon;
-        const hideIcon = theme === 'dark' ? sunIcon : moonIcon;
-        
-        // Animate out
-        hideIcon.style.transform = 'rotate(-90deg) scale(0.5)';
-        hideIcon.style.opacity = '0';
-        
-        setTimeout(() => {
-          hideIcon.classList.remove('block');
-          hideIcon.classList.add('hidden');
-          hideIcon.style.transform = '';
-          hideIcon.style.opacity = '';
-          
-          // Animate in
-          showIcon.style.transform = 'rotate(90deg) scale(0.5)';
-          showIcon.style.opacity = '0';
-          showIcon.classList.remove('hidden');
-          showIcon.classList.add('block');
-          
-          // Trigger reflow
-          showIcon.offsetHeight;
-          
-          showIcon.style.transform = 'rotate(0deg) scale(1)';
-          showIcon.style.opacity = '1';
-        }, 150);
+      const icons = {
+        light: document.querySelector('#theme-btn .theme-icon-sun'),
+        dark: document.querySelector('#theme-btn .theme-icon-moon'),
+        system: document.querySelector('#theme-btn .theme-icon-system'),
+      };
+      const preference = getThemePreference();
+      Object.entries(icons).forEach(([key, icon]) => {
+        if (!icon) return;
+        icon.style.display = key === preference ? 'block' : 'none';
+      });
+      const icon = icons[preference];
+      if (icon && shownThemeIcon !== null && shownThemeIcon !== preference) {
+        icon.classList.remove('theme-icon-in');
+        void icon.getBoundingClientRect();
+        icon.classList.add('theme-icon-in');
       }
+      shownThemeIcon = preference;
       
       // Update monitor icon stroke color based on theme
       const monitorIcon = document.querySelector('.monitor-icon');
@@ -562,7 +564,15 @@ const { isAdmin = false } = Astro.props;
         updateNavLinks();
       });
 
-      // System theme listener removed - we use fixed defaults
+      // With "follow the system" chosen, a change of the system's theme
+      // (a schedule, or the user switching it) reaches the open page.
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+          if (getThemePreference() !== 'system') return;
+          applyTheme(getSystemTheme());
+          updateThemeButton();
+        });
+      }
     }
 
     // Run initialization

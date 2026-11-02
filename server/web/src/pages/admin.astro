@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import interFontUrl from '../assets/fonts/InterVariable.woff2?url';
 import NavBar from '../components/NavBar.astro';
 import AdminDashboard from '../components/AdminDashboard.astro';
 import Footer from '../components/Footer.astro';
@@ -11,6 +12,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preload" href={interFontUrl} as="font" type="font/woff2" crossorigin />
     <meta name="description" content="Pulse Monitor admin console — manage clients, policies, and backups." />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="googlebot" content="noindex, nofollow" />
@@ -18,7 +20,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <meta name="format-detection" content="telephone=no" />
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#141516" media="(prefers-color-scheme: dark)" />
     <meta property="og:title" content="Admin · Pulse Monitor" />
     <meta property="og:description" content="Pulse Monitor admin console." />
     <meta property="og:type" content="website" />
@@ -117,6 +119,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
         // Get theme preference (use system theme as default)
         const storedTheme = localStorage.getItem('preferred-theme');
         const theme = (storedTheme === 'dark' || storedTheme === 'light') ? storedTheme : getSystemTheme();
+        // 'light', 'dark' or 'system' (no stored choice): the theme button's icon.
+        document.documentElement.dataset.themePref = (storedTheme === 'dark' || storedTheme === 'light') ? storedTheme : 'system';
         
         // Apply theme immediately to html
         const html = document.documentElement;
@@ -139,7 +143,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
         window.__pulseSyncThemeColor = function () {
           var dark = html.classList.contains('dark');
           var glass = html.classList.contains('glass-enabled');
-          var colour = glass ? (dark ? '#141925' : '#ebeff4') : (dark ? '#151515' : '#fafafa');
+          var colour = glass ? (dark ? '#141925' : '#ebeff4') : (dark ? '#141516' : '#fafafa');
           document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
             m.removeAttribute('media');
             m.setAttribute('content', colour);

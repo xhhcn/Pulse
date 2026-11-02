@@ -35,7 +35,7 @@ const customCodePlaceholder = [
 ].join('\n');
 ---
 
-<div class="mx-auto max-w-7xl">
+<div class="mx-auto max-w-[1500px]">
   <!-- System List -->
   <div class="glass-card mb-4 sm:mb-6 rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white p-3 sm:p-4 md:p-6">
     <div class="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -112,13 +112,13 @@ const customCodePlaceholder = [
           <button
             type="button"
             id="cancel-add-btn"
-            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-semibold text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
           >
             <span data-translate="cancel">Cancel</span>
           </button>
           <button
             type="submit"
-            class="flex-1 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-600"
+            class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
           >
             <span data-translate="addSystem">Add System</span>
           </button>
@@ -174,7 +174,7 @@ const customCodePlaceholder = [
             </div>
             <label class="relative inline-flex items-center cursor-pointer ml-3">
               <input type="checkbox" id="edit-show-on-home" name="show_on_home" class="sr-only peer" checked>
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-purple-500/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
             </label>
           </div>
           <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2">
@@ -184,7 +184,7 @@ const customCodePlaceholder = [
             </div>
             <label class="relative inline-flex items-center cursor-pointer ml-3">
               <input type="checkbox" id="edit-show-tcping" name="show_tcping" class="sr-only peer" checked>
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-purple-500/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
             </label>
           </div>
         </div>
@@ -201,13 +201,13 @@ const customCodePlaceholder = [
           <button
             type="button"
             id="cancel-edit-btn"
-            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-semibold text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
           >
             <span data-translate="cancel">Cancel</span>
           </button>
           <button
             type="submit"
-            class="flex-1 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-600"
+            class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
           >
             <span data-translate="updateSystem">Update Service</span>
           </button>
@@ -239,13 +239,13 @@ const customCodePlaceholder = [
       <div class="flex gap-3">
         <button
           id="cancel-delete-btn"
-          class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-semibold text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+          class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
         >
           <span data-translate="cancel">Cancel</span>
         </button>
         <button
           id="confirm-delete-btn"
-          class="flex-1 rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-600"
+          class="flex-1 rounded-lg bg-[#dc2626] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#b91c1c]"
         >
           <span data-translate="delete">Delete</span>
         </button>
@@ -313,13 +313,13 @@ const customCodePlaceholder = [
             <button
               type="button"
               id="cancel-tcping-config-btn"
-              class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-semibold text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+              class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
             >
               <span data-translate="cancel">Cancel</span>
             </button>
             <button
               type="submit"
-              class="flex-1 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-600"
+              class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
             >
               <span data-translate="save">Save</span>
             </button>
@@ -386,13 +386,13 @@ const customCodePlaceholder = [
           <button
             type="button"
             id="cancel-change-password-btn"
-            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-semibold text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
           >
             <span data-translate="cancel">Cancel</span>
           </button>
           <button
             type="submit"
-            class="flex-1 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
+            class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
           >
             <span data-translate="changePassword">Change Password</span>
           </button>
@@ -450,7 +450,7 @@ const customCodePlaceholder = [
             <button
               type="button"
               id="regenerate-shared-secret-btn"
-              class="rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+              class="rounded-lg border border-[#d4d4d4] dark:border-[#404040] bg-transparent px-3 py-2 text-sm font-medium text-[#262626] dark:text-[#f5f5f5] transition-colors hover:bg-[#f0f0f0] dark:hover:bg-[#262626]"
             >
               <span data-translate="regenerate">Regenerate</span>
             </button>
@@ -466,7 +466,7 @@ const customCodePlaceholder = [
           </div>
           <label class="relative inline-flex items-center cursor-pointer ml-3">
             <input type="checkbox" id="show-traffic-toggle" name="show_traffic" class="sr-only peer">
-            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-purple-500/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
           </label>
         </div>
 
@@ -478,7 +478,7 @@ const customCodePlaceholder = [
           </div>
           <label class="relative inline-flex items-center cursor-pointer ml-3">
             <input type="checkbox" id="show-glass-toggle" name="show_glass" class="sr-only peer">
-            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-purple-500/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
           </label>
         </div>
 
@@ -490,7 +490,7 @@ const customCodePlaceholder = [
           </div>
           <label class="relative inline-flex items-center cursor-pointer ml-3">
             <input type="checkbox" id="sticky-header-toggle" name="sticky_header" class="sr-only peer">
-            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-purple-500/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
           </label>
         </div>
 
@@ -519,13 +519,13 @@ const customCodePlaceholder = [
           <button
             type="button"
             id="cancel-navbar-config-btn"
-            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-semibold text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
           >
             <span data-translate="cancel">Cancel</span>
           </button>
           <button
             type="submit"
-            class="flex-1 rounded-lg bg-purple-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-600"
+            class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
           >
             <span data-translate="save">Save</span>
           </button>
@@ -557,14 +557,14 @@ const customCodePlaceholder = [
         <button
           type="button"
           id="cancel-regenerate-secret-btn"
-          class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-semibold text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+          class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
         >
           <span data-translate="cancel">Cancel</span>
         </button>
         <button
           type="button"
           id="confirm-regenerate-secret-btn"
-          class="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+          class="flex-1 rounded-lg bg-[#dc2626] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#b91c1c]"
         >
           <span data-translate="regenerate">Regenerate</span>
         </button>
@@ -655,13 +655,13 @@ const customCodePlaceholder = [
           <button
             type="button"
             id="cancel-privacy-config-btn"
-            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-semibold text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
           >
             <span data-translate="cancel">Cancel</span>
           </button>
           <button
             type="submit"
-            class="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+            class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
           >
             <span data-translate="save">Save</span>
           </button>
@@ -2731,12 +2731,22 @@ const customCodePlaceholder = [
   // Show temporary message
   function showMessage(text, type = 'info') {
     const messageEl = document.createElement('div');
-    messageEl.className = `fixed top-4 right-4 px-4 py-2 rounded-lg text-sm font-medium shadow-lg z-50 ${
-      type === 'success' ? 'bg-green-500 text-white' : 
-      type === 'error' ? 'bg-red-500 text-white' : 
-      'bg-blue-500 text-white'
+    // Beszel's toast: a card with an icon (red only for an error).
+    messageEl.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    messageEl.className = `fixed top-4 right-4 z-50 flex max-w-[min(92vw,380px)] items-center gap-2.5 rounded-[10px] border px-4 py-3 text-sm font-medium shadow-lg ${
+      type === 'error'
+        ? 'border-[#dc2626] bg-[#dc2626] text-white'
+        : 'border-[#e5e5e5] dark:border-[#2b2b2b] bg-white dark:bg-[#1a1a1a] text-[#262626] dark:text-[#f5f5f5]'
     }`;
-    messageEl.textContent = text;
+    const icon = type === 'success'
+      ? '<svg class="w-4 h-4 shrink-0 text-[#3db866]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>'
+      : type === 'error'
+        ? '<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>'
+        : '<svg class="w-4 h-4 shrink-0 text-[#737373] dark:text-[#a3a3a3]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>';
+    messageEl.innerHTML = icon;
+    const label = document.createElement('span');
+    label.textContent = text;
+    messageEl.appendChild(label);
     document.body.appendChild(messageEl);
 
     setTimeout(() => {

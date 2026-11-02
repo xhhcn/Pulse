@@ -2,41 +2,65 @@
 import Icon from './Icon.astro';
 ---
 
-<div id="system-table-header-row" class="grid items-center gap-1.5 border-b border-[#404040]/50 dark:border-[#404040]/50 border-[#e5e5e5] bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-medium tracking-wide text-[#525252] dark:text-[#a3a3a3]" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr); display: none; opacity: 0; transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
-  <div class="h-5 flex items-center gap-1">
-    <Icon name="server" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-    <span data-translate="system">Service</span>
+<!-- Each column name sorts the table, as in Beszel (SystemTable binds
+     .sort-header; the view menu sorts the same way). -->
+<div id="system-table-header-row" class="grid items-center gap-1.5 border-b border-[#404040]/50 dark:border-[#404040]/50 border-[#e5e5e5] dark:bg-[#1f2023] bg-[#f6f7f8] px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-medium tracking-wide text-[#525252] dark:text-[#a3a3a3]" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr); display: none; opacity: 0; transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+  <div data-col="name" class="h-5 flex items-center gap-1">
+    <button type="button" class="sort-header" data-sort="name">
+      <Icon name="server" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
+      <span data-translate="system">Service</span>
+      <span class="sort-header-arrow" aria-hidden="true"></span>
+    </button>
   </div>
-  <div class="h-5 flex items-center gap-1">
-    <Icon name="clock" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-    <span data-translate="time">Uptime</span>
+  <div data-col="uptime" class="h-5 flex items-center gap-1">
+    <button type="button" class="sort-header" data-sort="time">
+      <Icon name="clock" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
+      <span data-translate="time">Uptime</span>
+      <span class="sort-header-arrow" aria-hidden="true"></span>
+    </button>
   </div>
-  <div class="h-5 flex items-center gap-1">
-    <Icon name="map-pin" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-    <span data-translate="location">Location</span>
+  <div data-col="location" class="h-5 flex items-center gap-1">
+    <button type="button" class="sort-header" data-sort="location">
+      <Icon name="map-pin" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
+      <span data-translate="location">Location</span>
+      <span class="sort-header-arrow" aria-hidden="true"></span>
+    </button>
   </div>
-  <div class="h-5 flex items-center gap-1 pr-2 sm:pr-3 min-w-0 w-full">
-    <Icon name="cpu" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-    <span data-translate="cpu">CPU</span>
+  <div data-col="cpu" class="h-5 flex items-center gap-1 pr-2 sm:pr-3 min-w-0 w-full">
+    <button type="button" class="sort-header" data-sort="cpu">
+      <Icon name="cpu" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
+      <span data-translate="cpu">CPU</span>
+      <span class="sort-header-arrow" aria-hidden="true"></span>
+    </button>
   </div>
-  <div class="h-5 flex items-center gap-1 pr-2 sm:pr-3 min-w-0 w-full">
-    <Icon name="memory-stick" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-    <span data-translate="memory">Memory</span>
+  <div data-col="memory" class="h-5 flex items-center gap-1 pr-2 sm:pr-3 min-w-0 w-full">
+    <button type="button" class="sort-header" data-sort="memory">
+      <Icon name="memory-stick" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
+      <span data-translate="memory">Memory</span>
+      <span class="sort-header-arrow" aria-hidden="true"></span>
+    </button>
   </div>
-  <div class="h-5 flex items-center gap-1 pr-2 sm:pr-3 min-w-0 w-full">
-    <Icon name="hard-drive" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-    <span data-translate="disk">Disk</span>
+  <div data-col="disk" class="h-5 flex items-center gap-1 pr-2 sm:pr-3 min-w-0 w-full">
+    <button type="button" class="sort-header" data-sort="disk">
+      <Icon name="hard-drive" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
+      <span data-translate="disk">Disk</span>
+      <span class="sort-header-arrow" aria-hidden="true"></span>
+    </button>
   </div>
-  <!-- Download and upload speed added together, said in the tooltip. No
-       arrow icon after the label: ⇅ read as a sort control on a header that
-       does not sort. -->
-  <div class="h-5 flex items-center gap-1" data-header-title="netTitle" title="Download + upload speed">
-    <Icon name="network" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-    <span data-translate="net">Net</span>
+  <!-- Download and upload speed added together, said in the tooltip. -->
+  <div data-col="net" class="h-5 flex items-center gap-1" data-header-title="netTitle" title="Download + upload speed">
+    <button type="button" class="sort-header" data-sort="net">
+      <Icon name="network" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
+      <span data-translate="net">Net</span>
+      <span class="sort-header-arrow" aria-hidden="true"></span>
+    </button>
   </div>
-  <div class="h-5 flex items-center justify-center gap-1">
-    <Icon name="computer" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-    <span data-translate="os">OS</span>
+  <div data-col="os" class="h-5 flex items-center justify-center gap-1">
+    <button type="button" class="sort-header" data-sort="os">
+      <Icon name="computer" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
+      <span data-translate="os">OS</span>
+      <span class="sort-header-arrow" aria-hidden="true"></span>
+    </button>
   </div>
 </div>
 

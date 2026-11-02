@@ -11,51 +11,154 @@ import Icon from './Icon.astro';
     </div>
     <p id="all-systems-desc" class="text-xs sm:text-sm text-[#404040] dark:text-[#a3a3a3] leading-tight pb-0.5">Updated in real time. Click on a service to view information.</p>
   </div>
-  <div class="flex items-center gap-2 sm:gap-3 w-full sm:w-auto pb-0.5">
+  <!-- Filter and view menu, as in Beszel: one height, radius, border and
+       ground for both; the menu sorts by any column (also a click on a column
+       header) and shows all, online or offline services. -->
+  <div class="flex items-center gap-2 w-full sm:w-auto pb-0.5">
     <div class="relative flex-1 sm:flex-none">
-      <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#525252] dark:text-[#a3a3a3] flex items-center">
-        <Icon name="search" size={12} class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+      <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#737373] dark:text-[#a3a3a3] flex items-center">
+        <Icon name="search" size={14} class="w-3.5 h-3.5" />
       </span>
       <input
         id="system-filter-input"
         type="text"
-        class="w-full sm:w-40 md:w-48 rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white py-1.5 sm:py-2 pl-6 sm:pl-7 pr-2 sm:pr-3 text-xs sm:text-sm text-[#262626] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa] leading-normal"
+        autocomplete="off"
+        spellcheck="false"
+        class="toolbar-control w-full sm:w-56 md:w-64 pl-8 pr-16 text-sm leading-normal"
         placeholder="Filter..."
         data-placeholder-en="Filter..."
         data-placeholder-zh="筛选..."
       />
+      <kbd id="system-filter-shortcut" class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center rounded-md border border-[#e0e0e0] dark:border-[#333] px-1.5 py-0.5 font-sans text-[11px] font-medium leading-none text-[#737373] dark:text-[#a3a3a3]">Ctrl K</kbd>
+      <button id="system-filter-clear" type="button" class="hidden absolute right-1.5 top-1/2 -translate-y-1/2 h-7 w-7 items-center justify-center rounded-md text-[#737373] dark:text-[#a3a3a3] hover:bg-[#f0f0f0] dark:hover:bg-[#2a2a2a] hover:text-[#262626] dark:hover:text-[#f5f5f5]" aria-label="Clear" title="Clear">
+        <Icon name="x" size={14} class="w-3.5 h-3.5" />
+      </button>
     </div>
     <div class="relative" id="columns-dropdown-container">
-      <button id="columns-btn" class="flex items-center gap-1 sm:gap-1.5 rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-[#262626] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]">
-        <span id="columns-btn-text">Sort</span>
-        <Icon name="chevron-down" size={12} class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#525252] dark:text-[#a3a3a3]" />
+      <button id="columns-btn" type="button" class="toolbar-control toolbar-icon-btn flex items-center justify-center text-[#525252] dark:text-[#d4d4d4]" aria-haspopup="menu" aria-expanded="false" aria-controls="columns-dropdown" aria-label="View options" title="View options">
+        <Icon name="settings-2" size={16} class="w-4 h-4" />
       </button>
-      <div id="columns-dropdown" class="absolute right-0 top-full mt-2 hidden w-48 rounded-lg border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white shadow-2xl z-10">
-        <div class="p-2">
-          <div id="sort-by-label" class="mb-1 px-3 py-1 text-xs font-semibold text-[#525252] dark:text-[#a3a3a3] uppercase">Sort by</div>
-          <button class="sort-option w-full flex items-center justify-between rounded px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]" data-sort="name">
-            <span data-translate="name">Name</span>
-            <span class="sort-indicator hidden text-blue-600 dark:text-blue-400">
-              <Icon name="check" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-            </span>
-          </button>
-          <button class="sort-option w-full flex items-center justify-between rounded px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]" data-sort="time">
-            <span data-translate="time">Uptime</span>
-            <span class="sort-indicator hidden text-blue-600 dark:text-blue-400">
-              <Icon name="check" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-            </span>
-          </button>
-          <button class="sort-option w-full flex items-center justify-between rounded px-3 py-2 text-sm text-[#262626] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]" data-sort="os">
-            <span data-translate="os">OS</span>
-            <span class="sort-indicator hidden text-blue-600 dark:text-blue-400">
-              <Icon name="check" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-            </span>
-          </button>
+      <div id="columns-dropdown" class="view-menu absolute right-0 top-full mt-2 hidden z-10" role="menu" aria-labelledby="columns-btn">
+        <div class="view-menu-grid">
+          <div class="view-menu-section view-menu-layout">
+            <div class="view-menu-label"><Icon name="layout-grid" size={14} class="w-3.5 h-3.5" /><span data-translate="layout">Layout</span></div>
+            <button type="button" role="menuitemradio" class="layout-option view-menu-item" data-layout="table"><span class="layout-indicator view-menu-mark"></span><Icon name="layout-list" size={14} class="w-3.5 h-3.5 view-menu-icon" /><span data-translate="layoutTable">Table</span></button>
+            <button type="button" role="menuitemradio" class="layout-option view-menu-item" data-layout="grid"><span class="layout-indicator view-menu-mark"></span><Icon name="layout-grid" size={14} class="w-3.5 h-3.5 view-menu-icon" /><span data-translate="layoutGrid">Cards</span></button>
+          </div>
+          <div class="view-menu-section">
+            <div class="view-menu-label"><Icon name="filter" size={14} class="w-3.5 h-3.5" /><span data-translate="status">Status</span></div>
+            <button type="button" role="menuitemradio" class="status-option view-menu-item" data-status="all"><span class="status-indicator view-menu-mark"></span><span data-translate="statusAll">All</span><span class="status-count" data-count="all"></span></button>
+            <button type="button" role="menuitemradio" class="status-option view-menu-item" data-status="online"><span class="status-indicator view-menu-mark"></span><span data-translate="statusOnline">Online</span><span class="status-count" data-count="online"></span></button>
+            <button type="button" role="menuitemradio" class="status-option view-menu-item" data-status="offline"><span class="status-indicator view-menu-mark"></span><span data-translate="statusOffline">Offline</span><span class="status-count" data-count="offline"></span></button>
+          </div>
+          <div class="view-menu-section">
+            <div class="view-menu-label"><Icon name="arrow-up-down" size={14} class="w-3.5 h-3.5" /><span id="sort-by-label">Sort by</span></div>
+            <button type="button" role="menuitemradio" class="sort-option view-menu-item" data-sort=""><span class="sort-indicator view-menu-mark"></span><span data-translate="defaultOrder">Default order</span></button>
+            <button type="button" role="menuitemradio" class="sort-option view-menu-item" data-sort="name"><span class="sort-indicator view-menu-mark"></span><span data-translate="name">Name</span></button>
+            <button type="button" role="menuitemradio" class="sort-option view-menu-item" data-sort="time"><span class="sort-indicator view-menu-mark"></span><span data-translate="time">Uptime</span></button>
+            <button type="button" role="menuitemradio" class="sort-option view-menu-item" data-sort="location"><span class="sort-indicator view-menu-mark"></span><span data-translate="location">Location</span></button>
+            <button type="button" role="menuitemradio" class="sort-option view-menu-item" data-sort="cpu"><span class="sort-indicator view-menu-mark"></span><span data-translate="cpu">CPU</span></button>
+            <button type="button" role="menuitemradio" class="sort-option view-menu-item" data-sort="memory"><span class="sort-indicator view-menu-mark"></span><span data-translate="memory">Memory</span></button>
+            <button type="button" role="menuitemradio" class="sort-option view-menu-item" data-sort="disk"><span class="sort-indicator view-menu-mark"></span><span data-translate="disk">Disk</span></button>
+            <button type="button" role="menuitemradio" class="sort-option view-menu-item" data-sort="net"><span class="sort-indicator view-menu-mark"></span><span data-translate="net">Net</span></button>
+            <button type="button" role="menuitemradio" class="sort-option view-menu-item" data-sort="os"><span class="sort-indicator view-menu-mark"></span><span data-translate="os">OS</span></button>
+          </div>
+          <div class="view-menu-section">
+            <div class="view-menu-label"><Icon name="eye" size={14} class="w-3.5 h-3.5" /><span data-translate="visibleFields">Visible fields</span></div>
+            <button type="button" role="menuitemcheckbox" class="column-option view-menu-item" data-col="uptime"><span class="column-indicator view-menu-mark"></span><span data-translate="time">Uptime</span></button>
+            <button type="button" role="menuitemcheckbox" class="column-option view-menu-item" data-col="location"><span class="column-indicator view-menu-mark"></span><span data-translate="location">Location</span></button>
+            <button type="button" role="menuitemcheckbox" class="column-option view-menu-item" data-col="cpu"><span class="column-indicator view-menu-mark"></span><span data-translate="cpu">CPU</span></button>
+            <button type="button" role="menuitemcheckbox" class="column-option view-menu-item" data-col="memory"><span class="column-indicator view-menu-mark"></span><span data-translate="memory">Memory</span></button>
+            <button type="button" role="menuitemcheckbox" class="column-option view-menu-item" data-col="disk"><span class="column-indicator view-menu-mark"></span><span data-translate="disk">Disk</span></button>
+            <button type="button" role="menuitemcheckbox" class="column-option view-menu-item" data-col="net"><span class="column-indicator view-menu-mark"></span><span data-translate="net">Net</span></button>
+            <button type="button" role="menuitemcheckbox" class="column-option view-menu-item" data-col="os"><span class="column-indicator view-menu-mark"></span><span data-translate="os">OS</span></button>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </div>
+
+<style is:global>
+  /* The shortcut hint gives way to the clear button and to typing. */
+  #system-filter-input:focus ~ #system-filter-shortcut,
+  #system-filter-input:not(:placeholder-shown) ~ #system-filter-shortcut { display: none; }
+  #system-filter-clear:not(.hidden) { display: inline-flex; }
+
+  /* The menu: Beszel's popover (card ground, hairline border, soft shadow),
+     sort and status side by side from 640 px. */
+  .view-menu {
+    width: min(92vw, 640px);
+    max-height: min(70vh, 560px);
+    overflow-y: auto;
+    padding: 4px;
+    border-radius: 10px;
+    border: 1px solid #dadada;
+    background-color: #ffffff;
+    box-shadow: 0 10px 24px -6px rgba(0, 0, 0, 0.14), 0 2px 6px -2px rgba(0, 0, 0, 0.08);
+  }
+  html.dark .view-menu {
+    border-color: #2b2b2b;
+    background-color: #1c1c1c;
+    box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.6);
+  }
+  /* Beszel's four sections side by side from 640 px (layout, status, sort,
+     visible fields), stacked below; the layout choice only matters from
+     768 px, where the table is shown (phones always get cards). */
+  .view-menu-grid { display: grid; grid-template-columns: 1fr; }
+  .view-menu-section { padding: 2px; min-width: 0; }
+  @media (min-width: 640px) {
+    .view-menu-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .view-menu-section + .view-menu-section { border-left: 1px solid #e5e5e5; }
+    html.dark .view-menu-section + .view-menu-section { border-left-color: #2b2b2b; }
+  }
+  @media (max-width: 639.98px) {
+    .view-menu-section + .view-menu-section { border-top: 1px solid #e5e5e5; margin-top: 2px; padding-top: 4px; }
+    html.dark .view-menu-section + .view-menu-section { border-top-color: #2b2b2b; }
+  }
+  @media (max-width: 767.98px) {
+    .view-menu-layout { display: none; }
+    .view-menu-layout + .view-menu-section { border-left: 0; border-top: 0; margin-top: 0; padding-top: 2px; }
+  }
+  @media (min-width: 640px) and (max-width: 767.98px) {
+    .view-menu-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  .view-menu-icon { flex: none; opacity: 0.75; }
+  .view-menu-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px 6px 10px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid #e5e5e5;
+    font-size: 12px;
+    font-weight: 500;
+    color: #525252;
+  }
+  html.dark .view-menu-label { border-bottom-color: #2b2b2b; color: #a3a3a3; }
+  .view-menu-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 6px;
+    font-size: 14px;
+    text-align: left;
+    color: #262626;
+  }
+  html.dark .view-menu-item { color: #e5e5e5; }
+  .view-menu-item:hover,
+  .view-menu-item:focus-visible { background-color: #f2f2f2; outline: none; }
+  html.dark .view-menu-item:hover,
+  html.dark .view-menu-item:focus-visible { background-color: #262626; }
+  .view-menu-item[aria-checked="true"] { font-weight: 500; }
+  .view-menu-mark { display: inline-flex; width: 16px; height: 16px; flex: none; align-items: center; justify-content: center; color: #404040; }
+  html.dark .view-menu-mark { color: #d4d4d4; }
+  .status-count { margin-left: auto; font-size: 12px; color: #737373; font-variant-numeric: tabular-nums; }
+  html.dark .status-count { color: #a3a3a3; }
+</style>
 
 <script>
   // initI18n() wires the global `languagechange` event onto a
@@ -72,11 +175,26 @@ import Icon from './Icon.astro';
     'allSystems': { en: 'All Services', zh: '所有服务' },
     'updatedInRealTime': { en: 'Updated in real time. Click on a service to view information.', zh: '实时更新，点击服务查看详细信息。' },
     'filter': { en: 'Filter...', zh: '筛选...' },
-    'columns': { en: 'Sort', zh: '排序' },
+    'viewOptions': { en: 'View options', zh: '视图选项' },
+    'clear': { en: 'Clear', zh: '清除' },
     'sortBy': { en: 'Sort by', zh: '排序方式' },
+    'defaultOrder': { en: 'Default order', zh: '默认顺序' },
     'name': { en: 'Name', zh: '名称' },
     'time': { en: 'Uptime', zh: '运行时间' },
+    'location': { en: 'Location', zh: '位置' },
+    'cpu': { en: 'CPU', zh: 'CPU' },
+    'memory': { en: 'Memory', zh: '内存' },
+    'disk': { en: 'Disk', zh: '磁盘' },
+    'net': { en: 'Net', zh: '网络' },
     'os': { en: 'OS', zh: '系统' },
+    'status': { en: 'Status', zh: '状态' },
+    'layout': { en: 'Layout', zh: '布局' },
+    'layoutTable': { en: 'Table', zh: '表格' },
+    'layoutGrid': { en: 'Cards', zh: '卡片' },
+    'visibleFields': { en: 'Visible fields', zh: '显示的列' },
+    'statusAll': { en: 'All', zh: '全部' },
+    'statusOnline': { en: 'Online', zh: '在线' },
+    'statusOffline': { en: 'Offline', zh: '离线' },
   };
   
   function updateTranslations() {
@@ -96,9 +214,20 @@ import Icon from './Icon.astro';
       filterInput.placeholder = translations.filter[lang];
     }
     
-    // Update columns button
-    const columnsBtn = document.getElementById('columns-btn-text');
-    if (columnsBtn) columnsBtn.textContent = translations.columns[lang];
+    // View menu button and the filter's clear button
+    const columnsBtn = document.getElementById('columns-btn');
+    if (columnsBtn) {
+      columnsBtn.setAttribute('aria-label', translations.viewOptions[lang]);
+      columnsBtn.setAttribute('title', translations.viewOptions[lang]);
+    }
+    const clearBtn = document.getElementById('system-filter-clear');
+    if (clearBtn) {
+      clearBtn.setAttribute('aria-label', translations.clear[lang]);
+      clearBtn.setAttribute('title', translations.clear[lang]);
+    }
+    // ⌘K on a Mac, Ctrl K elsewhere
+    const shortcut = document.getElementById('system-filter-shortcut');
+    if (shortcut && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) shortcut.textContent = '⌘K';
     
     // Update sort by label
     const sortByLabel = document.getElementById('sort-by-label');
