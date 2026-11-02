@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -176,5 +178,26 @@ func TestTCPingCacheSkipsOversizedResponseWithoutPartialEntry(t *testing.T) {
 	}
 	if tcpingCacheBytes != 0 {
 		t.Fatalf("tcpingCacheBytes = %d, want 0", tcpingCacheBytes)
+	}
+}
+
+// The public navbar config carries the display switches the home page reads
+// before it renders (sticky_header for Pulse's table), never the secret.
+func TestPublicNavbarConfigCarriesDisplaySwitches(t *testing.T) {
+	store := newTestStore(t)
+	if err := store.SaveNavbarConfig(&NavbarConfig{Text: "Pulse", SharedSecret: "fleet-secret", StickyHeader: true, ShowGlass: true}); err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	handleGetNavbarConfig(store, rr, httptest.NewRequest(http.MethodGet, "/api/navbar/config", nil))
+	var got map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v (%s)", err, rr.Body.String())
+	}
+	if got["sticky_header"] != true || got["show_glass"] != true {
+		t.Fatalf("display switches missing: %s", rr.Body.String())
+	}
+	if s, _ := got["shared_secret"].(string); s != "" {
+		t.Fatal("the public config must not carry the shared secret")
 	}
 }

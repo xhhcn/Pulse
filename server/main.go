@@ -4914,14 +4914,15 @@ func handleGetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 	if !isAuthenticated(r) {
 		// Create a copy without the secret for public access
 		publicConfig := NavbarConfig{
-			Text:        config.Text,
-			Logo:        config.Logo,
-			CustomCSS:   config.CustomCSS,   // Public: used for page styling
-			CustomJS:    config.CustomJS,    // Public: used for page functionality
-			ShowTraffic: config.ShowTraffic, // Public: controls traffic display in detail section
-			ShowGlass:   config.ShowGlass,   // Public: controls glassmorphism effect
-			HideTags:    config.HideTags,    // Public: Hotaru-compatible display flag
-			HideCards:   config.HideCards,   // Public: Hotaru-compatible display flag
+			Text:         config.Text,
+			Logo:         config.Logo,
+			CustomCSS:    config.CustomCSS,    // Public: used for page styling
+			CustomJS:     config.CustomJS,     // Public: used for page functionality
+			ShowTraffic:  config.ShowTraffic,  // Public: controls traffic display in detail section
+			ShowGlass:    config.ShowGlass,    // Public: controls glassmorphism effect
+			StickyHeader: config.StickyHeader, // Public: Pulse's sticky table header
+			HideTags:     config.HideTags,     // Public: Hotaru-compatible display flag
+			HideCards:    config.HideCards,    // Public: Hotaru-compatible display flag
 			// SharedSecret is intentionally omitted for security
 		}
 		writeJSON(w, http.StatusOK, publicConfig)
