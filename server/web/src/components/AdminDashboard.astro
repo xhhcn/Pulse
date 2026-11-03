@@ -43,35 +43,42 @@ const customCodePlaceholder = [
         <h2 id="system-list-title" class="text-[1.4rem] sm:text-2xl font-semibold tracking-tight leading-none sm:leading-none text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="systemList">Service List</h2>
         <p class="mt-1.5 text-sm text-[#595959] dark:text-[#ababab]" data-translate="systemListDesc">Drag to reorder; the dashboard shows the services in this order.</p>
       </div>
-      <div class="flex items-center gap-1.5 sm:gap-2">
-        <button id="add-system-btn" class="rounded-lg p-1.5 sm:p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70" title="Add Service" aria-label="Add Service" data-title-en="Add Service" data-title-zh="添加服务">
-          <Icon name="plus" size={16} class="w-4 h-4 sm:w-5 sm:h-5" />
+      <!-- Beszel's toolbar: outline buttons with labels (its "Add System"),
+           the settings and the sign-out in one menu of labelled items, and
+           refresh as an icon. The items keep the buttons' ids (their
+           dialogs bind to them). -->
+      <div class="flex items-center gap-2 px-1 sm:px-0">
+        <button id="refresh-btn" type="button" class="toolbar-control toolbar-icon-btn inline-flex items-center justify-center" title="Refresh" aria-label="Refresh" data-title-en="Refresh" data-title-zh="刷新">
+          <Icon name="refresh-cw" size={16} class="w-4 h-4" />
         </button>
-        <button id="privacy-config-btn" class="rounded-lg p-1.5 sm:p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70" title="Privacy Settings" aria-label="Privacy Settings" data-title-en="Privacy Settings" data-title-zh="隐私设置">
-          <Icon name="shield" size={16} class="w-4 h-4 sm:w-5 sm:h-5" />
-        </button>
-        <button id="navbar-config-btn" class="rounded-lg p-1.5 sm:p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70" title="Customization Settings" aria-label="Customization Settings" data-title-en="Customization Settings" data-title-zh="自定义设置">
-          <Icon name="settings" size={16} class="w-4 h-4 sm:w-5 sm:h-5" />
-        </button>
-        <button id="tcping-config-btn" class="rounded-lg p-1.5 sm:p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70" title="TCPing Settings" aria-label="TCPing Settings" data-title-en="TCPing Settings" data-title-zh="TCPing 设置">
-          <Icon name="activity" size={16} class="w-4 h-4 sm:w-5 sm:h-5" />
-        </button>
-        <button id="refresh-btn" class="rounded-lg p-1.5 sm:p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70" title="Refresh" aria-label="Refresh" data-title-en="Refresh" data-title-zh="刷新">
-          <Icon name="refresh-cw" size={16} class="w-4 h-4 sm:w-5 sm:h-5" />
-        </button>
-        <button id="backup-btn" class="rounded-lg p-1.5 sm:p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 disabled:pointer-events-none disabled:opacity-60" title="Download Backup" aria-label="Download Backup" data-title-en="Download Backup" data-title-zh="下载备份">
-          <Icon name="download" size={16} class="w-4 h-4 sm:w-5 sm:h-5" />
-        </button>
-        <button id="change-password-btn" class="rounded-lg p-1.5 sm:p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70" title="Change Password" aria-label="Change Password" data-title-en="Change Password" data-title-zh="修改密码">
-          <Icon name="lock" size={16} class="w-4 h-4 sm:w-5 sm:h-5" />
-        </button>
-        <button id="logout-btn" class="rounded-lg p-1.5 sm:p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70" title="Logout" aria-label="Logout" data-title-en="Logout" data-title-zh="退出登录">
-          <Icon name="log-out" size={16} class="w-4 h-4 sm:w-5 sm:h-5" />
+        <div class="relative">
+          <button id="admin-menu-btn" type="button" class="toolbar-control toolbar-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="admin-menu">
+            <Icon name="settings" size={16} class="w-4 h-4" />
+            <span data-translate="settingsMenu">Settings</span>
+            <Icon name="chevron-down" size={16} class="w-4 h-4 -me-1 opacity-60" />
+          </button>
+          <div id="admin-menu" class="admin-menu hidden" role="menu" aria-labelledby="admin-menu-btn">
+            <button id="navbar-config-btn" type="button" role="menuitem" class="admin-menu-item"><Icon name="settings" size={16} class="w-4 h-4" /><span data-translate="customizationSettings">Customization Settings</span></button>
+            <button id="tcping-config-btn" type="button" role="menuitem" class="admin-menu-item"><Icon name="activity" size={16} class="w-4 h-4" /><span data-translate="tcpingSettings">TCPing Settings</span></button>
+            <button id="privacy-config-btn" type="button" role="menuitem" class="admin-menu-item"><Icon name="shield" size={16} class="w-4 h-4" /><span data-translate="privacySettings">Privacy Settings</span></button>
+            <div class="admin-menu-sep" role="separator"></div>
+            <button id="backup-btn" type="button" role="menuitem" class="admin-menu-item"><Icon name="download" size={16} class="w-4 h-4" /><span data-translate="downloadBackup">Download Backup</span></button>
+            <button id="change-password-btn" type="button" role="menuitem" class="admin-menu-item"><Icon name="lock" size={16} class="w-4 h-4" /><span data-translate="changePassword">Change Password</span></button>
+            <div class="admin-menu-sep" role="separator"></div>
+            <button id="logout-btn" type="button" role="menuitem" class="admin-menu-item"><Icon name="log-out" size={16} class="w-4 h-4" /><span data-translate="logout">Log Out</span></button>
+          </div>
+        </div>
+        <button id="add-system-btn" type="button" class="toolbar-control toolbar-btn">
+          <Icon name="plus" size={16} class="w-4 h-4 -ms-1" />
+          <span data-translate="addSystem">Add Service</span>
         </button>
       </div>
     </div>
 
-    <div id="systems-list" class="space-y-3 max-h-[600px] overflow-y-auto scrollbar-hide" data-draggable-list>
+    <!-- One list in a box, as the dashboard's table and Beszel's: rows with
+         hairline dividers, scrolling with the page. -->
+    <p id="reorder-status" class="sr-only" role="status" aria-live="polite"></p>
+    <div id="systems-list" class="glass-inner rounded-[10.8px] border border-[#dadada]/60 dark:border-[#2c2c2c]/60 divide-y divide-[#dadada]/60 dark:divide-[#2c2c2c]/60" data-draggable-list>
       <div class="flex items-center justify-center py-12">
         <div id="loading-systems-text" class="text-sm text-[#595959] dark:text-[#ababab]" data-translate="loadingSystems">Loading systems...</div>
       </div>
@@ -80,7 +87,7 @@ const customCodePlaceholder = [
 
   <!-- Add System Modal -->
   <div id="add-system-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="add-new-system-title" data-modal>
-    <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="add-new-system-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="addNewSystem">Add New System</h2>
         <button id="close-add-modal-btn" class="rounded-lg p-1 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
@@ -90,7 +97,7 @@ const customCodePlaceholder = [
 
       <form id="add-system-form" class="space-y-4">
         <div>
-          <label for="add-system-name-input" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]"><span data-translate="systemName">System Name</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <label for="add-system-name-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="systemName">System Name</span> <span class="text-red-500 dark:text-red-400">*</span></label>
           <input id="add-system-name-input"
             type="text"
             name="name"
@@ -98,9 +105,9 @@ const customCodePlaceholder = [
             placeholder=""
             data-placeholder-en="My Server"
             data-placeholder-zh="我的服务器"
-            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
+            class="w-full toolbar-control px-3 text-sm"
           />
-          <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="displayNameForThisSystem">Display name for this system</p>
+          <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="displayNameForThisSystem">Display name for this service</p>
         </div>
 
         <div class="rounded-lg bg-[#282828] dark:bg-[#282828] bg-[#f5f5f5] p-3">
@@ -115,13 +122,13 @@ const customCodePlaceholder = [
           <button
             type="button"
             id="cancel-add-btn"
-            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="flex-1 toolbar-control toolbar-btn"
           >
             <span data-translate="cancel">Cancel</span>
           </button>
           <button
             type="submit"
-            class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
+            class="flex-1 h-10 rounded-lg bg-[#171717] px-4 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
           >
             <span data-translate="addSystem">Add System</span>
           </button>
@@ -132,7 +139,7 @@ const customCodePlaceholder = [
 
   <!-- Edit System Modal -->
   <div id="edit-system-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="edit-system-title" data-modal>
-    <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="edit-system-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="editSystem">Edit System</h2>
         <button id="close-edit-modal-btn" class="rounded-lg p-1 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
@@ -144,7 +151,7 @@ const customCodePlaceholder = [
         <input type="hidden" name="original-id" value="" />
         
         <div>
-          <label for="edit-system-name-input" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]"><span data-translate="systemName">System Name</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <label for="edit-system-name-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="systemName">System Name</span> <span class="text-red-500 dark:text-red-400">*</span></label>
           <input id="edit-system-name-input"
             type="text"
             name="name"
@@ -152,42 +159,43 @@ const customCodePlaceholder = [
             placeholder=""
             data-placeholder-en="My Server"
             data-placeholder-zh="我的服务器"
-            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
+            class="w-full toolbar-control px-3 text-sm"
           />
         </div>
 
         <div>
-          <label for="edit-tags-input" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]"><span data-translate="tags">Tags</span> <span class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="tagsCommaSeparated">(comma-separated)</span></label>
+          <label for="edit-tags-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="tags">Tags</span> <span class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="tagsCommaSeparated">(comma-separated)</span></label>
           <input
             type="text"
             name="tags"
             id="edit-tags-input"
             placeholder="Python, traffic:in, speed:in, spr:VIP, spy:staff, spb:pro"
-            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
+            class="w-full toolbar-control px-3 text-sm"
           />
           <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="tagsHint">Enter tags separated by commas (e.g., Python, traffic:in, speed:in, spr:VIP, spy:staff, spb:pro)</p>
         </div>
 
-        <!-- Per-system visibility toggles (admin-only; agents never touch them) -->
-        <div class="space-y-2">
-          <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2">
+        <!-- Per-system visibility toggles (admin-only; agents never touch them),
+             in one list as the settings dialog's display switches -->
+        <div class="rounded-[10.8px] border border-[#dadada]/60 dark:border-[#2c2c2c]/60 divide-y divide-[#dadada]/60 dark:divide-[#2c2c2c]/60">
+          <div class="flex items-center justify-between gap-3 px-3 py-2.5">
             <div class="flex-1 pr-3">
-              <label for="edit-show-on-home" class="block text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4]" data-translate="showOnHomeLabel">首页展示该服务</label>
+              <label for="edit-show-on-home" class="block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="showOnHomeLabel">首页展示该服务</label>
               <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showOnHomeDesc">关闭后首页不再展示该服务，API 与管理页仍然可见。</p>
             </div>
-            <label class="relative inline-flex items-center cursor-pointer ml-3">
+            <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="edit-show-on-home" name="show_on_home" class="sr-only peer" checked>
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
             </label>
           </div>
-          <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2">
+          <div class="flex items-center justify-between gap-3 px-3 py-2.5">
             <div class="flex-1 pr-3">
-              <label for="edit-show-tcping" class="block text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4]" data-translate="showTcpingLabel">展示 TCPing</label>
+              <label for="edit-show-tcping" class="block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="showTcpingLabel">展示 TCPing</label>
               <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showTcpingDesc">关闭后首页不再展示该服务的 TCPing 图表。</p>
             </div>
-            <label class="relative inline-flex items-center cursor-pointer ml-3">
+            <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="edit-show-tcping" name="show_tcping" class="sr-only peer" checked>
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
             </label>
           </div>
         </div>
@@ -204,13 +212,13 @@ const customCodePlaceholder = [
           <button
             type="button"
             id="cancel-edit-btn"
-            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="flex-1 toolbar-control toolbar-btn"
           >
             <span data-translate="cancel">Cancel</span>
           </button>
           <button
             type="submit"
-            class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
+            class="flex-1 h-10 rounded-lg bg-[#171717] px-4 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
           >
             <span data-translate="updateSystem">Update Service</span>
           </button>
@@ -221,7 +229,7 @@ const customCodePlaceholder = [
 
   <!-- Delete Confirmation Modal -->
   <div id="delete-confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="delete-system-title" data-modal>
-    <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4">
         <div class="mb-3 flex items-center gap-3">
           <div class="rounded-full bg-red-500/10 p-2">
@@ -234,21 +242,22 @@ const customCodePlaceholder = [
         <p class="text-sm text-[#595959] dark:text-[#ababab]">
           <span data-translate="areYouSureYouWantToDelete">Are you sure you want to delete</span> <span class="font-medium text-[#1d1d20] dark:text-[#d4d4d4]" id="delete-system-name"></span>?
         </p>
-        <p class="mt-3 text-xs text-red-500/90 dark:text-red-400/80">
-          ⚠️ <span data-translate="thisActionCannotBeUndone">This action cannot be undone.</span>
+        <p class="mt-3 flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+          <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+          <span data-translate="thisActionCannotBeUndone">This action cannot be undone.</span>
         </p>
       </div>
 
       <div class="flex gap-3">
         <button
           id="cancel-delete-btn"
-          class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+          class="flex-1 toolbar-control toolbar-btn"
         >
           <span data-translate="cancel">Cancel</span>
         </button>
         <button
           id="confirm-delete-btn"
-          class="flex-1 rounded-lg bg-[#dc2626] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#b91c1c]"
+          class="flex-1 h-10 rounded-lg bg-[#dc2626] px-4 text-sm font-medium text-white transition-colors hover:bg-[#b91c1c]"
         >
           <span data-translate="delete">Delete</span>
         </button>
@@ -271,7 +280,7 @@ const customCodePlaceholder = [
       <div class="dialog-scroll flex-1 overflow-y-auto overflow-x-hidden p-4 pt-4 sm:p-6 sm:pt-4 pb-0 sm:pb-0">
         <form id="tcping-config-form" class="space-y-4">
           <div>
-            <label for="tcping-interval" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]">
+            <label for="tcping-interval" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]">
               <span data-translate="pollingInterval">Polling Interval</span> <span class="text-red-500 dark:text-red-400">*</span>
             </label>
             <div class="flex items-center gap-2">
@@ -282,26 +291,30 @@ const customCodePlaceholder = [
                 min="1"
                 max="86400"
                 required
-                class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                class="w-32 toolbar-control px-3 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <span class="text-sm text-[#595959] dark:text-[#ababab] shrink-0" data-translate="seconds">seconds</span>
             </div>
-            <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="pollingIntervalDesc">How often to send tcping requests to clients</p>
+            <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="pollingIntervalDesc">How often the clients run their TCPing probes</p>
           </div>
 
           <div>
-            <label class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]">
+            <p class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]">
               <span data-translate="tcpingTargets">TCPing Targets</span> <span class="text-red-500 dark:text-red-400">*</span>
-            </label>
-            <div id="tcping-targets-container" class="space-y-2 sm:space-y-2">
+            </p>
+            <div class="mb-1.5 hidden sm:grid grid-cols-[7rem_minmax(0,1fr)_2.5rem] gap-2 text-xs font-medium text-[#595959] dark:text-[#ababab]" aria-hidden="true">
+              <span data-translate="targetNameLabel">Name</span><span data-translate="targetAddressLabel">Address:port</span>
+            </div>
+            <div id="tcping-targets-container" class="space-y-2">
               <!-- Targets will be dynamically added here -->
             </div>
             <button
               type="button"
               id="add-target-btn"
-              class="mt-2 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-1.5 text-xs font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+              class="mt-2 toolbar-control toolbar-btn"
             >
-              <span data-translate="addTarget">+ Add Target</span>
+              <svg class="-ms-1 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>
+              <span data-translate="addTarget">Add Target</span>
             </button>
             <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="targetFormatDesc">Format: name and address (e.g., Google DNS, 8.8.8.8:53)</p>
           </div>
@@ -316,13 +329,13 @@ const customCodePlaceholder = [
             <button
               type="button"
               id="cancel-tcping-config-btn"
-              class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+              class="flex-1 toolbar-control toolbar-btn"
             >
               <span data-translate="cancel">Cancel</span>
             </button>
             <button
               type="submit"
-              class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
+              class="flex-1 h-10 rounded-lg bg-[#171717] px-4 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
             >
               <span data-translate="save">Save</span>
             </button>
@@ -334,7 +347,7 @@ const customCodePlaceholder = [
 
   <!-- Change Password Modal -->
   <div id="change-password-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="change-password-title" data-modal>
-    <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="change-password-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="changePassword">Change Password</h2>
         <button id="close-change-password-modal-btn" class="rounded-lg p-1 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
@@ -344,7 +357,7 @@ const customCodePlaceholder = [
 
       <form id="change-password-form" class="space-y-4">
         <div>
-          <label for="current-password-input" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]"><span data-translate="currentPassword">Current Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <label for="current-password-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="currentPassword">Current Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
           <input id="current-password-input"
             type="password"
             name="currentPassword"
@@ -352,12 +365,12 @@ const customCodePlaceholder = [
             placeholder=""
             data-placeholder-en="Enter current password"
             data-placeholder-zh="输入当前密码"
-            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
+            class="w-full toolbar-control px-3 text-sm"
           />
         </div>
 
         <div>
-          <label for="new-password-input" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]"><span data-translate="newPassword">New Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <label for="new-password-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="newPassword">New Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
           <input id="new-password-input"
             type="password"
             name="newPassword"
@@ -365,13 +378,13 @@ const customCodePlaceholder = [
             placeholder=""
             data-placeholder-en="Enter new password (min 6 characters)"
             data-placeholder-zh="输入新密码（至少 6 个字符）"
-            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
+            class="w-full toolbar-control px-3 text-sm"
           />
           <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="passwordMinLength">Password must be at least 6 characters long</p>
         </div>
 
         <div>
-          <label for="confirm-new-password-input" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]"><span data-translate="confirmNewPassword">Confirm New Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <label for="confirm-new-password-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="confirmNewPassword">Confirm New Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
           <input id="confirm-new-password-input"
             type="password"
             name="confirmNewPassword"
@@ -379,7 +392,7 @@ const customCodePlaceholder = [
             placeholder=""
             data-placeholder-en="Confirm new password"
             data-placeholder-zh="确认新密码"
-            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
+            class="w-full toolbar-control px-3 text-sm"
           />
         </div>
 
@@ -389,13 +402,13 @@ const customCodePlaceholder = [
           <button
             type="button"
             id="cancel-change-password-btn"
-            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="flex-1 toolbar-control toolbar-btn"
           >
             <span data-translate="cancel">Cancel</span>
           </button>
           <button
             type="submit"
-            class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
+            class="flex-1 h-10 rounded-lg bg-[#171717] px-4 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
           >
             <span data-translate="changePassword">Change Password</span>
           </button>
@@ -406,7 +419,7 @@ const customCodePlaceholder = [
 
   <!-- Navbar Config Modal -->
   <div id="navbar-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="navbar-config-title" data-modal>
-    <div class="mx-4 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 sm:p-7 pb-0 sm:pb-0 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 pb-0 shadow-lg" data-modal-content>
       <div class="mb-5 flex items-center justify-between">
         <h2 id="navbar-config-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="customizationSettings">Customization Settings</h2>
         <button id="close-navbar-config-modal-btn" class="rounded-lg p-1 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
@@ -415,114 +428,123 @@ const customCodePlaceholder = [
       </div>
 
       <form id="navbar-config-form" class="space-y-5">
-        <div>
-          <label for="navbar-text-input" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]"><span data-translate="navbarText">Navbar Text</span></label>
-          <input
-            type="text"
-            name="text"
-            id="navbar-text-input"
-            placeholder="Pulse"
-            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
-          />
-          <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="navbarTextHint">Custom text displayed in navbar (leave empty for default: Pulse)</p>
-        </div>
-
-        <div>
-          <label for="navbar-logo-input" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]"><span data-translate="navbarLogo">Navbar Logo</span></label>
-          <input
-            type="text"
-            name="logo"
-            id="navbar-logo-input"
-            placeholder="https://example.com/logo.svg or SVG code"
-            data-placeholder-en="https://example.com/logo.svg or SVG code"
-            data-placeholder-zh="https://example.com/logo.svg 或 SVG 代码"
-            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
-          />
-          <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="navbarLogoHint">Logo URL or SVG code (leave empty for default logo)</p>
-        </div>
-
-        <div>
-          <label for="navbar-shared-secret-input" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]"><span data-translate="sharedSecret">Shared Secret</span></label>
-          <div class="flex items-center gap-2">
+        <!-- Four parts, as Beszel's settings pages: a heading each, a
+             hairline between them; the display switches in one list. -->
+        <section class="space-y-4" aria-labelledby="config-brand-heading">
+          <h3 id="config-brand-heading" class="text-sm font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionBrand">Brand</h3>
+          <div>
+            <label for="navbar-text-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="navbarText">Navbar Text</span></label>
             <input
               type="text"
-              id="navbar-shared-secret-input"
-              readonly
-              class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#282828] dark:bg-[#282828] bg-[#f5f5f5] px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] font-mono"
+              name="text"
+              id="navbar-text-input"
+              placeholder="Pulse"
+              class="w-full toolbar-control px-3 text-sm"
             />
-            <button
-              type="button"
-              id="regenerate-shared-secret-btn"
-              class="rounded-lg border border-[#d4d4d4] dark:border-[#404040] bg-transparent px-3 py-2 text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f0f0f0] dark:hover:bg-[#262626]"
-            >
-              <span data-translate="regenerate">Regenerate</span>
-            </button>
+            <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="navbarTextHint">Custom text displayed in navbar (leave empty for default: Pulse)</p>
           </div>
-          <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="sharedSecretHint">This secret is shared by all clients for authentication</p>
-        </div>
 
-        <!-- Show Traffic Toggle -->
-        <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
-          <div class="flex-1">
-            <label for="show-traffic-toggle" class="block text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] mb-1" data-translate="showTrafficLabel">Show Traffic Info</label>
-            <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showTrafficDesc">Display real-time and total traffic in the detail dropdown section</p>
+          <div>
+            <label for="navbar-logo-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="navbarLogo">Navbar Logo</span></label>
+            <input
+              type="text"
+              name="logo"
+              id="navbar-logo-input"
+              placeholder="https://example.com/logo.svg or SVG code"
+              data-placeholder-en="https://example.com/logo.svg or SVG code"
+              data-placeholder-zh="https://example.com/logo.svg 或 SVG 代码"
+              class="w-full toolbar-control px-3 text-sm"
+            />
+            <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="navbarLogoHint">Logo URL or SVG code (leave empty for default logo)</p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-3">
-            <input type="checkbox" id="show-traffic-toggle" name="show_traffic" class="sr-only peer">
-            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
-          </label>
-        </div>
+        </section>
 
-        <!-- Glassmorphism Toggle -->
-        <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
-          <div class="flex-1">
-            <label for="show-glass-toggle" class="block text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] mb-1" data-translate="showGlassLabel">Glassmorphism Effect</label>
-            <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showGlassDesc">Enable frosted glass visual effect on navbar and cards</p>
+        <section class="space-y-3 pt-5 border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60" aria-labelledby="config-display-heading">
+          <h3 id="config-display-heading" class="text-sm font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionDisplay">Display</h3>
+          <div class="rounded-[10.8px] border border-[#dadada]/60 dark:border-[#2c2c2c]/60 divide-y divide-[#dadada]/60 dark:divide-[#2c2c2c]/60">
+          <div class="flex items-center justify-between gap-3 p-4">
+            <div class="flex-1">
+              <label for="show-traffic-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="showTrafficLabel">Show Traffic Info</label>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showTrafficDesc">Display real-time and total traffic in the detail dropdown section</p>
+            </div>
+            <label class="relative inline-flex shrink-0 items-center cursor-pointer">
+              <input type="checkbox" id="show-traffic-toggle" name="show_traffic" class="sr-only peer">
+              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+            </label>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-3">
-            <input type="checkbox" id="show-glass-toggle" name="show_glass" class="sr-only peer">
-            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
-          </label>
-        </div>
-
-        <!-- Sticky table header toggle (off by default) -->
-        <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
-          <div class="flex-1">
-            <label for="sticky-header-toggle" class="block text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] mb-1" data-translate="stickyHeaderLabel">Sticky Table Header</label>
-            <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="stickyHeaderDesc">Keep the column names at the top of the window while a long list scrolls</p>
+          <div class="flex items-center justify-between gap-3 p-4">
+            <div class="flex-1">
+              <label for="show-glass-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="showGlassLabel">Glassmorphism Effect</label>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showGlassDesc">Enable frosted glass visual effect on navbar and cards</p>
+            </div>
+            <label class="relative inline-flex shrink-0 items-center cursor-pointer">
+              <input type="checkbox" id="show-glass-toggle" name="show_glass" class="sr-only peer">
+              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+            </label>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-3">
-            <input type="checkbox" id="sticky-header-toggle" name="sticky_header" class="sr-only peer">
-            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
-          </label>
-        </div>
-
-        <!-- Card layout at every width (off by default: the table, on phones its compact rows) -->
-        <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
-          <div class="flex-1">
-            <label for="card-layout-toggle" class="block text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] mb-1" data-translate="cardLayoutLabel">Card Layout</label>
-            <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="cardLayoutDesc">Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu</p>
+          <div class="flex items-center justify-between gap-3 p-4">
+            <div class="flex-1">
+              <label for="sticky-header-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="stickyHeaderLabel">Sticky Table Header</label>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="stickyHeaderDesc">Keep the column names at the top of the window while a long list scrolls</p>
+            </div>
+            <label class="relative inline-flex shrink-0 items-center cursor-pointer">
+              <input type="checkbox" id="sticky-header-toggle" name="sticky_header" class="sr-only peer">
+              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+            </label>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-3">
-            <input type="checkbox" id="card-layout-toggle" name="card_layout" class="sr-only peer">
-            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
-          </label>
-        </div>
+          <div class="flex items-center justify-between gap-3 p-4">
+            <div class="flex-1">
+              <label for="card-layout-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="cardLayoutLabel">Card Layout</label>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="cardLayoutDesc">Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu</p>
+            </div>
+            <label class="relative inline-flex shrink-0 items-center cursor-pointer">
+              <input type="checkbox" id="card-layout-toggle" name="card_layout" class="sr-only peer">
+              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+            </label>
+          </div>
+          </div>
+        </section>
 
-        <!-- Custom CSS & JavaScript -->
-        <div>
-          <label for="navbar-custom-code-input" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]"><span data-translate="customCode">Custom CSS & JavaScript</span></label>
-          <textarea
-            id="navbar-custom-code-input"
-            rows="10"
-            placeholder={customCodePlaceholder}
-            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa] font-mono"
-          ></textarea>
-          <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="customCodeHint">Custom CSS and JavaScript will be applied to all pages. Use &lt;style&gt; for CSS or &lt;script&gt; for JS</p>
-          <p class="mt-2 text-xs text-[#595959] dark:text-[#ababab]">
-            <strong data-translate="customCodeSecurityWarning">⚠️ Security Warning: Custom code is publicly accessible. Do NOT include sensitive information (API keys, passwords, tokens).</strong>
-          </p>
-        </div>
+        <section class="space-y-4 pt-5 border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60" aria-labelledby="config-auth-heading">
+          <h3 id="config-auth-heading" class="text-sm font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionClientAuth">Client Authentication</h3>
+          <div>
+            <label for="navbar-shared-secret-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="sharedSecret">Shared Secret</span></label>
+            <div class="flex items-center gap-2">
+              <input
+                type="text"
+                id="navbar-shared-secret-input"
+                readonly
+                class="toolbar-control flex-1 min-w-0 px-3 text-sm font-mono"
+              />
+              <button
+                type="button"
+                id="regenerate-shared-secret-btn"
+                class="toolbar-control toolbar-btn shrink-0"
+              >
+                <span data-translate="regenerate">Regenerate</span>
+              </button>
+            </div>
+            <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="sharedSecretHint">This secret is shared by all clients for authentication</p>
+          </div>
+        </section>
+
+        <section class="space-y-4 pt-5 border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60" aria-labelledby="config-code-heading">
+          <h3 id="config-code-heading" class="text-sm font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionCustomCode">Custom Code</h3>
+          <div>
+            <label for="navbar-custom-code-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="customCode">Custom CSS & JavaScript</span></label>
+            <textarea
+              id="navbar-custom-code-input"
+              rows="10"
+              placeholder={customCodePlaceholder}
+              class="w-full toolbar-control px-3 text-sm font-mono"
+            ></textarea>
+            <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="customCodeHint">Custom CSS and JavaScript will be applied to all pages. Use &lt;style&gt; for CSS or &lt;script&gt; for JS</p>
+            <p class="mt-2 flex items-start gap-1.5 text-xs font-medium text-[#595959] dark:text-[#ababab]">
+              <svg class="mt-px h-3.5 w-3.5 shrink-0 text-[#d97706] dark:text-[#f59e0b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              <span data-translate="customCodeSecurityWarning">Security warning: custom code is public. Don't include sensitive information (API keys, passwords, tokens).</span>
+            </p>
+          </div>
+        </section>
 
         <div id="navbar-config-message" class="hidden text-sm"></div>
 
@@ -530,17 +552,17 @@ const customCodePlaceholder = [
              The bar carries the dialog's bottom padding (the dialog has none):
              a sticky box keeps clear of its scroll container's padding, which
              left a strip of the scrolled text showing below the buttons. -->
-        <div class="modal-actions sticky bottom-0 z-10 -mx-6 sm:-mx-7 flex gap-3 border-t border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white px-6 sm:px-7 pt-4 pb-6 sm:pb-7">
+        <div class="modal-actions sticky bottom-0 z-10 -mx-6 flex gap-3 border-t border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white px-6 pt-4 pb-6">
           <button
             type="button"
             id="cancel-navbar-config-btn"
-            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="flex-1 toolbar-control toolbar-btn"
           >
             <span data-translate="cancel">Cancel</span>
           </button>
           <button
             type="submit"
-            class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
+            class="flex-1 h-10 rounded-lg bg-[#171717] px-4 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
           >
             <span data-translate="save">Save</span>
           </button>
@@ -551,7 +573,7 @@ const customCodePlaceholder = [
 
   <!-- Regenerate Secret Confirmation Modal -->
   <div id="regenerate-secret-confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="regenerate-secret-title" data-modal>
-    <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4">
         <h2 id="regenerate-secret-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="confirmRegenerateTitle">Regenerate Shared Secret?</h2>
       </div>
@@ -572,14 +594,14 @@ const customCodePlaceholder = [
         <button
           type="button"
           id="cancel-regenerate-secret-btn"
-          class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+          class="flex-1 toolbar-control toolbar-btn"
         >
           <span data-translate="cancel">Cancel</span>
         </button>
         <button
           type="button"
           id="confirm-regenerate-secret-btn"
-          class="flex-1 rounded-lg bg-[#dc2626] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#b91c1c]"
+          class="flex-1 h-10 rounded-lg bg-[#dc2626] px-4 text-sm font-medium text-white transition-colors hover:bg-[#b91c1c]"
         >
           <span data-translate="regenerate">Regenerate</span>
         </button>
@@ -589,7 +611,7 @@ const customCodePlaceholder = [
 
   <!-- Privacy Config Modal -->
   <div id="privacy-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="privacy-config-title" data-modal>
-    <div class="mx-4 w-full max-w-md rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="privacy-config-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="privacySettings">Privacy Settings</h2>
         <button id="close-privacy-config-modal-btn" class="rounded-lg p-1 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
@@ -606,14 +628,14 @@ const customCodePlaceholder = [
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
             <input type="checkbox" id="privacy-enabled" name="enabled" class="sr-only peer">
-            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
           </label>
         </div>
 
         <!-- Temporary Share Section -->
         <div id="share-section" class="space-y-3 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
           <div>
-            <label class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]" data-translate="temporaryShare">Temporary Share</label>
+            <label class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="temporaryShare">Temporary Share</label>
             <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="temporaryShareDesc">Generate a temporary share link that allows access without login. Login page will appear before admin page for share links.</p>
           </div>
 
@@ -638,7 +660,7 @@ const customCodePlaceholder = [
 
           <!-- Generate New Share Link -->
           <div>
-            <label for="token-expires-hours" class="mb-1 block text-sm font-medium text-[#595959] dark:text-[#ababab]" data-translate="expirationHours">Expiration (Hours)</label>
+            <label for="token-expires-hours" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="expirationHours">Expiration (Hours)</label>
             <input
               type="number"
               id="token-expires-hours"
@@ -646,7 +668,7 @@ const customCodePlaceholder = [
               min="1"
               max="720"
               value="1"
-              class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              class="w-full toolbar-control px-3 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
             <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="expirationHoursHint">Number of hours until the share link expires (1-720, max 30 days)</p>
           </div>
@@ -654,13 +676,13 @@ const customCodePlaceholder = [
           <button
             type="button"
             id="generate-share-link-btn"
-            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="w-full toolbar-control toolbar-btn"
             data-translate="generateShareLink">Generate Share Link</button>
           
           <button
             type="button"
             id="revoke-share-link-btn"
-            class="w-full rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="w-full toolbar-control toolbar-btn"
             data-translate="revokeShareLink">Revoke Share Link</button>
         </div>
 
@@ -670,13 +692,13 @@ const customCodePlaceholder = [
           <button
             type="button"
             id="cancel-privacy-config-btn"
-            class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-4 py-2 text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:border-[#525252] dark:hover:border-[#525252] hover:border-[#737373] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+            class="flex-1 toolbar-control toolbar-btn"
           >
             <span data-translate="cancel">Cancel</span>
           </button>
           <button
             type="submit"
-            class="flex-1 rounded-lg bg-[#171717] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
+            class="flex-1 h-10 rounded-lg bg-[#171717] px-4 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
           >
             <span data-translate="save">Save</span>
           </button>
@@ -694,28 +716,28 @@ const customCodePlaceholder = [
 ></div>
 
 <style>
-  /* Hide scrollbar for systems-list but keep scrolling functionality */
-  .scrollbar-hide {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+  /* The services list: rows inside one box (the box's corners round the
+     first and last row's hover tint). A row is moved by its handle —
+     dragged with a mouse, a finger or a pen, or with ↑ / ↓ when the handle
+     has focus; the row being dragged lifts above the others. */
+  #systems-list > :global(.draggable-item:first-child) { border-top-left-radius: 10.8px; border-top-right-radius: 10.8px; }
+  #systems-list > :global(.draggable-item:last-child) { border-bottom-left-radius: 10.8px; border-bottom-right-radius: 10.8px; }
+  #systems-list :global(.drag-handle) {
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 28px; height: 36px; margin-left: -6px; border-radius: 8.8px;
+    color: #595959; cursor: grab; touch-action: none;
   }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;  /* Chrome, Safari and Opera */
+  #systems-list :global(.drag-handle:hover) { color: #1d1d20; background-color: rgba(243, 239, 236, 0.7); }
+  :global(html.dark) #systems-list :global(.drag-handle) { color: #ababab; }
+  :global(html.dark) #systems-list :global(.drag-handle:hover) { color: #f5f5f5; background-color: rgba(40, 40, 40, 0.5); }
+  #systems-list :global(.draggable-item.is-dragging) {
+    position: relative; z-index: 5; cursor: grabbing;
+    background-color: #ffffff; border-radius: 10.8px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
   }
-  /* With the scrollbar hidden, nothing showed that the 600 px list goes
-     on: an edge with more services beyond it fades out
-     (updateListEdgeFades sets the attributes). */
-  #systems-list {
-    --fade-top: 0px;
-    --fade-bottom: 0px;
-  }
-  #systems-list[data-more-above] { --fade-top: 1.5rem; }
-  #systems-list[data-more-below] { --fade-bottom: 3rem; }
-  #systems-list[data-more-above],
-  #systems-list[data-more-below] {
-    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
-    mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
-  }
+  :global(html.dark) #systems-list :global(.draggable-item.is-dragging) { background-color: #222222; box-shadow: 0 10px 24px -6px rgba(0, 0, 0, 0.6); }
+  #systems-list :global(.draggable-item.is-dragging .drag-handle) { cursor: grabbing; }
+  :global(body.is-reordering) { cursor: grabbing; user-select: none; -webkit-user-select: none; }
 
   /* Rows from 640 to 1023 px. The address column was as wide as each row's
      longest IPv6 address, so the columns started at a different x on every
@@ -1154,11 +1176,6 @@ const customCodePlaceholder = [
   // SSE connection for real-time updates
   let eventSource = null;
 
-  // Drag and drop state
-  let draggedElement = null;
-  let draggedIndex = null;
-  let autoScrollInterval = null;
-
   // Cache current data for comparison (incremental updates)
   let currentData = new Map(); // key: system ID, value: system data
 
@@ -1431,13 +1448,13 @@ const customCodePlaceholder = [
 
   function renderSystemItem(system, index) {
     return `
-        <div class="draggable-item rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c] border-[#d4d4d4]/50 dark:bg-transparent bg-white p-4 cursor-move transition duration-150 hover:shadow-md hover:bg-[#f0f0f0]/40 dark:hover:bg-[#292929]/20 min-h-[60px] relative" draggable="true" data-system-id="${escapeHtmlAttr(system.id || '')}" data-index="${index}">
+        <div class="draggable-item relative px-3 sm:px-4 py-3 hover:bg-[#f5f5f5] dark:hover:bg-[#222]/50" data-system-id="${escapeHtmlAttr(system.id || '')}" data-index="${index}">
             <!-- CPU brand logo behind the row. From 1024 px the name and address columns are fixed (lg:w / lg:min-w below; the address column fits a full IPv6 address), so the address and traffic columns line up on every row. Only from 1280 px is there free space left of the buttons for the logo; on narrower rows the traffic column would run into it, so it is not shown there. -->
             ${(() => {
               const cpuBrandIcon = getCPUBrandIcon(system.cpu_model);
               if (cpuBrandIcon) {
                 return `
-                <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden xl:flex xl:left-auto xl:right-[11.5rem] xl:translate-x-0 items-center justify-center pointer-events-none opacity-20" style="z-index: 0;">
+                <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden xl:flex xl:left-auto xl:right-[14rem] xl:translate-x-0 items-center justify-center pointer-events-none opacity-20" style="z-index: 0;">
                   <span class="cpu-brand-icon block leading-none" data-icon="${escapeHtmlAttr(cpuBrandIcon)}"></span>
                 </div>
                 `;
@@ -1445,31 +1462,10 @@ const customCodePlaceholder = [
               return '';
             })()}
             
-            <div class="flex items-center gap-3 min-h-[28px] relative" style="z-index: 1;">
-            <!-- Edit Button -->
-            <button 
-              class="edit-btn shrink-0 rounded-lg p-2 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 self-center"
-              data-system='${escapeHtmlAttr(JSON.stringify(system))}'
-              data-edit-key='${escapeHtmlAttr(
-                String(system.id || '') + '|' +
-                String(system.name || '') + '|' +
-                String(system.secret || '') + '|' +
-                (Array.isArray(system.tags) ? system.tags.slice().sort().join(',') : '') + '|' +
-                String(system.ipv4 || '') + '|' +
-                String(system.ipv6 || '') + '|' +
-                String(system.os || '') + '|' +
-                String(system.cpu_model || '') + '|' +
-                String(system.virtualization_type || '') + '|' +
-                (system.hide_on_home === true ? '1' : '0') + '|' +
-                (system.hide_tcping === true ? '1' : '0')
-              )}'
-              title="${adminT('editSystem')}" data-title-en="Edit Service" data-title-zh="编辑服务"
-              aria-label="${adminT('editSystem')}"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
+            <div class="flex items-center gap-2 sm:gap-3 min-h-[28px] relative" style="z-index: 1;">
+            <!-- Handle: drag it, or focus it and press ↑ / ↓ (setupDragAndDrop) -->
+            <button type="button" class="drag-handle" aria-label="${adminT('dragHandle')}" data-title-en="Drag or press ↑ ↓ to reorder" data-title-zh="拖动或按 ↑ ↓ 调整顺序" title="${adminT('dragHandle')}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             </button>
 
             <!-- System Info -->
@@ -1549,6 +1545,32 @@ const customCodePlaceholder = [
               </div>
               ` : ''}
             </div>
+
+            <!-- Edit Button -->
+            <button 
+              class="edit-btn shrink-0 rounded-lg p-2 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 self-center"
+              data-system='${escapeHtmlAttr(JSON.stringify(system))}'
+              data-edit-key='${escapeHtmlAttr(
+                String(system.id || '') + '|' +
+                String(system.name || '') + '|' +
+                String(system.secret || '') + '|' +
+                (Array.isArray(system.tags) ? system.tags.slice().sort().join(',') : '') + '|' +
+                String(system.ipv4 || '') + '|' +
+                String(system.ipv6 || '') + '|' +
+                String(system.os || '') + '|' +
+                String(system.cpu_model || '') + '|' +
+                String(system.virtualization_type || '') + '|' +
+                (system.hide_on_home === true ? '1' : '0') + '|' +
+                (system.hide_tcping === true ? '1' : '0')
+              )}'
+              title="${adminT('editSystem')}" data-title-en="Edit Service" data-title-zh="编辑服务"
+              aria-label="${adminT('editSystem')}"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
 
             <!-- Copy Linux Install Command Button (mingcute:linux-fill) -->
             <button 
@@ -1719,7 +1741,7 @@ const customCodePlaceholder = [
             } else {
               // Create new icon container in the center (absolute positioning, background)
               const iconContainer = document.createElement('div');
-              iconContainer.className = 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden xl:flex xl:left-auto xl:right-[11.5rem] xl:translate-x-0 items-center justify-center pointer-events-none opacity-20';
+              iconContainer.className = 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden xl:flex xl:left-auto xl:right-[14rem] xl:translate-x-0 items-center justify-center pointer-events-none opacity-20';
               iconContainer.style.zIndex = '0';
               const iconSpan = document.createElement('span');
               iconSpan.className = 'cpu-brand-icon block leading-none';
@@ -2198,29 +2220,11 @@ const customCodePlaceholder = [
   // below can decide whether to fall back to a one-shot GET.
   let initialSystemsRendered = false;
 
-  // Edge fades of the services list (styles above): which ends have more
-  // services beyond them. Re-checked on scroll, resize and when items are
-  // added or removed; value updates inside items do not change the height.
-  function updateListEdgeFades() {
-    const list = document.getElementById('systems-list');
-    if (!list) return;
-    list.toggleAttribute('data-more-above', list.scrollTop > 1);
-    list.toggleAttribute('data-more-below', list.scrollTop + list.clientHeight < list.scrollHeight - 1);
-  }
-  {
-    const list = document.getElementById('systems-list');
-    let queued = false;
-    const queue = () => {
-      if (queued) return;
-      queued = true;
-      requestAnimationFrame(() => { queued = false; updateListEdgeFades(); });
-    };
-    if (list) {
-      list.addEventListener('scroll', queue, { passive: true });
-      new MutationObserver(queue).observe(list, { childList: true });
-      window.addEventListener('resize', queue);
-    }
-  }
+  // The page footer shows with the list's first answer (data, an empty list
+  // or an error), in place below it, instead of being pushed down the screen
+  // by the rows; in case no answer comes, after 5 s.
+  const markListReady = () => requestAnimationFrame(() => document.documentElement.classList.add('pulse-list-ready'));
+  setTimeout(markListReady, 5000);
 
   // Smart render with incremental updates
   async function renderSystems(data) {
@@ -2228,6 +2232,7 @@ const customCodePlaceholder = [
     if (!container) return;
 
     initialSystemsRendered = true;
+    markListReady();
 
     if (!Array.isArray(data) || data.length === 0) {
       container.innerHTML = `
@@ -2700,6 +2705,7 @@ const customCodePlaceholder = [
       // The list DOM is replaced below; forget the diff cache too, otherwise
       // the next SSE frame appends rows underneath this banner forever.
       currentData = new Map();
+      markListReady();
       container.innerHTML = `
         <div class="text-center py-12">
           <p class="text-sm text-red-500 dark:text-red-400">${adminT('loadServicesError')}</p>
@@ -2715,6 +2721,8 @@ const customCodePlaceholder = [
   // dropped does not jump back and forth. The reload at the end renders the
   // confirmed order, or reverts the optimistic move if the save failed.
   let orderSaveInFlight = false;
+  // A drag (or a run of ↑ / ↓) in progress: live snapshots wait too.
+  let reorderActive = false;
   async function saveOrderToBackend(order) {
     orderSaveInFlight = true;
     try {
@@ -2770,407 +2778,191 @@ const customCodePlaceholder = [
     }, 3000);
   }
 
-  // Auto-scroll during drag
-  let lastMouseY = 0;
-  let lastMouseX = 0;
-  let containerCache = null; // Cache container rect to reduce recalculations
-  // Idempotency flag for the single `document.addEventListener('dragover', ...)`
-  // mounted by setupDragAndDrop — there's only one document, and that
-  // function gets re-invoked whenever new servers register, so without
-  // this guard every new client would stack another global listener +
-  // closure on the page for the lifetime of the tab.
-  let globalDragoverBound = false;
-
-  function startAutoScroll(e, container) {
-    lastMouseY = e.clientY;
-    lastMouseX = e.clientX;
-    containerCache = null; // Reset cache
-    
-    if (autoScrollInterval) return; // Already scrolling
-    
-    const scrollThreshold = 100; // pixels from edge
-    const maxScrollSpeed = 20; // pixels per frame
-    const minScrollSpeed = 2; // minimum scroll speed
-    const fastScrollThreshold = 50; // pixels for fast scroll
-    const fastScrollMultiplier = 1.8; // multiplier for fast scroll
-    
-    autoScrollInterval = setInterval(() => {
-      if (!draggedElement) {
-        stopAutoScroll();
-        return;
-      }
-      
-      const mouseY = lastMouseY;
-      const mouseX = lastMouseX;
-      
-      // Cache container rect (only recalculate if needed)
-      if (!containerCache) {
-        containerCache = container.getBoundingClientRect();
-      }
-      const containerTop = containerCache.top;
-      const containerBottom = containerCache.bottom;
-      const containerLeft = containerCache.left;
-      const containerRight = containerCache.right;
-      
-      // Get container scroll info
-      const containerScrollTop = container.scrollTop || 0;
-      const containerScrollHeight = container.scrollHeight || 0;
-      const containerClientHeight = container.clientHeight || 0;
-      const containerCanScrollUp = containerScrollTop > 0;
-      const containerCanScrollDown = containerScrollTop < (containerScrollHeight - containerClientHeight - 1);
-      
-      // Get window scroll info
-      const windowScrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      const windowScrollHeight = document.documentElement.scrollHeight;
-      const windowClientHeight = window.innerHeight;
-      const windowCanScrollUp = windowScrollTop > 0;
-      const windowCanScrollDown = windowScrollTop < (windowScrollHeight - windowClientHeight - 1);
-      
-      // Check if mouse is within container bounds (for optimization)
-      const isInContainer = mouseX >= containerLeft && mouseX <= containerRight &&
-                            mouseY >= containerTop && mouseY <= containerBottom;
-      
-      // Calculate scroll amount
-      let scrollAmount = 0;
-      let shouldScrollContainer = false;
-      let shouldScrollWindow = false;
-      
-      // Priority 1: Check container edges (if mouse is in container or near it)
-      if (isInContainer || (mouseY >= containerTop - scrollThreshold && mouseY <= containerBottom + scrollThreshold)) {
-        // Near top edge of container
-        if (mouseY < containerTop + scrollThreshold) {
-          const distance = Math.max(0, mouseY - containerTop);
-          const speed = Math.max(minScrollSpeed, (scrollThreshold - distance) / 5);
-          scrollAmount = -Math.min(maxScrollSpeed, speed);
-          
-          // Accelerate when very close
-          if (mouseY < containerTop + fastScrollThreshold) {
-            scrollAmount *= fastScrollMultiplier;
-          }
-          
-          // Determine scroll target
-          if (containerCanScrollUp) {
-            shouldScrollContainer = true;
-          } else if (windowCanScrollUp) {
-            shouldScrollWindow = true;
-          }
+  // The settings menu (Beszel's dropdown): opened by its button (↓, Enter or
+  // Space from the keyboard focus the first item), closed by Escape, Tab, a
+  // click elsewhere or picking an item. Picking one first hands the focus
+  // back to the button, so the dialog it opens returns the focus there.
+  {
+    const menuBtn = document.getElementById('admin-menu-btn');
+    const menu = document.getElementById('admin-menu');
+    if (menuBtn && menu) {
+      const items = () => [...menu.querySelectorAll('[role="menuitem"]:not(:disabled)')];
+      const isOpen = () => !menu.classList.contains('hidden');
+      const open = (focusFirst) => {
+        menu.classList.remove('hidden');
+        menuBtn.setAttribute('aria-expanded', 'true');
+        if (focusFirst) items()[0]?.focus();
+      };
+      const close = (refocus) => {
+        if (!isOpen()) return;
+        menu.classList.add('hidden');
+        menuBtn.setAttribute('aria-expanded', 'false');
+        if (refocus) menuBtn.focus();
+      };
+      // A click from the keyboard (Enter / Space) has detail 0.
+      menuBtn.addEventListener('click', (e) => (isOpen() ? close(false) : open(e.detail === 0)));
+      menuBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' && !isOpen()) { e.preventDefault(); open(true); }
+      });
+      menu.addEventListener('keydown', (e) => {
+        const list = items();
+        const i = list.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') { e.preventDefault(); list[(i + 1) % list.length]?.focus(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); list[(i - 1 + list.length) % list.length]?.focus(); }
+        else if (e.key === 'Home') { e.preventDefault(); list[0]?.focus(); }
+        else if (e.key === 'End') { e.preventDefault(); list[list.length - 1]?.focus(); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
+        else if (e.key === 'Tab') close(false);
+      });
+      menu.addEventListener('click', (e) => {
+        if (e.target.closest('[role="menuitem"]')) close(true);
+      }, true);
+      document.addEventListener('pointerdown', (e) => {
+        if (isOpen() && !menu.contains(e.target) && !menuBtn.contains(e.target)) close(false);
+      });
+      // Escape with the focus anywhere else (the button keeps it after a
+      // click) closes the menu too, before the dialogs' own Escape.
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isOpen() && !menu.contains(document.activeElement)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          close(true);
         }
-        // Near bottom edge of container
-        else if (mouseY > containerBottom - scrollThreshold) {
-          const distance = Math.max(0, containerBottom - mouseY);
-          const speed = Math.max(minScrollSpeed, (scrollThreshold - distance) / 5);
-          scrollAmount = Math.min(maxScrollSpeed, speed);
-          
-          // Determine scroll target
-          if (containerCanScrollDown) {
-            shouldScrollContainer = true;
-          } else if (windowCanScrollDown) {
-            shouldScrollWindow = true;
-          }
-        }
-      }
-      
-      // Priority 2: Check viewport edges (for window-level scrolling)
-      if (scrollAmount === 0) {
-        // Near top of viewport
-        if (mouseY < scrollThreshold && windowCanScrollUp) {
-          const distance = Math.max(0, mouseY);
-          const speed = Math.max(minScrollSpeed, (scrollThreshold - distance) / 5);
-          scrollAmount = -Math.min(maxScrollSpeed, speed);
-          shouldScrollWindow = true;
-          
-          // Accelerate when very close to top
-          if (mouseY < fastScrollThreshold) {
-            scrollAmount *= fastScrollMultiplier;
-          }
-        }
-        // Near bottom of viewport
-        else if (mouseY > windowClientHeight - scrollThreshold && windowCanScrollDown) {
-          const distance = Math.max(0, windowClientHeight - mouseY);
-          const speed = Math.max(minScrollSpeed, (scrollThreshold - distance) / 5);
-          scrollAmount = Math.min(maxScrollSpeed, speed);
-          shouldScrollWindow = true;
-        }
-      }
-      
-      // Apply scroll
-      if (scrollAmount !== 0) {
-        if (shouldScrollContainer && container) {
-          container.scrollBy({ top: scrollAmount, behavior: 'auto' });
-          // Invalidate cache after scroll
-          containerCache = null;
-        }
-        if (shouldScrollWindow) {
-          window.scrollBy({ top: scrollAmount, behavior: 'auto' });
-        }
-      }
-    }, 16); // ~60fps
-  }
-  
-  function stopAutoScroll() {
-    if (autoScrollInterval) {
-      clearInterval(autoScrollInterval);
-      autoScrollInterval = null;
-    }
-    containerCache = null; // Clear cache
-  }
-  
-  function updateAutoScrollMouseY(e) {
-    lastMouseY = e.clientY;
-    lastMouseX = e.clientX;
-    // Invalidate cache when mouse moves significantly
-    if (containerCache) {
-      const deltaY = Math.abs(e.clientY - (containerCache.top + containerCache.bottom) / 2);
-      if (deltaY > 50) {
-        containerCache = null;
-      }
+      }, true);
     }
   }
 
-  // Drag and drop functionality
-  //
-  // This runs again on every render that adds a row. Without the guards
-  // below a re-run would:
-  //   * mount another `document` dragover listener each time, which is an
-  //     unbounded leak on a long-lived admin tab as clients join over time;
-  //   * stack additional dragstart/dragend/dragover/dragleave/drop
-  //     listeners onto every pre-existing item element, since the items are
-  //     NOT replaced on an incremental update (only their inner buttons are,
-  //     by setupSystemEventHandlers).
-  //
-  // The dataset flag (`dndBound`) per item, `dndContainerBound` on the
-  // container and the module-level boolean (`globalDragoverBound`) make
-  // every addEventListener call below a no-op on second-or-later invocation.
+  // Reordering by the rows' handles: drag one with a mouse, a finger or a
+  // pen (pointer events; the handle has touch-action: none, so on a phone it
+  // moves the row instead of scrolling the page), or focus it and press
+  // ↑ / ↓. The row moves in the list at once and the page scrolls when the
+  // pointer nears its top or bottom edge; the order is saved when the drag
+  // ends, or 700 ms after the last key press, and live updates wait until
+  // then (renderSystemsSerialized). Escape (or a cancelled touch) puts the
+  // row back. A screen reader hears the new place (#reorder-status).
+  const listOrder = (container) => [...container.querySelectorAll(':scope > .draggable-item')].map((row) => row.dataset.systemId);
+  function announceRowPosition(row) {
+    const status = document.getElementById('reorder-status');
+    if (!status || !row.parentNode) return;
+    const rows = [...row.parentNode.querySelectorAll(':scope > .draggable-item')];
+    status.textContent = adminT('movedTo').replace('{n}', String(rows.indexOf(row) + 1)).replace('{total}', String(rows.length));
+  }
+  function releaseHeldRender() {
+    reorderActive = false;
+    if (pendingSystemsData && !orderSaveInFlight) {
+      const held = pendingSystemsData;
+      pendingSystemsData = null;
+      renderSystemsSerialized(held);
+    }
+  }
   function setupDragAndDrop(container) {
-    if (!container) return;
-
-    const items = container.querySelectorAll('.draggable-item');
-    
-    items.forEach(item => {
-      if (item.dataset.dndBound === '1') {
-        // Already wired up on a previous call. Skip — re-binding
-        // would duplicate listeners and the closures would pin
-        // stale captured references.
-        return;
-      }
-      item.dataset.dndBound = '1';
-
-      // Prevent dragging when clicking on interactive elements
-      const interactiveElements = item.querySelectorAll('button, input, a');
-      interactiveElements.forEach(el => {
-        el.addEventListener('mousedown', (e) => {
-          e.stopPropagation();
-        });
-        el.addEventListener('dragstart', (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-        });
-      });
-
-      // Add drag handle indicator
-      item.style.cursor = 'move';
-      item.setAttribute('title', 'Drag to reorder');
-
-      item.addEventListener('dragstart', (e) => {
-        // Don't start drag if clicking on interactive elements
-        if (e.target.closest('button, input, a')) {
-          e.preventDefault();
-          return;
-        }
-        draggedElement = item;
-        // Get actual DOM index instead of data-index (which may be stale)
-        const allItems = Array.from(container.querySelectorAll('.draggable-item'));
-        draggedIndex = allItems.findIndex(i => i === item);
-        if (draggedIndex === -1) {
-          // Fallback to data-index if not found
-          draggedIndex = parseInt(item.dataset.index) || 0;
-        }
-        
-        // Create a custom drag image that maintains the original size
-        // This prevents the row from appearing smaller during drag
-        const dragImage = item.cloneNode(true);
-        dragImage.style.position = 'absolute';
-        dragImage.style.top = '-9999px';
-        dragImage.style.left = '-9999px';
-        dragImage.style.width = item.offsetWidth + 'px';
-        dragImage.style.opacity = '0.8';
-        document.body.appendChild(dragImage);
-        
-        // Set custom drag image to maintain original size
-        const rect = item.getBoundingClientRect();
-        e.dataTransfer.setDragImage(dragImage, e.clientX - rect.left, e.clientY - rect.top);
-        
-        // Clean up the temporary drag image after a short delay
-        setTimeout(() => {
-          if (dragImage.parentNode) {
-            dragImage.parentNode.removeChild(dragImage);
-          }
-        }, 0);
-        
-        item.classList.add('opacity-50');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/html', item.outerHTML);
-        
-        // Start auto-scroll monitoring
-        // We'll start it on dragover to get mouse position
-      });
-
-      item.addEventListener('dragend', () => {
-        // Stop auto-scroll
-        stopAutoScroll();
-        
-        if (draggedElement) {
-          draggedElement.classList.remove('opacity-50');
-        }
-        draggedElement = null;
-        draggedIndex = null;
-        // Remove all drag-over classes
-        container.querySelectorAll('.draggable-item').forEach(i => i.classList.remove('border-blue-400', 'bg-blue-500/10', 'border-t-2', 'border-b-2'));
-      });
-
-      item.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        
-        // Update mouse position and start auto-scroll if needed
-        if (draggedElement) {
-          updateAutoScrollMouseY(e);
-          if (!autoScrollInterval) {
-            startAutoScroll(e, container);
-          }
-        }
-        
-        if (draggedElement && draggedElement !== item) {
-          const currentIndex = parseInt(item.dataset.index);
-          const rect = item.getBoundingClientRect();
-          const midpoint = rect.top + rect.height / 2;
-          
-          // Remove all drag-over classes
-          container.querySelectorAll('.draggable-item').forEach(i => i.classList.remove('border-blue-400', 'bg-blue-500/10', 'border-t-2', 'border-b-2'));
-          
-          if (e.clientY < midpoint) {
-            // Insert above
-            item.classList.add('border-t-2', 'border-blue-400');
-          } else {
-            // Insert below
-            item.classList.add('border-b-2', 'border-blue-400');
-          }
-        }
-      });
-
-      item.addEventListener('dragleave', (e) => {
-        item.classList.remove('border-blue-400', 'bg-blue-500/10', 'border-t-2', 'border-b-2');
-        
-        // Update mouse position for auto-scroll
-        if (draggedElement) {
-          updateAutoScrollMouseY(e);
-        }
-      });
-
-      item.addEventListener('drop', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        if (!draggedElement || draggedElement === item) return;
-
-        // Get all items in current DOM order (not from data-index, but actual DOM position)
-        const allItems = Array.from(container.querySelectorAll('.draggable-item'));
-        
-        // Find actual indices in DOM
-        const draggedId = draggedElement.dataset.systemId;
-        const dropId = item.dataset.systemId;
-        
-        const draggedDomIndex = allItems.findIndex(i => i.dataset.systemId === draggedId);
-        const dropDomIndex = allItems.findIndex(i => i.dataset.systemId === dropId);
-        
-        if (draggedDomIndex === -1 || dropDomIndex === -1) {
-          return;
-        }
-
-        const rect = item.getBoundingClientRect();
-        const midpoint = rect.top + rect.height / 2;
-        const insertAbove = e.clientY < midpoint;
-
-        // Get all system IDs in current DOM order
-        const currentOrder = allItems.map(i => i.dataset.systemId);
-
-        // Remove dragged item from current order
-        const newOrder = currentOrder.filter(id => id !== draggedId);
-
-        // Calculate final insert position based on actual DOM indices
-        let finalInsertIndex;
-        
-        if (draggedDomIndex < dropDomIndex) {
-          // Dragging downward
-          // After removal, target position shifts left by 1
-          finalInsertIndex = insertAbove ? dropDomIndex - 1 : dropDomIndex;
-        } else if (draggedDomIndex > dropDomIndex) {
-          // Dragging upward
-          // Target position stays the same after removal
-          finalInsertIndex = insertAbove ? dropDomIndex : dropDomIndex + 1;
+    if (!container || container.dataset.reorderBound === '1') return;
+    container.dataset.reorderBound = '1';
+    let drag = null;
+    let scrollFrame = 0;
+    let keyboardSaveTimer = null;
+    const rowById = (id) => container.querySelector(`:scope > .draggable-item[data-system-id="${cssEscape(String(id))}"]`);
+    // Keep the row under the pointer: past half of a neighbour's height it
+    // takes the neighbour's place.
+    const follow = (clientY) => {
+      if (!drag) return;
+      const { row } = drag;
+      const y = clientY + window.scrollY;
+      let dy = y - drag.startY;
+      for (;;) {
+        const next = row.nextElementSibling;
+        const prev = row.previousElementSibling;
+        if (dy > 0 && next && next.classList.contains('draggable-item') && dy > next.offsetHeight / 2) {
+          container.insertBefore(next, row);
+          drag.startY += next.offsetHeight;
+        } else if (dy < 0 && prev && prev.classList.contains('draggable-item') && -dy > prev.offsetHeight / 2) {
+          container.insertBefore(row, prev);
+          drag.startY -= prev.offsetHeight;
         } else {
-          // Same position, no change needed
-          return;
+          break;
         }
-
-        // Ensure index is within bounds
-        finalInsertIndex = Math.max(0, Math.min(finalInsertIndex, newOrder.length));
-        newOrder.splice(finalInsertIndex, 0, draggedId);
-
-        // Move the row now so the drop feels instant; the reload after the
-        // save confirms (or reverts) the position.
-        const parent = draggedElement.parentNode;
-        if (parent && item.parentNode === parent) {
-          parent.insertBefore(draggedElement, insertAbove ? item : item.nextSibling);
-        }
-
-        // Save new order to backend (this will also reload after save)
-        saveOrderToBackend(newOrder);
-      });
+        dy = y - drag.startY;
+      }
+      row.style.transform = `translateY(${dy}px)`;
+    };
+    const autoScroll = () => {
+      scrollFrame = 0;
+      if (!drag) return;
+      const edge = 64;
+      const y = drag.clientY;
+      const step = y < edge ? -Math.ceil((edge - y) / 4)
+        : y > window.innerHeight - edge ? Math.ceil((y - (window.innerHeight - edge)) / 4) : 0;
+      if (step) {
+        window.scrollBy(0, step);
+        follow(y);
+      }
+      scrollFrame = requestAnimationFrame(autoScroll);
+    };
+    const end = (cancel) => {
+      if (!drag) return;
+      const { row, before } = drag;
+      drag = null;
+      cancelAnimationFrame(scrollFrame);
+      row.style.transform = '';
+      row.classList.remove('is-dragging');
+      document.body.classList.remove('is-reordering');
+      if (cancel) before.forEach((id) => { const r = rowById(id); if (r) container.appendChild(r); });
+      const order = listOrder(container);
+      if (!cancel && order.join('\n') !== before.join('\n')) {
+        announceRowPosition(row);
+        reorderActive = false;
+        saveOrderToBackend(order);
+      } else {
+        releaseHeldRender();
+      }
+    };
+    container.addEventListener('pointerdown', (e) => {
+      const handle = e.target.closest('.drag-handle');
+      if (!handle || drag || keyboardSaveTimer || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      const row = handle.closest('.draggable-item');
+      if (!row) return;
+      e.preventDefault();
+      try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+      drag = { row, pointerId: e.pointerId, startY: e.clientY + window.scrollY, clientY: e.clientY, before: listOrder(container) };
+      reorderActive = true;
+      row.classList.add('is-dragging');
+      document.body.classList.add('is-reordering');
+      scrollFrame = requestAnimationFrame(autoScroll);
     });
-    
-    // Add global dragover listener on container for auto-scroll.
-    // This ensures scrolling works even when mouse is between items.
-    //
-    // Bind ONCE per container. setupDragAndDrop runs again when new
-    // servers register, but the container element is stable, so a
-    // second `addEventListener('dragover', …)` here would just stack
-    // duplicate listeners (and their closures, capturing
-    // draggedElement / autoScrollInterval / containerCache).
-    if (container.dataset.dndContainerBound !== '1') {
-      container.dataset.dndContainerBound = '1';
-      container.addEventListener('dragover', (e) => {
-        if (draggedElement) {
-          updateAutoScrollMouseY(e);
-          if (!autoScrollInterval) {
-            startAutoScroll(e, container);
-          }
-        }
-      });
-    }
-
-    // Also listen on document for when dragging outside container.
-    // This one MUST be guarded by a module-level flag — there's only
-    // one `document`, and stacking handlers here was the dominant
-    // memory leak on the admin page.
-    if (!globalDragoverBound) {
-      globalDragoverBound = true;
-      document.addEventListener('dragover', (e) => {
-        if (draggedElement) {
-          updateAutoScrollMouseY(e);
-          if (!autoScrollInterval) {
-            // The container we pass to startAutoScroll comes from
-            // the captured closure of the LAST setupDragAndDrop
-            // call. Since the document handler is mounted only
-            // once, reach for the live element on each tick so
-            // remounted containers (e.g. after a full re-render)
-            // still drive auto-scroll correctly.
-            const live = document.getElementById('systems-list');
-            if (live) startAutoScroll(e, live);
-          }
-        }
-      });
-    }
+    container.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      drag.clientY = e.clientY;
+      follow(e.clientY);
+    });
+    container.addEventListener('pointerup', (e) => { if (drag && e.pointerId === drag.pointerId) end(false); });
+    container.addEventListener('pointercancel', (e) => { if (drag && e.pointerId === drag.pointerId) end(true); });
+    container.addEventListener('lostpointercapture', (e) => { if (drag && e.pointerId === drag.pointerId) end(false); });
+    container.addEventListener('keydown', (e) => {
+      const handle = e.target.closest('.drag-handle');
+      if (!handle) return;
+      if (e.key === 'Escape' && drag) { e.preventDefault(); e.stopPropagation(); end(true); return; }
+      if ((e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || drag) return;
+      e.preventDefault();
+      const row = handle.closest('.draggable-item');
+      const sibling = e.key === 'ArrowUp' ? row.previousElementSibling : row.nextElementSibling;
+      if (!sibling || !sibling.classList.contains('draggable-item')) return;
+      if (e.key === 'ArrowUp') container.insertBefore(row, sibling);
+      else container.insertBefore(sibling, row);
+      handle.focus();
+      reorderActive = true;
+      announceRowPosition(row);
+      clearTimeout(keyboardSaveTimer);
+      const id = row.dataset.systemId;
+      keyboardSaveTimer = setTimeout(() => {
+        keyboardSaveTimer = null;
+        reorderActive = false;
+        // The save's reload re-appends the rows, which drops the focus:
+        // give it back to the moved row's handle.
+        saveOrderToBackend(listOrder(container)).then(() => {
+          if (document.activeElement === document.body || !document.activeElement) rowById(id)?.querySelector('.drag-handle')?.focus();
+        });
+      }, 700);
+    });
   }
 
   // Add system
@@ -3618,37 +3410,40 @@ const customCodePlaceholder = [
   const targetsContainer = document.getElementById('tcping-targets-container');
   const addTargetBtn = document.getElementById('add-target-btn');
 
-  // Function to create a target input row
+  // Function to create a target input row: name, address and remove in
+  // one row under the column labels (from 640 px); on a phone the address
+  // takes a line of its own under the name.
   function createTargetInput(target = { name: '', address: '' }) {
     const div = document.createElement('div');
-    // Use flex-col on mobile, flex-row on larger screens
-    div.className = 'target-row flex flex-col sm:flex-row gap-2 p-3 sm:p-2 rounded-lg border border-[#404040]/30 dark:border-[#404040]/30 border-[#d4d4d4]/30 bg-[#1a1a1a] dark:bg-[#1a1a1a] bg-[#fafafa]';
+    div.className = 'target-row grid grid-cols-[minmax(0,1fr)_2.5rem] sm:grid-cols-[7rem_minmax(0,1fr)_2.5rem] gap-2';
     div.innerHTML = `
       <input
         type="text"
-        class="target-name-input w-full sm:flex-1 min-w-0 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
+        class="target-name-input toolbar-control w-full min-w-0 px-3 text-sm"
         placeholder="${adminTranslations.targetName[adminLang()]}"
         data-placeholder-en="Target Name"
         data-placeholder-zh="目标名称"
+        aria-label="${adminTranslations.targetNameLabel[adminLang()]}"
         value="${escapeHtmlAttr(target.name || '')}"
       />
       <input
         type="text"
-        class="target-address-input w-full sm:flex-1 min-w-0 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#1d1d20] dark:text-[#d4d4d4] placeholder-[#737373] dark:placeholder-[#737373] placeholder-[#a3a3a3] outline-none transition-colors focus:border-[#525252] dark:focus:border-[#525252] focus:border-[#737373] focus:bg-[#282828] dark:focus:bg-[#282828] focus:bg-[#fafafa]"
+        class="target-address-input toolbar-control order-3 col-span-2 sm:order-none sm:col-span-1 w-full min-w-0 px-3 text-sm"
         placeholder="8.8.8.8:53"
+        aria-label="${adminTranslations.targetAddressLabel[adminLang()]}"
         value="${escapeHtmlAttr(target.address || '')}"
       />
       <button
         type="button"
-        class="remove-target-btn w-full sm:w-auto flex items-center justify-center gap-2 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-sm text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#f5f5f5] shrink-0"
+        class="remove-target-btn toolbar-control toolbar-icon-btn order-2 sm:order-none inline-flex items-center justify-center text-[#595959] dark:text-[#ababab]"
         title="${adminTranslations.removeTarget[adminLang()]}"
+        aria-label="${adminTranslations.removeTarget[adminLang()]}"
         data-title-en="Remove target"
         data-title-zh="移除目标"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="shrink-0" aria-hidden="true">
           <path d="M18 6L6 18M6 6l12 12"/>
         </svg>
-        <span class="sm:hidden" data-translate="remove">${adminTranslations.remove[adminLang()]}</span>
       </button>
     `;
     
@@ -4583,7 +4378,7 @@ const customCodePlaceholder = [
   let pendingSystemsData = null;
   async function renderSystemsSerialized(data) {
     if (!Array.isArray(data)) return;
-    if (orderSaveInFlight) {
+    if (orderSaveInFlight || reorderActive) {
       pendingSystemsData = data; // dropped when the save's reload renders
       return;
     }
@@ -4605,7 +4400,7 @@ const customCodePlaceholder = [
         // An order save started while we were rendering: hold the snapshot
         // (the save's own reload renders the confirmed order) instead of
         // painting the pre-drag order behind the admin's back.
-        if (current && orderSaveInFlight) { pendingSystemsData = current; break; }
+        if (current && (orderSaveInFlight || reorderActive)) { pendingSystemsData = current; break; }
       }
     } finally {
       isRenderSystemsRunning = false;
@@ -4851,24 +4646,31 @@ const customCodePlaceholder = [
       eventSource.close();
       eventSource = null;
     }
-    
-    // Clean up dragged element state
-    draggedElement = null;
-    draggedIndex = null;
   });
 
   // Translation functionality for AdminDashboard
   const adminTranslations = {
     'systemList': { en: 'Service List', zh: '服务列表' },
-    'systemListDesc': { en: 'Drag to reorder; the dashboard shows the services in this order.', zh: '拖动可调整顺序，首页按此顺序显示服务。' },
+    'systemListDesc': { en: 'Drag a row by its handle to reorder; the dashboard shows the services in this order.', zh: '拖动左侧把手调整顺序，首页按此顺序显示服务。' },
     'addSystem': { en: 'Add Service', zh: '添加服务' },
+    'settingsMenu': { en: 'Settings', zh: '设置' },
+    'downloadBackup': { en: 'Download Backup', zh: '下载备份' },
+    'logout': { en: 'Log Out', zh: '退出登录' },
+    'dragHandle': { en: 'Drag or press ↑ ↓ to reorder', zh: '拖动或按 ↑ ↓ 调整顺序' },
+    'movedTo': { en: 'Moved to position {n} of {total}', zh: '已移到第 {n} 位，共 {total} 个' },
+    'sectionBrand': { en: 'Brand', zh: '品牌' },
+    'sectionDisplay': { en: 'Display', zh: '显示' },
+    'sectionClientAuth': { en: 'Client Authentication', zh: '客户端认证' },
+    'sectionCustomCode': { en: 'Custom Code', zh: '自定义代码' },
+    'targetNameLabel': { en: 'Name', zh: '名称' },
+    'targetAddressLabel': { en: 'Address:port', zh: '地址:端口' },
     'refresh': { en: 'Refresh', zh: '刷新' },
     'tcpingSettings': { en: 'TCPing Settings', zh: 'TCPing 设置' },
     'pollingInterval': { en: 'Polling Interval', zh: '轮询间隔' },
     'seconds': { en: 'seconds', zh: '秒' },
-    'pollingIntervalDesc': { en: 'How often to send tcping requests to clients', zh: '向客户端发送 tcping 请求的频率' },
+    'pollingIntervalDesc': { en: 'How often the clients run their TCPing probes', zh: '客户端发起 TCPing 探测的间隔' },
     'tcpingTargets': { en: 'TCPing Targets', zh: 'TCPing 目标' },
-    'addTarget': { en: '+ Add Target', zh: '+ 添加目标' },
+    'addTarget': { en: 'Add Target', zh: '添加目标' },
     'targetFormatDesc': { en: 'Format: name and address (e.g., Google DNS, 8.8.8.8:53)', zh: '格式：名称和地址（例如：Google DNS, 8.8.8.8:53）' },
     'targetName': { en: 'Target Name', zh: '目标名称' },
     'save': { en: 'Save', zh: '保存' },
@@ -4879,7 +4681,7 @@ const customCodePlaceholder = [
     'trafficOut': { en: 'Out:', zh: '出站:' },
     'deleteSystem': { en: 'Delete Service', zh: '删除服务' },
     'systemName': { en: 'Service Name', zh: '服务名称' },
-    'displayNameForThisSystem': { en: 'Display name for this system', zh: '此服务的显示名称' },
+    'displayNameForThisSystem': { en: 'Display name for this service', zh: '此服务的显示名称' },
     'myServer': { en: 'My Server', zh: '我的服务器' },
     'tags': { en: 'Tags', zh: '标签' },
     'tagsCommaSeparated': { en: '(comma-separated)', zh: '（逗号分隔）' },
@@ -4902,7 +4704,7 @@ const customCodePlaceholder = [
     'remove': { en: 'Remove', zh: '移除' },
     'removeTarget': { en: 'Remove target', zh: '移除目标' },
     'note': { en: 'Note:', zh: '注意:' },
-    'noteContent': { en: 'IP addresses, location, OS and metrics are automatically updated by the agent and cannot be edited manually.', zh: 'IP 地址、位置、操作系统和指标由代理自动更新，无法手动编辑。' },
+    'noteContent': { en: 'IP addresses, location, OS and metrics are updated automatically by the client and cannot be edited here.', zh: 'IP 地址、位置、操作系统和指标由客户端自动更新，无法在此编辑。' },
     'changePassword': { en: 'Change Password', zh: '修改密码' },
     'currentPassword': { en: 'Current Password', zh: '当前密码' },
     'newPassword': { en: 'New Password', zh: '新密码' },
@@ -4965,7 +4767,7 @@ const customCodePlaceholder = [
     'copy': { en: 'Copy', zh: '复制' },
     'customCode': { en: 'Custom CSS & JavaScript', zh: '自定义 CSS 和 JavaScript' },
     'customCodeHint': { en: 'Custom CSS and JavaScript will be applied to all pages. Use <style> for CSS or <script> for JS', zh: '自定义 CSS 和 JavaScript 将应用于所有页面。使用 <style> 标签添加 CSS，使用 <script> 标签添加 JS' },
-    'customCodeSecurityWarning': { en: '⚠️ Security Warning: Do NOT include sensitive information (API keys, passwords, tokens).', zh: '⚠️ 安全提示：请勿包含敏感信息（API 密钥、密码、令牌等）' },
+    'customCodeSecurityWarning': { en: "Security warning: custom code is public. Don't include sensitive information (API keys, passwords, tokens).", zh: '安全提示：自定义代码对所有访客公开，请勿包含敏感信息（API 密钥、密码、令牌等）。' },
     'showTrafficLabel': { en: 'Show Traffic Info', zh: '显示流量信息' },
     'showTrafficDesc': { en: 'Display real-time and total traffic in the detail dropdown section', zh: '在下拉详情部分显示实时流量和总流量' },
     'showGlassLabel': { en: 'Glassmorphism Effect', zh: '毛玻璃特效' },

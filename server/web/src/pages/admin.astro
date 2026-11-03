@@ -29,13 +29,19 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <meta name="twitter:title" content="Admin · Pulse Monitor" />
     <meta name="twitter:description" content="Pulse Monitor admin console." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <!-- Home-screen icon and install manifest, as Beszel ships (iOS ignores an SVG touch icon). -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
     <link rel="mask-icon" href="/favicon.svg" color="#24292f" />
     <title>Admin · Pulse Monitor</title>
     <!-- View Transitions API styling for smooth theme switching. Global: the
          theme-switching rule has to reach the components' elements too (a
          scoped one only covered this page's own markup). -->
     <style is:global>
+      /* The footer waits invisible until the services list's first answer
+         (the rows would push it down the screen; AdminDashboard). */
+      html:not(.pulse-list-ready) #page-footer { visibility: hidden; }
+
       /* View Transitions API support for smooth cross-fade */
       ::view-transition-old(root),
       ::view-transition-new(root) {
@@ -295,7 +301,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
       <main class="flex-1 px-4 pt-4 pb-2 sm:pb-4">
         <AdminDashboard apiBase={apiBase} />
       </main>
-      <div class="px-4">
+      <div id="page-footer" class="px-4">
         <Footer />
       </div>
     </div>

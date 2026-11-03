@@ -35,7 +35,9 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <meta name="twitter:title" content="Pulse Monitor" />
     <meta name="twitter:description" content="Lightweight, real-time server monitoring dashboard." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <!-- Home-screen icon and install manifest, as Beszel ships (iOS ignores an SVG touch icon). -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
     <link rel="mask-icon" href="/favicon.svg" color="#24292f" />
     <title>Pulse Monitor</title>
     <!-- View Transitions API styling for smooth theme switching. Global: the

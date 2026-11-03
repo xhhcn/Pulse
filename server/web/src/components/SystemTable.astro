@@ -693,8 +693,9 @@ const apiBase = apiBaseProp ?? '';
         case 'memory':
         case 'disk':
         case 'net': {
+          // An offline server's speed is not current: it sorts last.
           const measure = (s) => currentSort.field === 'net'
-            ? (Number(s.net_in_mb_s) || 0) + (Number(s.net_out_mb_s) || 0)
+            ? (s.alert ? NaN : (Number(s.net_in_mb_s) || 0) + (Number(s.net_out_mb_s) || 0))
             : Number(s[currentSort.field]);
           aVal = measure(a);
           bVal = measure(b);
@@ -1119,20 +1120,21 @@ const apiBase = apiBaseProp ?? '';
     return String(text).replace(/[&<>"']/g, m => map[m]);
   }
 
-  // Format total traffic bytes to appropriate unit
+  // Format total traffic bytes to appropriate unit: steps of 1024, named so
+  // (KiB … TiB), as memory and disk beside it and the admin page name them.
   function formatTotalTraffic(bytes) {
     if (bytes === 0 || bytes == null) return '0 B';
     
     if (bytes < 1024) {
       return `${bytes} B`;
     } else if (bytes < 1024 * 1024) {
-      return `${(bytes / 1024).toFixed(2)} KB`;
+      return `${(bytes / 1024).toFixed(2)} KiB`;
     } else if (bytes < 1024 * 1024 * 1024) {
-      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
     } else if (bytes < 1024 * 1024 * 1024 * 1024) {
-      return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+      return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
     } else {
-      return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`;
+      return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TiB`;
     }
   }
 
@@ -1259,7 +1261,7 @@ const apiBase = apiBaseProp ?? '';
                   const totalNetIn = item.total_net_in_bytes || 0;
                   const formattedIn = formatTotalTraffic(totalNetIn);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="in" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="in" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
                     </svg>
@@ -1271,7 +1273,7 @@ const apiBase = apiBaseProp ?? '';
                   const totalNetOut = item.total_net_out_bytes || 0;
                   const formattedOut = formatTotalTraffic(totalNetOut);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="out" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="out" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>
                     </svg>
@@ -1283,7 +1285,7 @@ const apiBase = apiBaseProp ?? '';
                   const netInSpeed = item.net_in_mb_s || 0;
                   const formattedSpeed = formatTrafficSpeed(netInSpeed);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="in" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="in" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="m7 13 5 5 5-5"/><path d="m7 6 5 5 5-5"/>
                     </svg>
@@ -1295,7 +1297,7 @@ const apiBase = apiBaseProp ?? '';
                   const netOutSpeed = item.net_out_mb_s || 0;
                   const formattedSpeed = formatTrafficSpeed(netOutSpeed);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="out" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="out" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="m17 11-5-5-5 5"/><path d="m17 18-5-5-5 5"/>
                     </svg>
@@ -1359,7 +1361,7 @@ const apiBase = apiBaseProp ?? '';
                 
                 // Regular tag
                 return `
-                <span class="inline-flex items-center rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]">
+                <span class="inline-flex items-center rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]">
                   ${safeTag}
                 </span>
               `;
@@ -1394,11 +1396,11 @@ const apiBase = apiBaseProp ?? '';
     const safeNameAttr = escapeHtmlAttr(item.name || 'unknown');
     return `
     <div class="system-row${isOffline ? ' is-offline' : ''}" data-system-id="${safeId}">
-      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer" data-system-id="${safeId}" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
+      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer" data-system-id="${safeId}" role="button" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-[#fb2c36]' : 'bg-[#3db866]'} shrink-0"></span>
           <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>${isOffline ? offlineChip() : ''}
-          <button class="copy-btn text-[#595959] dark:text-[#ababab] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
+          <button class="copy-btn text-[#595959] dark:text-[#ababab] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" tabindex="-1" aria-hidden="true" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
@@ -1407,7 +1409,7 @@ const apiBase = apiBaseProp ?? '';
         <div class="cell-cpu h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.cpu || 0, false, isOffline, cardLabel('cpu'))}</div>
         <div class="cell-memory h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.memory || 0, false, isOffline, cardLabel('memory'))}</div>
         <div class="cell-disk h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline, cardLabel('disk'))}</div>
-        <div class="cell-net text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel('net')}<span class="cell-value">${formatTrafficSpeed((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0))}</span></div>
+        <div class="cell-net text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel('net')}<span class="cell-value">${isOffline ? '-' : formatTrafficSpeed((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0))}</span></div>
         <div class="cell-uptime text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center">${cardLabel('uptime')}<span class="cell-value">${escapeHtml(item.time || '-')}</span></div>
         <div class="cell-os text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center w-full min-w-0" title="${escapeHtmlAttr(osDetailText(item))}">${osCellHTML(item)}</div>
     </div>
@@ -1460,7 +1462,7 @@ const apiBase = apiBaseProp ?? '';
             <div class="detail-item" data-traffic-row="speed">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
               <div class="detail-label shrink-0" data-translate-detail="realtimeTraffic">Traffic:</div>
-              ${(!item.cpu_model && !item.memory_info && !item.disk_info) ? `
+              ${(item.alert || (!item.cpu_model && !item.memory_info && !item.disk_info)) ? `
               <div class="detail-value" data-traffic-placeholder="speed">-</div>
               ` : `
               <div class="detail-value detail-pair flex items-center gap-2.5" data-traffic-values="speed">
@@ -1564,8 +1566,8 @@ const apiBase = apiBaseProp ?? '';
 
   const translations = {
     'noSystemsFound': { en: 'No services found', zh: '未找到服务' },
-    'systemsWillAppear': { en: 'Services will appear here once agents start reporting', zh: '代理开始报告后，服务将显示在这里' },
-    'copySystemName': { en: 'Copy system name', zh: '复制服务名称' },
+    'systemsWillAppear': { en: 'Services will appear here once their clients start reporting', zh: '客户端开始上报后，服务将显示在这里' },
+    'copySystemName': { en: 'Copy service name', zh: '复制服务名称' },
     'copied': { en: 'Copied!', zh: '已复制！' },
     // Empty state of a filter that matches nothing (the services exist).
     'noMatchingServices': { en: 'No matching services', zh: '没有匹配的服务' },
@@ -2117,8 +2119,10 @@ const apiBase = apiBaseProp ?? '';
     // Cell 6: Net - only update when the displayed text changes. The value
     // is shown in automatic units (B/s, KB/s, MB/s), so a fixed MB/s
     // threshold would freeze small speeds that still change on screen.
-    const oldNetText = formatTrafficSpeed(oldItemNormalized.net_in_mb_s + oldItemNormalized.net_out_mb_s);
-    const newNetText = formatTrafficSpeed(newItemNormalized.net_in_mb_s + newItemNormalized.net_out_mb_s);
+    // An offline server has no current speed: a dash, as Beszel leaves it out.
+    const netText = (it) => (it.alert ? '-' : formatTrafficSpeed(it.net_in_mb_s + it.net_out_mb_s));
+    const oldNetText = netText(oldItemNormalized);
+    const newNetText = netText(newItemNormalized);
     if (shouldUpdateAll || oldNetText !== newNetText) {
       const netCell = cell('net');
       if (netCell) {
@@ -2195,6 +2199,8 @@ const apiBase = apiBaseProp ?? '';
         // Update traffic rows if show_traffic is enabled
         if (showTrafficInfo) {
           const hasData = !!(item.cpu_model || item.memory_info || item.disk_info);
+          // No current speed for an offline server (a dash).
+          const hasSpeed = hasData && !item.alert;
           
           // Handle speed row transition between placeholder and values
           const speedPlaceholder = detailsSection.querySelector('[data-traffic-placeholder="speed"]');
@@ -2202,7 +2208,7 @@ const apiBase = apiBaseProp ?? '';
           const speedRow = detailsSection.querySelector('[data-traffic-row="speed"]');
           
           if (speedRow) {
-            if (hasData && speedPlaceholder) {
+            if (hasSpeed && speedPlaceholder) {
               // Transition from placeholder to values
               const valuesHtml = `
                 <div class="detail-value detail-pair flex items-center gap-2.5" data-traffic-values="speed">
@@ -2217,11 +2223,11 @@ const apiBase = apiBaseProp ?? '';
                 </div>`;
               speedPlaceholder.remove();
               speedRow.insertAdjacentHTML('beforeend', valuesHtml);
-            } else if (!hasData && speedValues) {
+            } else if (!hasSpeed && speedValues) {
               // Transition from values to placeholder
               speedValues.remove();
               speedRow.insertAdjacentHTML('beforeend', '<div class="detail-value" data-traffic-placeholder="speed">-</div>');
-            } else if (hasData && speedValues) {
+            } else if (hasSpeed && speedValues) {
               // Update existing values
               const speedInEl = speedValues.querySelector('[data-detail-speed="in"] span:last-child');
               const speedOutEl = speedValues.querySelector('[data-detail-speed="out"] span:last-child');
@@ -5859,7 +5865,7 @@ const apiBase = apiBaseProp ?? '';
     }
     #monitor-root:not(.layout-grid) .system-row > [data-system-id] > div { height: auto; min-height: 0; }
     #monitor-root:not(.layout-grid) .cell-name { grid-area: name; min-width: 0; align-items: flex-start; }
-    #monitor-root:not(.layout-grid) .cell-name > .rounded-full { margin-top: 0.42em; }
+    #monitor-root:not(.layout-grid) .cell-name > .rounded-full { margin-top: 5.5px; }
     #monitor-root:not(.layout-grid) .row-name {
       white-space: normal;
       overflow-wrap: anywhere;
@@ -6127,7 +6133,7 @@ const apiBase = apiBaseProp ?? '';
   #monitor-root.layout-grid #systems-body { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-flow: row dense; gap: 16px; align-items: start; }
   #monitor-root.layout-grid #systems-body > .system-row { display: contents; }
   #monitor-root.layout-grid #systems-body .system-row > [data-system-id] {
-    grid-template-columns: 16px minmax(80px, max-content) max-content minmax(0, 1fr) !important;
+    grid-template-columns: 24px minmax(80px, max-content) max-content minmax(0, 1fr) !important;
     grid-template-areas: none !important;
     column-gap: 10px;
     row-gap: 10px;
@@ -6253,7 +6259,8 @@ const apiBase = apiBaseProp ?? '';
   html.dark #monitor-root .detail-icon { color: #ababab; }
   #monitor-root .detail-label { color: #595959; white-space: nowrap; }
   html.dark #monitor-root .detail-label { color: #ababab; }
-  #monitor-root .detail-value { min-width: 0; color: #1d1d20; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  #monitor-root .detail-value { min-width: 0; color: #1d1d20; overflow-wrap: anywhere; }
+  #monitor-root .detail-value:not(:is([data-detail="location"], [data-detail="os"], [data-detail="cpu_model"])) { font-variant-numeric: tabular-nums; }
   html.dark #monitor-root .detail-value { color: #f5f5f5; }
   #monitor-root .detail-pair > span { white-space: nowrap; }
   #monitor-root [data-tcping-stats] { font-size: 12px; }
@@ -6364,13 +6371,14 @@ const apiBase = apiBaseProp ?? '';
     color: #ababab;
   }
 
-  /* A row reached with Tab (Enter/Space opens it) shows a ring in the
-     accent green; mouse and touch never show it. */
+  /* A row reached with Tab (Enter/Space opens it) shows Beszel's focus ring
+     (its ring colour, 2 px) just inside the row; mouse and touch never show
+     it. */
   .system-row > [data-system-id]:focus-visible {
-    outline: 2px solid rgba(16, 185, 129, 0.6);
+    outline: 2px solid #837e79;
     outline-offset: -2px;
-    border-radius: 0.5rem;
   }
+  html.dark .system-row > [data-system-id]:focus-visible { outline-color: #cacbce; }
   .system-row > [data-system-id]:focus:not(:focus-visible) {
     outline: none;
   }

@@ -79,11 +79,14 @@ html.dark .toolbar-control {
   color: #f5f5f5;
 }
 .toolbar-icon-btn { width: 40px; }
+/* A text box in the same style grows with its rows. */
+textarea.toolbar-control { height: auto; padding-top: 8px; padding-bottom: 8px; line-height: 20px; }
 /* Beszel's placeholder (muted text), focus ring (2 px of its ring colour
    2 px off the field) and outline-button hover (its accent). */
 .toolbar-control::placeholder { color: #595959; }
 html.dark .toolbar-control::placeholder { color: #ababab; }
 .toolbar-control:focus-visible {
+  outline: none;
   box-shadow: 0 0 0 2px #fafafa, 0 0 0 4px #837e79;
 }
 html.dark .toolbar-control:focus-visible {
@@ -105,6 +108,45 @@ html.dark #system-table-header-row .sort-header:focus-visible {
 .toolbar-icon-btn[aria-expanded="true"] { background-color: rgba(243, 239, 236, 0.7); }
 html.dark .toolbar-icon-btn:hover,
 html.dark .toolbar-icon-btn[aria-expanded="true"] { background-color: rgba(40, 40, 40, 0.5); }
+/* Beszel's outline button with text (the admin page's settings menu and
+   add-service buttons): the same control with an icon and a label. */
+.toolbar-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; font-size: 14px; font-weight: 500; line-height: 20px; white-space: nowrap; }
+.toolbar-btn:hover,
+.toolbar-btn[aria-expanded="true"] { background-color: rgba(243, 239, 236, 0.7); }
+html.dark .toolbar-btn:hover,
+html.dark .toolbar-btn[aria-expanded="true"] { background-color: rgba(40, 40, 40, 0.5); }
+/* Beszel's dropdown menu (the admin page's settings): the popover card with
+   4 px padding, items with an icon and a label, hairline separators, its
+   150 ms entrance (fade, from 95 % and 8 px above). Keyboard focus moves the
+   highlight, as hover does. */
+.admin-menu {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 40;
+  min-width: 200px; padding: 4px; border-radius: 10.8px;
+  border: 1px solid #dadada; background-color: #ffffff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  transform-origin: top right;
+}
+html.dark .admin-menu { border-color: #2c2c2c; background-color: #171717; }
+.admin-menu:not(.hidden) { animation: pulse-menu-in 150ms ease; }
+@keyframes pulse-menu-in { from { opacity: 0; transform: translateY(-8px) scale(0.95); } }
+.admin-menu-item {
+  display: flex; width: 100%; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 8.8px;
+  font-size: 14px; line-height: 20px; color: #1d1d20; text-align: left; white-space: nowrap; cursor: pointer;
+}
+.admin-menu-item svg { width: 16px; height: 16px; flex: none; color: #595959; }
+.admin-menu-item:hover,
+.admin-menu-item:focus-visible { background-color: #f0f0f0; outline: none; }
+html.dark .admin-menu-item { color: #f5f5f5; }
+html.dark .admin-menu-item svg { color: #ababab; }
+html.dark .admin-menu-item:hover,
+html.dark .admin-menu-item:focus-visible { background-color: #282828; }
+.admin-menu-item:disabled { opacity: 0.5; pointer-events: none; }
+.admin-menu-sep { height: 1px; margin: 4px -4px; background-color: #f0f0f0; }
+html.dark .admin-menu-sep { background-color: #292929; }
+@media (prefers-reduced-motion: reduce) {
+  .admin-menu:not(.hidden) { animation: none; }
+}
 
 /* Tooltips of icon-only controls (utils/tooltip.ts), Beszel's: the popover
    ground, a hairline border, radius-md, 14/20 px text, no shadow, a small
@@ -248,7 +290,7 @@ html.light * {
 [data-tabular-nums],
 [data-tabular-nums] *,
 .system-row .text-right,
-.system-row span.font-medium,
+.system-row span.font-medium:not(.row-name),
 .system-total-net-in,
 .system-total-net-out,
 [data-tcping-avg],
@@ -303,13 +345,16 @@ html.light * {
    line and it produced the bug the user saw: input remained rounded
    until focus, then snapped to a square box. */
 :focus-visible {
-  outline: 1px solid rgba(255, 255, 255, 0.35);
-  outline-offset: 0;
+  outline: 2px solid #cacbce;
+  outline-offset: 2px;
 }
 
+/* Beszel's focus ring (ring-2 ring-ring ring-offset-2): its ring colour
+   2 px off the control, on every control that has no ring of its own
+   (a 1 px line at 30 % before, which vanished on the dark buttons). */
 body.light :focus-visible,
 html.light :focus-visible {
-  outline-color: rgba(0, 0, 0, 0.30);
+  outline-color: #837e79;
 }
 
 /* Elements already declaring their own Tailwind focus ring (via
@@ -795,25 +840,12 @@ html.glass-enabled.dark #columns-btn:hover {
   border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
-/* Admin system rows */
-html.glass-enabled.light .draggable-item {
-  background: rgba(255, 255, 255, 0.45) !important;
-  border-color: rgba(255, 255, 255, 0.65) !important;
-  box-shadow: none !important;
-}
-html.glass-enabled.light .draggable-item:hover {
-  background: rgba(255, 255, 255, 0.72) !important;
-  border-color: rgba(0, 0, 0, 0.09) !important;
-}
-html.glass-enabled.dark .draggable-item {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border-color: rgba(255, 255, 255, 0.07) !important;
-  box-shadow: none !important;
-}
-html.glass-enabled.dark .draggable-item:hover {
-  background: rgba(255, 255, 255, 0.055) !important;
-  border-color: rgba(255, 255, 255, 0.11) !important;
-}
+/* Admin service rows: one list in a box (the box is .glass-inner, as the
+   dashboard's table); the rows' dividers and hover tint. */
+html.glass-enabled.light .draggable-item { border-color: rgba(0, 0, 0, 0.06) !important; }
+html.glass-enabled.light .draggable-item:hover { background: rgba(255, 255, 255, 0.4) !important; }
+html.glass-enabled.dark .draggable-item { border-color: rgba(255, 255, 255, 0.07) !important; }
+html.glass-enabled.dark .draggable-item:hover { background: rgba(255, 255, 255, 0.035) !important; }
 
 /* Login form inputs */
 html.glass-enabled.light .glass-login input:not([type="checkbox"]) {
@@ -829,6 +861,7 @@ html.glass-enabled.dark .glass-login input:not([type="checkbox"]) {
    The only surfaces that blur (and saturate) what lies beneath them;
    opaque enough that their text stays crisp over the table. */
 html.glass-enabled.light #columns-dropdown,
+html.glass-enabled.light .admin-menu,
 html.glass-enabled.light [data-modal-content] {
   background: rgba(250, 250, 252, 0.86) !important;
   backdrop-filter: blur(30px) saturate(180%);
@@ -839,6 +872,7 @@ html.glass-enabled.light [data-modal-content] {
     0 14px 40px -10px rgba(0, 0, 0, 0.28) !important;
 }
 html.glass-enabled.dark #columns-dropdown,
+html.glass-enabled.dark .admin-menu,
 html.glass-enabled.dark [data-modal-content] {
   background: rgba(38, 38, 42, 0.82) !important;
   backdrop-filter: blur(30px) saturate(180%);
@@ -859,10 +893,12 @@ html.glass-enabled.dark [data-modal-content] {
 
 /* Sort option buttons and column toggles in the menu */
 html.glass-enabled.light .view-menu-item:hover,
+html.glass-enabled.light .admin-menu-item:is(:hover, :focus-visible),
 html.glass-enabled.light #columns-dropdown label:hover {
   background-color: rgba(0, 0, 0, 0.05) !important;
 }
 html.glass-enabled.dark .view-menu-item:hover,
+html.glass-enabled.dark .admin-menu-item:is(:hover, :focus-visible),
 html.glass-enabled.dark #columns-dropdown label:hover {
   background-color: rgba(255, 255, 255, 0.06) !important;
 }
