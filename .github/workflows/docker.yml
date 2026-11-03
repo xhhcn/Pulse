@@ -146,21 +146,32 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} is a small follow-up to v1.3.46: service names on the dashboard keep the full shape of their letters again. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} brings the dashboard close to Beszel, the design Pulse follows, measured element by element against a running Beszel 0.21.1: its typeface, colours, proportions, bars, menus, tooltips and chart style, a card layout, sortable and hideable columns, a theme button that can follow the system, and a glass mode built on the same theme. What Pulse shows stays as it was. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: the dashboard no longer cuts a pixel off the edge of a service name, such as the hook of a J, the bar of a T or the tail of an r. In the table it came with the ellipsis for long names in v1.3.45; the phone cards, which limit a name to two lines, had it as well. Layout, line breaks and the ellipsis are unchanged.
+            - Web: Beszel's look, matched to a running instance: Inter (self-hosted, SIL Open Font License) for Latin text, its warm (light) and cool (dark) greys, page, card, border and muted text tones in both themes, its radii, a 64 px navigation bar (56 px on phones) with 40 px buttons, 1500 px content width, and its status colours (Pulse keeps its yellow, orange and red steps at 70, 80 and 90 %).
+            - Web: from 1280 px the table is Beszel's: 14 px text, 56 px rows, an 8 px status dot, 14 px bars that fill their column, values in its regular weight with tabular figures, and a 48 px header whose names sort the table; the sort arrow takes the place of a column's icon under the pointer or once sorted, so no column changes width. Flags and OS logos are a size smaller and the OS logos line up under their header.
+            - Web: the filter is Beszel's plain field with a clear button (Ctrl K / ⌘K or / still go to it), next to the view button. The view menu has Beszel's four parts: layout (table, or cards from 768 px), status (all, online, offline, with counts), sort by any column and the fields shown; the choices are kept in the browser.
+            - Web: the card layout is Beszel's: a shaded header with the status dot, name, flag and OS over aligned rows of icon, label and value, two cards a row, three from 1024 px. An opened card stays in place: its details open across the grid under its row while the next cards fill the row.
+            - Web: the TCPing chart keeps every probe, as before, drawn in the style of Beszel's charts: 1.5 px lines, the axis fitted to them, a time every 2 hours with Beszel's tick marks, its grid and text colours, a dot on the probes under the pointer, and the legend under the chart. A legend entry picks its target and the others fade in their own colours; the tooltip lists the targets from the highest.
+            - Web: on a theme switch the chart changes colour in the same frame as the page (before, a moment early, under the old page's cross-fade); in dark, an opened row sits a step below the card and its chart a step above.
+            - Web: the theme button steps through light, dark and "follow the system", the default; with it chosen, the dashboard, admin and login pages follow the system as it changes. Icons follow Beszel's (uptime, network, the dark theme's moon).
+            - Web: glass mode is Beszel's theme in frosted glass: a warm paper (light) or graphite (dark) ground lit by soft fields of Beszel's chart colours, lighter panes with a hairline edge, Beszel's header band as a tint, and one frosted material for menus, dialogs, tooltips, the chart's tooltip and notices.
+            - Web: icon-only buttons show Beszel's tooltip on hover and keyboard focus; an opened row lists its details with icons; the login page has the mark, fields with an icon and a dark primary button; admin has Beszel's title, neutral 40 px icon buttons, its dialog titles, one primary style (red for deleting and for a new shared secret), matching switches and notices.
+            - Web: fixes. A row ignored changes under 0.1 (under 0.1 MB/s for speeds) for good, so an idle server could keep showing an old speed and a sorted table could look out of order; rows were not reordered when services were added, removed or filtered in the same update; on phones under 390 px a card's memory value dropped below its label.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format changed.
             - Existing `metrics.db` files remain readable.
+            - A light or dark choice made before stays; without one, the page follows the system as it did on load, now also while open.
 
             ### Verified
 
-            - Chromium: pixel comparison with v1.3.46 on frozen data, light, dark and glass, from phone to desktop: only the restored letter edges differ. A scan that unclips every clipping element on the dashboard, login and admin pages finds no other cut-off text.
-            - Chromium, Firefox and WebKit: the table at 153 widths from 768 to 1920 px in both languages; the phone cards from 320 to 767 px with short, long, two-line and clamped names.
+            - Against a running Beszel 0.21.1 fed with the same 131 servers: computed sizes, colours, borders and radii of the navigation bar, toolbar, table, cards, menus, tooltips and charts in both themes, from 390 to 1440 px.
+            - Chromium, Firefox and WebKit: the table at 153 widths from 768 to 1920 px in both languages and every column sorted from 768 to 1440 px; the phone cards from 320 to 767 px; hidden fields, the card layout and an opened card; the toolbar, menu and kept choices; sorted tables during a minute of live updates; the chart following a theme switch frame by frame; the TCPing chart's selection, tooltip and live samples; the sticky header; the admin dialogs; the glass dialogs; the connection notice; a theme audit of 60 pages.
+            - The TCPing palette with the dataviz validator: the first three colours separate under protanopia and deuteranopia as any pair (ΔE 13.8 or more) and keep 3:1 on both chart cards.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
