@@ -289,10 +289,10 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
   </head>
   <body class="min-h-screen overflow-x-hidden bg-[#fafafa] dark:bg-[#171717] text-[#151515] dark:text-[#f5f5f5]">
     <div id="auth-check" class="hidden min-h-screen flex flex-col">
-      <div class="px-4 animate-navbar">
+      <div class="px-4">
         <NavBar isAdmin={true} />
       </div>
-      <main class="flex-1 px-4 pt-4 pb-2 sm:pb-4 animate-content">
+      <main class="flex-1 px-4 pt-4 pb-2 sm:pb-4">
         <AdminDashboard apiBase={apiBase} />
       </main>
       <div class="px-4">
@@ -302,9 +302,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <!--
       Auth-gate overlay — see index.astro for the full rationale.
       TL;DR: `fixed inset-0` + opacity transition so the spinner cross-
-      fades out while the admin content fades in beneath, instead of
-      snapping out of the layout and leaving a one-frame blank gap
-      before `.animate-content` (delay: 0.1s) begins its entrance.
+      fades out over the admin page beneath (already in place: no
+      entrance animation of its own) instead of snapping away.
     -->
     <div id="login-redirect" class="fixed inset-0 z-50 flex items-center justify-center bg-[#fafafa] dark:bg-[#171717] transition-opacity duration-200 ease-out">
       <div class="text-center animate-page-in">
@@ -380,11 +379,9 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
       const verifyData = res.ok ? await res.json().catch(() => null) : null;
       const tokenValid = res.status !== 401 && !(verifyData && verifyData.valid === false);
       if (tokenValid) {
-          // Token is valid — cross-fade the overlay out so the admin
-          // dashboard appears smoothly beneath. `.animate-content` on
-          // <main> has a 100 ms animation-delay, and the overlay's
-          // `transition: opacity 200ms` keeps the spinner visible
-          // through that window so the user never sees an empty frame.
+          // Token is valid — cross-fade the overlay out (its
+          // `transition: opacity 200ms`) over the dashboard, which is
+          // already in place beneath it.
           // `pointer-events: none` drops the overlay out of the hit-
           // testing path immediately so clicks land on the NavBar /
           // content while the fade is in progress, instead of being

@@ -125,8 +125,12 @@ html.dark .toolbar-icon-btn[aria-expanded="true"] { background-color: rgba(40, 4
   pointer-events: none;
   opacity: 0;
   transform: scale(0.95);
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
+/* Beszel's tooltip entrance (tw-animate-css fade-in-0 zoom-in-95 and an
+   8 px slide from the control's side, 150 ms ease). */
+.pulse-tooltip[data-side="bottom"] { transform: translateY(-8px) scale(0.95); }
+.pulse-tooltip[data-side="top"] { transform: translateY(8px) scale(0.95); }
 html.dark .pulse-tooltip {
   border-color: #2c2c2c;
   background: #171717;
@@ -157,6 +161,9 @@ html.dark .pulse-tooltip {
   from { opacity: 0; transform: rotate(-30deg); }
 }
 #theme-btn .theme-icon-in { animation: theme-icon-in 200ms ease; }
+/* The navbar's logo, name and buttons wait hidden until the site's own
+   name and logo are in (NavBar), then show together in one 150 ms fade. */
+#navbar-logo-container, #navbar-text, #navbar-icons-container { transition: opacity 150ms ease; }
 @media (prefers-reduced-motion: reduce) {
   #theme-btn .theme-icon-in { animation: none; }
 }
@@ -343,23 +350,6 @@ html.light :focus-visible {
   animation: page-fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Staggered fade-in for lists */
-@keyframes stagger-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-stagger-in {
-  opacity: 0;
-  animation: stagger-fade-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
 /* Skeleton loading pulse animation */
 @keyframes skeleton-pulse {
   0%, 100% {
@@ -405,7 +395,10 @@ html.light :focus-visible {
   background-size: 200% 100%;
 }
 
-/* Modal animations */
+/* Modal animations, Beszel's dialog (tw-animate-css): the overlay fades in
+   150 ms; the dialog fades in from 95 % with a 10 px drift up (Beszel's 2 %
+   of its height), 200 ms ease, and leaves the same way (the close timer in
+   AdminDashboard waits 200 ms). */
 @keyframes modal-backdrop-in {
   from {
     opacity: 0;
@@ -447,19 +440,19 @@ html.light :focus-visible {
 }
 
 .modal-backdrop-enter {
-  animation: modal-backdrop-in 0.2s ease-out forwards;
+  animation: modal-backdrop-in 0.15s ease forwards;
 }
 
 .modal-content-enter {
-  animation: modal-content-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: modal-content-in 0.2s ease forwards;
 }
 
 .modal-backdrop-exit {
-  animation: modal-backdrop-out 0.15s ease-in forwards;
+  animation: modal-backdrop-out 0.15s ease forwards;
 }
 
 .modal-content-exit {
-  animation: modal-content-out 0.15s ease-in forwards;
+  animation: modal-content-out 0.2s ease forwards;
 }
 
 /* Card/Panel hover lift effect */
@@ -509,20 +502,11 @@ html.light :focus-visible {
   overflow: hidden;
 }
 
-/* Button press effect */
-.btn-press {
-  transition: transform 0.1s ease;
-}
-
-.btn-press:active {
-  transform: scale(0.97);
-}
-
 /* Subtle scale-in for new elements */
 @keyframes scale-in {
   from {
     opacity: 0;
-    transform: scale(0.9);
+    transform: scale(0.95);
   }
   to {
     opacity: 1;
@@ -531,7 +515,7 @@ html.light :focus-visible {
 }
 
 .animate-scale-in {
-  animation: scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: scale-in 0.15s ease forwards;
 }
 
 /* Spinner rotation (enhanced) */
@@ -578,71 +562,9 @@ html.light :focus-visible {
   animation: row-highlight 0.8s ease-out;
 }
 
-/* Login card entrance */
-@keyframes login-card-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
+/* Login card entrance: the dialogs' motion (Beszel's dialog), once. */
 .animate-login-card {
-  animation: login-card-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* Form field stagger animation */
-@keyframes form-field-in {
-  from {
-    opacity: 0;
-    transform: translateX(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-.animate-form-field {
-  opacity: 0;
-  animation: form-field-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* Navbar slide-down */
-@keyframes navbar-slide-down {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-navbar {
-  animation: navbar-slide-down 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* Content container animation */
-@keyframes content-fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(15px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-content {
-  animation: content-fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: 0.1s;
-  opacity: 0;
+  animation: modal-content-in 0.2s ease forwards;
 }
 
 /* Fix for modals inside animated containers - move to body level */
@@ -1072,43 +994,28 @@ html.glass-enabled.dark :is(.pulse-tooltip, .pulse-tooltip-arrow, .tcping-toolti
   }
 }
 
-/* Default "monitor" navbar logo heartbeat.
-   One opacity animation on the whole icon instead of five SMIL <animate>
-   children: SMIL cannot run on the compositor, so the looping logo made the
-   browser re-render the page on every frame for as long as it stayed open
-   (~30 % of the main thread on a dashboard), while an element-level
-   opacity animation is composited. The elements carry their peak opacity
-   and the icon fades between 40 % and 100 % of it, linearly over 2 s: the
-   five SMIL animations were in phase, so this closely approximates them
-   (same peaks; the troughs differ by at most 0.1). */
-.monitor-icon.default-logo {
-  animation: pulse-logo-beat 2s linear infinite;
-}
-@keyframes pulse-logo-beat {
-  0%, 100% { opacity: 0.4; }
-  50%      { opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .monitor-icon.default-logo { animation: none; }
-}
+/* The default "monitor" navbar logo no longer loops: it beats once each
+   time fresh data reaches the page (NavBar, on SystemTable's pulse:data)
+   and stays still when the live stream stops. Beszel's logo is still too;
+   its one looping motion is a status ping that means "up". */
 
 /* Reduced motion: entrance, dialog and row animations are skipped and what
    they reveal is simply shown (several start from opacity 0). The loading
    spinner keeps turning: it tells that something is in progress. Dialogs
    close on a timer, not on animationend, so skipping the exit is safe. */
 @media (prefers-reduced-motion: reduce) {
-  .animate-page-in, .animate-stagger-in, .animate-scale-in, .animate-progress,
+  .animate-page-in, .animate-scale-in, .animate-progress,
   .animate-row-update, .animate-row-expand, .animate-row-collapse,
-  .animate-login-card, .animate-form-field, .animate-navbar, .animate-content,
+  .animate-login-card,
   .modal-backdrop-enter, .modal-content-enter, .modal-backdrop-exit, .modal-content-exit,
   .animate-skeleton, .animate-shimmer {
     animation: none !important;
   }
-  .animate-page-in, .animate-stagger-in, .animate-scale-in, .animate-login-card,
-  .animate-form-field, .animate-navbar, .animate-content,
+  .animate-page-in, .animate-scale-in, .animate-login-card,
   .modal-backdrop-enter, .modal-content-enter {
     opacity: 1 !important;
   }
+  #navbar-logo-container, #navbar-text, #navbar-icons-container { transition: none !important; }
   #system-table-header-row { transition: none !important; }
 }
 

@@ -43,6 +43,11 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
          scoped one only covered this page's own markup). -->
     <style is:global>
       /* View Transitions API support for smooth cross-fade */
+      /* The footer waits invisible until the list's first answer (the
+         rows would push it down the screen), SystemTable's
+         revealTableFrame. */
+      html:not(.pulse-list-ready) #page-footer { visibility: hidden; }
+
       ::view-transition-old(root),
       ::view-transition-new(root) {
         animation-duration: 0.15s;
@@ -308,13 +313,13 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
   </head>
   <body class="min-h-screen overflow-x-hidden flex flex-col bg-[#fafafa] dark:bg-[#171717] text-[#151515] dark:text-[#f5f5f5]">
     <div id="auth-check" class="hidden min-h-screen flex flex-col">
-      <div class="px-4 animate-navbar">
+      <div class="px-4">
         <NavBar />
       </div>
-      <main class="flex-1 px-4 pt-4 pb-2 sm:pb-4 animate-content">
+      <main class="flex-1 px-4 pt-4 pb-2 sm:pb-4">
         <SystemTable apiBase={apiBase} />
       </main>
-      <div class="px-4">
+      <div id="page-footer" class="px-4">
         <Footer />
       </div>
     </div>
@@ -322,14 +327,12 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
       Auth-gate overlay. Positioned `fixed inset-0` with an opaque body-
       matching background so it covers the page while auth resolves, and
       carries a 200 ms opacity transition. When auth passes we don't snap
-      it out with `display: none` — that would leave a visible gap
-      frame between spinner-gone and main-content-faded-in (the `.animate-
-      content` class has a 0.1 s animation-delay). Instead we set
+      it out with `display: none` — that would snap. Instead we set
       `opacity: 0` first, let the fade play, and only THEN apply `hidden`.
-      During those 200 ms the main content's own entrance animations run
-      underneath, so the perceived transition is a clean cross-fade
-      rather than a snap-out / blank-frame / fade-in. The `z-50` ensures
-      the overlay stays above the main content while it fades.
+      During those 200 ms the page underneath is already in place (no
+      entrance animation of its own), so the overlay simply cross-fades
+      away. The `z-50` ensures the overlay stays above the main content
+      while it fades.
     -->
     <div id="login-redirect" class="fixed inset-0 z-50 flex items-center justify-center bg-[#fafafa] dark:bg-[#171717] transition-opacity duration-200 ease-out">
       <div class="text-center animate-page-in">
@@ -362,8 +365,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     const loginRedirect = document.getElementById('login-redirect');
 
     // Reveal the authenticated page with a smooth cross-fade:
-    //  1. Un-hide #auth-check so its child animations (.animate-navbar
-    //     / .animate-content) start their entrance keyframes.
+    //  1. Un-hide #auth-check: the page is in place at once beneath the
+    //     overlay (no entrance animation of its own, as Beszel's).
     //  2. Drop the overlay out of the hit-testing path (`pointer-events:
     //     none`) so during the 200 ms fade the user can already
     //     interact with the NavBar / content underneath — otherwise

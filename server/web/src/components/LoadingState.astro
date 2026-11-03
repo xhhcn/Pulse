@@ -75,11 +75,10 @@
 
 <style>
   /* Wrapper — reserves a natural amount of vertical space. The table
-     header (SystemTableHeaderRow) is rendered as `display: none`
-     during the pulse phase so it contributes zero height; the
-     loading block therefore sits flush against the table card's top
-     border and this min-height alone defines the area the user sees
-     pulsing. 200 px is tall enough for the five-row preview + its
+     header (SystemTableHeaderRow) waits invisible in its place during
+     the pulse phase (so the list doesn't move when it shows); the
+     loading block sits under it and this min-height alone defines the
+     area the user sees pulsing. 200 px is tall enough for the five-row preview + its
      vertical padding to feel substantial, and slightly shorter than
      a typical populated table so that when real rows land the table
      only grows downward (never jumps up), matching the dashboard's

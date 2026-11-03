@@ -456,23 +456,12 @@ const { isAdmin = false } = Astro.props;
         }
       }
       
-      // Show all elements with smooth staggered fade-in animation
-      // Use requestAnimationFrame to ensure smooth animation trigger
+      // Show the logo, the name and the buttons together now that the
+      // site's own are in (they wait hidden so the defaults never flash
+      // first): one 150 ms fade (global.css), no entrance of their own, as
+      // Beszel's page has none.
       requestAnimationFrame(() => {
-        if (logoContainer) {
-          logoContainer.classList.add('animate-stagger-in');
-          logoContainer.style.animationDelay = '0ms';
-        }
-        
-        if (navbarText) {
-          navbarText.classList.add('animate-stagger-in');
-          navbarText.style.animationDelay = '50ms';
-        }
-        
-        if (iconsContainer) {
-          iconsContainer.classList.add('animate-stagger-in');
-          iconsContainer.style.animationDelay = '100ms';
-        }
+        [logoContainer, navbarText, iconsContainer].forEach((el) => { if (el) el.style.opacity = '1'; });
       });
     }
 
@@ -576,6 +565,22 @@ const { isAdmin = false } = Astro.props;
           updateThemeButton();
         });
       }
+
+      // Pulse's heartbeat as a live signal: the default logo beats once each
+      // time fresh data reaches the page (SystemTable's pulse:data, every
+      // few seconds while the live stream runs) and stays still when it
+      // stops. At most one beat in 1.5 s; none in a background tab or with
+      // reduced motion; a custom logo stays still.
+      const reducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+      let lastBeat = 0;
+      window.addEventListener('pulse:data', () => {
+        const logo = document.querySelector('#navbar-logo-container .monitor-icon.default-logo');
+        if (!logo || typeof logo.animate !== 'function' || document.hidden || (reducedMotion && reducedMotion.matches)) return;
+        const now = performance.now();
+        if (now - lastBeat < 1500) return;
+        lastBeat = now;
+        logo.animate([{ opacity: 1 }, { opacity: 0.4, offset: 0.3 }, { opacity: 1 }], { duration: 800, easing: 'ease-out' });
+      });
     }
 
     // Run initialization

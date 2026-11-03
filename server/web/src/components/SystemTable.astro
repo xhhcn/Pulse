@@ -550,11 +550,11 @@ const apiBase = apiBaseProp ?? '';
 
   // Latched the FIRST time the table renders rows. Without this latch,
   // every transient empty payload (server hiccup, all clients momentarily
-  // unreported, …) would clear `currentData` and cause the row stagger
+  // unreported, …) would clear `currentData` and cause the list's fade-in
   // (`data-row-in`) to replay the next time data comes back — which the
-  // user perceives as "the dashboard keeps fading in from the top". The
-  // stagger is meant to be a first-impression delight, not a refresh
-  // signal, so we run it exactly once per page session.
+  // user perceives as "the dashboard keeps fading in". It only softens the
+  // loading preview's exit, not a refresh signal, so it runs exactly once
+  // per page session.
   let staggerAnimationPlayed = false;
 
   // Sort, kept in this browser as in Beszel; field null is the order the
@@ -955,8 +955,9 @@ const apiBase = apiBaseProp ?? '';
 
   const pct = (val) => Math.min(Math.max(val || 0, 0), 100);
   // Bars follow whole percents (the label keeps one decimal): a tenth of a
-  // percent is a sub-pixel step, yet each one restarted the 0.5 s width
-  // transition of that bar on nearly every update.
+  // percent is a sub-pixel step, yet each one restarted the bar's width
+  // transition on nearly every update. The bars ease to a new value in
+  // 150 ms (width only, a colour changes at once); Beszel's meters jump.
   const barWidth = (val) => `${Math.round(pct(val))}%`;
   // Usage label, one decimal. "100.0%" is wider than the w-8 / sm:w-10
   // label slot and ran under the start of the bar; a full bar reads "100%".
@@ -1100,7 +1101,7 @@ const apiBase = apiBaseProp ?? '';
     <div class="flex items-center gap-0.5 pr-2 sm:pr-3 min-w-0 w-full">${label}
       <span class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] w-8 sm:w-10 shrink-0">${pctLabel(value)}</span>
       <div class="progress-track relative h-2.5 sm:h-3 flex-1 min-w-[60px] overflow-hidden rounded-full dark:bg-[#292929] bg-[#f0f0f0]">
-        <div class="absolute inset-y-0 left-0 h-full transition-all duration-500 ease-out ${getProgressColor(value, isOffline)}" style="width:${barWidth(value)}"></div>
+        <div class="absolute inset-y-0 left-0 h-full transition-[width] duration-150 ease-out ${getProgressColor(value, isOffline)}" style="width:${barWidth(value)}"></div>
     </div>
     </div>
   `;
@@ -1393,7 +1394,7 @@ const apiBase = apiBaseProp ?? '';
     const safeNameAttr = escapeHtmlAttr(item.name || 'unknown');
     return `
     <div class="system-row${isOffline ? ' is-offline' : ''}" data-system-id="${safeId}">
-      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
+      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer" data-system-id="${safeId}" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-[#fb2c36]' : 'bg-[#3db866]'} shrink-0"></span>
           <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>${isOffline ? offlineChip() : ''}
@@ -2061,7 +2062,7 @@ const apiBase = apiBaseProp ?? '';
           const width = barWidth(value);
           if (progressBar.style.width !== width) progressBar.style.width = width;
           // Update color based on threshold
-          const barClass = `absolute inset-y-0 left-0 h-full transition-all duration-500 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          const barClass = `absolute inset-y-0 left-0 h-full transition-[width] duration-150 ease-out ${getDynamicProgressColor(value, isOffline)}`;
           if (progressBar.className !== barClass) progressBar.className = barClass;
         }
       }
@@ -2084,7 +2085,7 @@ const apiBase = apiBaseProp ?? '';
           const width = barWidth(value);
           if (progressBar.style.width !== width) progressBar.style.width = width;
           // Update color based on threshold
-          const barClass = `absolute inset-y-0 left-0 h-full transition-all duration-500 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          const barClass = `absolute inset-y-0 left-0 h-full transition-[width] duration-150 ease-out ${getDynamicProgressColor(value, isOffline)}`;
           if (progressBar.className !== barClass) progressBar.className = barClass;
         }
       }
@@ -2107,7 +2108,7 @@ const apiBase = apiBaseProp ?? '';
           const width = barWidth(value);
           if (progressBar.style.width !== width) progressBar.style.width = width;
           // Update color based on threshold
-          const barClass = `absolute inset-y-0 left-0 h-full transition-all duration-500 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          const barClass = `absolute inset-y-0 left-0 h-full transition-[width] duration-150 ease-out ${getDynamicProgressColor(value, isOffline)}`;
           if (progressBar.className !== barClass) progressBar.className = barClass;
         }
       }
@@ -4781,11 +4782,10 @@ const apiBase = apiBaseProp ?? '';
       body.innerHTML = items.map(item => renderRow(item, tcpingConfigured && item.hide_tcping !== true)).join('');
       currentData = newData;
 
-      // Row-level stagger-in. Each row animates at the ALREADY-settled
-      // column width (locked in STEP 1 of renderDataInternal), so the
-      // fade-up is a pure opacity+translateY transition with zero
-      // horizontal motion — the user sees rows "rise into place",
-      // never "slide sideways".
+      // The first data replaces the loading preview with one 150 ms fade
+      // of the whole list, at the ALREADY-settled column width (locked in
+      // STEP 1 of renderDataInternal), so nothing moves: the rows show
+      // together, as Beszel's table does, without a cascade.
       //
       // Gated by `staggerAnimationPlayed` so a transient empty payload
       // mid-session does NOT replay the animation: that scenario was
@@ -4794,22 +4794,16 @@ const apiBase = apiBaseProp ?? '';
       const systemRows = body.querySelectorAll('.system-row');
       if (!staggerAnimationPlayed) {
         staggerAnimationPlayed = true;
-        // The first screen rises row by row; later rows arrive with its last
-        // one instead of trickling in for seconds (at 50 ms a row, 131 rows
-        // took 7 s, and a quick scroll found empty rows). No cascade with
-        // reduced motion.
+        // No fade with reduced motion.
         const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if (!calm) systemRows.forEach((row, index) => {
-          const delay = Math.min(index, 12) * 40;
+        if (!calm) systemRows.forEach((row) => {
           row.style.opacity = '0';
-          row.style.animation = 'data-row-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards';
-          row.style.animationDelay = `${delay}ms`;
+          row.style.animation = 'data-row-in 0.15s ease forwards';
           // Clean up after animation
           setTimeout(() => {
             row.style.opacity = '';
             row.style.animation = '';
-            row.style.animationDelay = '';
-          }, 400 + delay);
+          }, 200);
         });
       }
 
@@ -5133,6 +5127,7 @@ const apiBase = apiBaseProp ?? '';
       html += `<span class="${chip} bg-black/5 dark:bg-white/[0.06] text-[#595959] dark:text-[#ababab]" role="status">${dot('bg-[#a3a3a3]')}${translations.connectionLost[lang]}</span>`;
     }
     if (el.innerHTML !== html) el.innerHTML = html;
+    el.classList.remove('invisible');
     el.classList.toggle('hidden', total === 0);
     updateStatusCounts();
   }
@@ -5204,6 +5199,19 @@ const apiBase = apiBaseProp ?? '';
 
   // Internal render implementation — assumed to be called serially from
   // renderData() only. Never call this directly.
+  // While the list loads, the header row waits invisible in its place (the
+  // list below it doesn't move when it shows) and so does the page footer
+  // (the rows would push it down the screen): both show with the first
+  // answer, data, an empty list or an error. Nothing moves on the way in.
+  function revealTableFrame(headerRow) {
+    headerRow.style.visibility = 'visible';
+    void headerRow.offsetHeight;
+    headerRow.style.opacity = '1';
+    document.documentElement.classList.add('pulse-list-ready');
+  }
+  // In case no answer ever comes, the footer shows anyway.
+  setTimeout(() => document.documentElement.classList.add('pulse-list-ready'), 5000);
+
   async function renderDataInternal(data) {
     initialDataRendered = true;
     lastRenderedPayload = data;
@@ -5213,7 +5221,7 @@ const apiBase = apiBaseProp ?? '';
     updateSystemsSummary(data);
     if (data.length === 0) {
       showEmpty();
-      // Materialise the header (it ships as display:none during the
+      // Show the header (it waits invisible in its place during the
       // pulse phase — see STEP 2 below for the full rationale). Even
       // though there are no rows to measure, we still want the header
       // visible so the empty-state message is framed by the proper
@@ -5221,9 +5229,7 @@ const apiBase = apiBaseProp ?? '';
       // appropriate here because no row ever forces it wider.
       const headerRow = document.getElementById('system-table-header-row');
       if (headerRow) {
-        headerRow.style.display = 'grid';
-        void headerRow.offsetHeight;
-        headerRow.style.opacity = '1';
+        revealTableFrame(headerRow);
       }
       return;
     }
@@ -5248,30 +5254,26 @@ const apiBase = apiBaseProp ?? '';
     const preCalculatedWidth = calculateServerNameColumnWidth(data);
     applyServerNameColumnWidth(preCalculatedWidth);
 
-    // STEP 2 — On the very first render, materialise the header.
+    // STEP 2 — On the very first render, show the header.
     //
-    // The header row ships with inline `display: none; opacity: 0` so
-    // it is completely absent from layout during the pulse phase —
-    // crucially, the user never sees a header at the wrong (default
-    // 160 px) column width. STEP 1 above has already measured every
-    // server name and committed the correct `--first-col-width` to
-    // the style tree via a forced reflow, so the moment we flip the
-    // header back to `display: grid` its columns are drawn at their
-    // final, data-driven widths. A second forced reflow here makes
-    // sure the display switch is committed BEFORE we touch opacity,
-    // otherwise the browser is free to batch the two style changes
-    // and skip the opacity transition entirely (rendering the header
-    // as an abrupt pop-in). With the reflow in place the sequence
-    // the user sees is: pulse rows breathing → pulse vanishes → the
-    // table header fades in at its correct width → rows slot in
-    // underneath at the same, settled column positions. No part of
-    // the header is ever visible at the wrong width.
+    // The header row ships with inline `visibility: hidden; opacity: 0`:
+    // it keeps its place during the pulse phase (so the list below it
+    // never moves when it shows) but the user never sees it at the wrong
+    // (default 160 px) column width. STEP 1 above has already measured
+    // every server name and committed the correct `--first-col-width` to
+    // the style tree via a forced reflow, so the moment the header turns
+    // visible its columns are drawn at their final, data-driven widths.
+    // A second forced reflow makes sure that switch is committed BEFORE
+    // we touch opacity, otherwise the browser is free to batch the two
+    // style changes and skip the opacity transition entirely (rendering
+    // the header as an abrupt pop-in). The sequence the user sees is:
+    // pulse rows breathing → pulse vanishes → the table header fades in
+    // at its correct width → rows fade in underneath at the same,
+    // settled column positions; the footer shows with them.
     if (currentData.size === 0) {
       const headerRow = document.getElementById('system-table-header-row');
       if (headerRow) {
-        headerRow.style.display = 'grid';
-        void headerRow.offsetHeight;
-        headerRow.style.opacity = '1';
+        revealTableFrame(headerRow);
       }
 
       // STEP 3 — Wait one paint frame before handing off to render().
@@ -5310,6 +5312,7 @@ const apiBase = apiBaseProp ?? '';
     try {
       const data = await fetchSystemMetrics(apiBase);
       await renderData(data);
+      window.dispatchEvent(new Event('pulse:data'));
     } catch (err) {
       if (loadingIndicator) {
         loadingIndicator.innerHTML = `
@@ -5321,14 +5324,11 @@ const apiBase = apiBaseProp ?? '';
       }
       // Materialise the header at the default 160 px --first-col-width
       // so the error message has the proper column frame around it.
-      // The display:none→grid + reflow + opacity trick mirrors the
-      // happy-path STEP 2, so the failure UI fades in with the same
-      // curve as success.
+      // The same reveal as the happy-path STEP 2, so the failure UI
+      // fades in with the same curve as success.
       const headerRow = document.getElementById('system-table-header-row');
       if (headerRow) {
-        headerRow.style.display = 'grid';
-        void headerRow.offsetHeight;
-        headerRow.style.opacity = '1';
+        revealTableFrame(headerRow);
       }
     }
   }
@@ -5505,6 +5505,8 @@ const apiBase = apiBaseProp ?? '';
             // Backend-pushed full state — render directly, no GET.
             streamPayloads.add(update.systems);
             debouncedRenderData(update.systems);
+            // Fresh data: the navbar logo beats (NavBar).
+            window.dispatchEvent(new Event('pulse:data'));
           } else {
             // Legacy signal-only event from an older server — fall back.
             debouncedLoadData();
@@ -5829,14 +5831,8 @@ const apiBase = apiBaseProp ?? '';
   
   
   @keyframes data-row-in {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
   /* Phones, held either way: each service is a card instead of a row of a
@@ -6076,7 +6072,7 @@ const apiBase = apiBaseProp ?? '';
     letter-spacing: inherit;
     color: inherit;
     cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition: background-color 50ms ease, color 50ms ease;
   }
   #system-table-header-row .sort-header:hover,
   #system-table-header-row .sort-header:focus-visible { background-color: rgba(0, 0, 0, 0.045); color: #1d1d20; outline: none; }
@@ -6308,10 +6304,10 @@ const apiBase = apiBaseProp ?? '';
     box-shadow: 0 16px 24px -6px rgba(0, 0, 0, 0.12), 0 6px 10px -6px rgba(0, 0, 0, 0.1);
     pointer-events: none;
     opacity: 0;
-    transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: opacity 0.15s ease-out, transform 0.15s ease-out;
     will-change: transform;
   }
-  .tcping-tooltip.is-placing { transition: opacity 0.2s ease; }
+  .tcping-tooltip.is-placing { transition: opacity 0.15s ease-out; }
   @media (prefers-reduced-motion: reduce) {
     .tcping-tooltip { transition: none; }
   }
@@ -6330,10 +6326,11 @@ const apiBase = apiBaseProp ?? '';
   .tcping-tooltip-value.is-muted { font-weight: 400; color: #595959; }
   html.dark .tcping-tooltip-value.is-muted { color: #ababab; }
 
-  /* A new TCPing chart draws in from left to right: Chart.js renders it
-     once, and a soft-edged mask sweeps across the canvas while it rises
-     6 px into place (the rows' data-row-in easing), instead of Chart.js
-     redrawing all 3 × 1440 points on every frame of its own entrance. */
+  /* A new TCPing chart draws in from left to right, oldest to newest:
+     Chart.js renders it once and a soft-edged mask sweeps across the canvas
+     in 400 ms, instead of Chart.js redrawing all 3 × 1440 points on every
+     frame of its own entrance. Pulse's one flourish on a chart; Beszel's
+     charts fade in (150 ms) and draw without animating. */
   @keyframes tcping-reveal {
     from {
       -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 33.4%, transparent 40%, transparent 100%);
@@ -6341,7 +6338,6 @@ const apiBase = apiBaseProp ?? '';
       -webkit-mask-size: 300% 100%; mask-size: 300% 100%;
       -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
       -webkit-mask-position: 100% 0; mask-position: 100% 0;
-      transform: translateY(6px);
     }
     to {
       -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 33.4%, transparent 40%, transparent 100%);
@@ -6349,10 +6345,9 @@ const apiBase = apiBaseProp ?? '';
       -webkit-mask-size: 300% 100%; mask-size: 300% 100%;
       -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
       -webkit-mask-position: 0 0; mask-position: 0 0;
-      transform: none;
     }
   }
-  [data-tcping-chart].tcping-new:not(.opacity-0) { animation: tcping-reveal 900ms cubic-bezier(0.16, 1, 0.3, 1); }
+  [data-tcping-chart].tcping-new:not(.opacity-0) { animation: tcping-reveal 400ms cubic-bezier(0.16, 1, 0.3, 1); }
   @media (prefers-reduced-motion: reduce) {
     [data-tcping-chart].tcping-new:not(.opacity-0) { animation: none; }
     /* Rows open and close without the slide (beats the inline transition

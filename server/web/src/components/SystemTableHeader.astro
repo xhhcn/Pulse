@@ -6,8 +6,11 @@ import Icon from './Icon.astro';
   <div id="system-table-header-text" class="px-2 sm:px-1">
     <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <p id="all-systems-title" class="text-[1.4rem] sm:text-2xl font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5] leading-none sm:leading-none">All Services</p>
-      <!-- Live summary (SystemTable fills it from the same list as the rows). -->
-      <p id="systems-summary" class="hidden flex flex-wrap items-center gap-1.5 text-xs font-medium leading-none"></p>
+      <!-- Live summary (SystemTable fills it from the same list as the rows).
+           Until then two invisible chips of a usual width hold its place,
+           so nothing below moves when the real ones arrive (on phones they
+           take a line of their own under the title). -->
+      <p id="systems-summary" class="invisible flex flex-wrap items-center gap-1.5 text-xs font-medium leading-none"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1">000 services</span><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1"><span class="h-1.5 w-1.5 rounded-full"></span>000 online</span></p>
     </div>
     <p id="all-systems-desc" class="text-sm text-[#595959] dark:text-[#ababab]">Updated in real time. Click on a service to view information.</p>
   </div>
@@ -103,6 +106,12 @@ import Icon from './Icon.astro';
   html.dark .view-menu {
     border-color: #2c2c2c;
     background-color: #171717;
+  }
+  /* Narrow phones: the summary takes its own line under the title (it
+     wraps there anyway once a third chip comes), so the line its
+     placeholder holds is the line the chips arrive on. */
+  @media (max-width: 479.98px) {
+    #systems-summary { flex-basis: 100%; }
   }
   /* Beszel's dropdown entrance (tw-animate-css): a fade from 95 % and 8 px
      above, 150 ms ease, grown from the corner by its button. */

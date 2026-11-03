@@ -897,8 +897,9 @@ const customCodePlaceholder = [
       content.classList.add('modal-content-exit');
     }
     
-    // Hide modal after animation completes. The handle is kept on the
-    // element so a re-open within the 150 ms window can cancel it.
+    // Hide modal after animation completes (Beszel's 200 ms dialog exit,
+    // global.css). The handle is kept on the element so a re-open within
+    // the window can cancel it.
     modal._closeTimer = setTimeout(() => {
       modal._closeTimer = null;
       modal.classList.add('hidden');
@@ -922,7 +923,7 @@ const customCodePlaceholder = [
       if (callback && typeof callback === 'function') {
         callback();
       }
-    }, 150);
+    }, 200);
   }
 
   // Close the topmost visible modal on Escape.
@@ -2256,9 +2257,9 @@ const customCodePlaceholder = [
       container.innerHTML = data.map((system, index) => renderSystemItem(system, index)).join('');
       currentData = newData;
 
-      // Admin list: no stagger / fade-in on rows. The outer page already
-      // animates `.animate-content`; another per-row entrance reads as a
-      // second “wave” and clashes with SSE refreshes. Rows appear immediately.
+      // Admin list: no stagger / fade-in on rows. A per-row entrance reads
+      // as a “wave” and clashes with SSE refreshes; the page has no entrance
+      // either (as Beszel's). Rows appear immediately.
 
       setupSystemEventHandlers(container);
       setupDragAndDrop(container);
