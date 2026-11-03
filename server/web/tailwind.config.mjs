@@ -4,6 +4,13 @@ export default {
 	darkMode: 'class', // Enable class-based dark mode
 	theme: {
 		extend: {
+			// Beszel's radius (0.8rem): its md (10.8 px) for controls and rows,
+			// which Pulse writes rounded-lg, and its lg (12.8 px) for cards and
+			// dialogs, which Pulse writes rounded-xl.
+			borderRadius: {
+				lg: '0.675rem',
+				xl: '0.8rem',
+			},
 			colors: {
 				surface: '#151515',
 				panel: '#1c1c1c',

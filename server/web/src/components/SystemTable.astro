@@ -11,13 +11,13 @@ const apiBase = apiBaseProp ?? '';
 <div 
   id="monitor-root"
   data-api-base={apiBase}
-  class="glass-card mx-auto max-w-[1500px] rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1c1c1c] bg-white shadow-[0_1px_2px_0_rgba(0,0,0,0.05)] p-2 sm:p-4 md:p-6"
+  class="glass-card mx-auto max-w-[1500px] rounded-[12.8px] border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white shadow-[0_1px_2px_0_rgba(0,0,0,0.05)] px-2 py-5 sm:p-4 md:p-6"
   style="--first-col-width: 160px;"
 >
   <SystemTableHeader />
 
   <!-- 表格容器 - 独立边框 -->
-  <div class="glass-inner rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 dark:bg-[#181818] bg-white overflow-x-auto" style="scrollbar-width: none; -ms-overflow-style: none;">
+  <div class="glass-inner rounded-[10.8px] border border-[#404040]/50 dark:border-[#2c2c2c] border-[#dadada] dark:bg-transparent bg-white overflow-x-auto" style="scrollbar-width: none; -ms-overflow-style: none;">
     <style>
       #monitor-root .overflow-x-auto::-webkit-scrollbar {
         display: none;
@@ -40,7 +40,7 @@ const apiBase = apiBaseProp ?? '';
       <SystemTableHeaderRow />
 
       <!-- 表格主体 -->
-      <div id="systems-body" class="divide-y divide-[#404040]/50 dark:divide-[#404040]/50 divide-[#e5e5e5]">
+      <div id="systems-body" class="divide-y divide-[#dadada]/60 dark:divide-[#2c2c2c]/60">
         <LoadingState />
       </div>
     </div>
@@ -414,7 +414,7 @@ const apiBase = apiBaseProp ?? '';
   // an empty box in the cell.
   const showIconText = (el) => {
     const text = document.createElement('span');
-    text.className = 'text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3] whitespace-nowrap';
+    text.className = 'text-[10px] sm:text-xs text-[#595959] dark:text-[#ababab] whitespace-nowrap';
     text.textContent = el.dataset.fallback || '-';
     el.replaceWith(text);
   };
@@ -709,6 +709,9 @@ const apiBase = apiBaseProp ?? '';
   const ARROW_DOWN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>';
   const ARROW_UP_DOWN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>';
   const CHECK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  // Beszel marks a choice of one (layout, status) with a dot and a field
+  // shown with a check, as Radix's radio and checkbox items.
+  const DOT = '<svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>';
   function updateSortUI() {
     const arrow = currentSort.direction === 'desc' ? ARROW_UP : ARROW_DOWN;
     document.querySelectorAll('.sort-option').forEach((btn) => {
@@ -716,7 +719,7 @@ const apiBase = apiBaseProp ?? '';
       const active = field === currentSort.field;
       btn.setAttribute('aria-checked', active ? 'true' : 'false');
       const mark = btn.querySelector('.sort-indicator');
-      if (mark) mark.innerHTML = active ? (field ? arrow : CHECK) : '';
+      if (mark) mark.innerHTML = active ? (field ? arrow : DOT) : '';
     });
     document.querySelectorAll('.sort-header').forEach((btn) => {
       const active = btn.dataset.sort === currentSort.field;
@@ -746,7 +749,7 @@ const apiBase = apiBaseProp ?? '';
       const active = btn.dataset.status === statusFilter;
       btn.setAttribute('aria-checked', active ? 'true' : 'false');
       const mark = btn.querySelector('.status-indicator');
-      if (mark) mark.innerHTML = active ? CHECK : '';
+      if (mark) mark.innerHTML = active ? DOT : '';
     });
   }
 
@@ -860,7 +863,7 @@ const apiBase = apiBaseProp ?? '';
       const active = btn.dataset.layout === layoutMode;
       btn.setAttribute('aria-checked', active ? 'true' : 'false');
       const mark = btn.querySelector('.layout-indicator');
-      if (mark) mark.innerHTML = active ? CHECK : '';
+      if (mark) mark.innerHTML = active ? DOT : '';
     });
     document.querySelectorAll('.column-option').forEach((btn) => {
       const shown = !hiddenCols.includes(btn.dataset.col);
@@ -1020,22 +1023,25 @@ const apiBase = apiBaseProp ?? '';
 
   // Get color class based on value threshold
   // An offline server keeps its last known values, in grey: red means high
-  // load only. The green and yellow are Beszel's (its green is
-  // hsl(140 50% 48%)); the status dots use the same green.
+  // load only. Pulse's steps (yellow from 70 %, orange from 80 %, red from
+  // 90 %: one more than Beszel's 65/90, for the load getting close) in
+  // Beszel's colours: its green hsl(140 50% 48%) and Tailwind 4's
+  // yellow-500, orange-500 and red-500. The status dots use the same green
+  // and red.
   const OFFLINE_BAR = 'bg-[#a3a3a3] dark:bg-[#525252]';
   const offlineChip = () => `<span class="offline-chip shrink-0 rounded-full px-1.5 text-[10px] font-semibold leading-4 bg-red-500/10 text-red-700 dark:bg-red-400/15 dark:text-red-300" data-translate-detail="offlineChip">${translations.offlineChip[getCurrentLanguage()]}</span>`;
   const getProgressColor = (value, isOffline = false) => {
     if (isOffline) return OFFLINE_BAR;
-    if (value >= 90) return 'bg-red-500';
-    if (value >= 80) return 'bg-orange-500';
-    if (value >= 70) return 'bg-yellow-500';
+    if (value >= 90) return 'bg-[#fb2c36]';
+    if (value >= 80) return 'bg-[#ff6900]';
+    if (value >= 70) return 'bg-[#f0b100]';
     return 'bg-[#3db866]';
   };
 
   const progress = (value, warn = false, isOffline = false, label = '') => `
     <div class="flex items-center gap-0.5 pr-2 sm:pr-3 min-w-0 w-full">${label}
-      <span class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] w-8 sm:w-10 shrink-0">${pctLabel(value)}</span>
-      <div class="progress-track relative h-2.5 sm:h-3 flex-1 min-w-[60px] overflow-hidden rounded-full bg-[#111] dark:bg-[#262626] bg-[#e5e5e5]">
+      <span class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] w-8 sm:w-10 shrink-0">${pctLabel(value)}</span>
+      <div class="progress-track relative h-2.5 sm:h-3 flex-1 min-w-[60px] overflow-hidden rounded-full dark:bg-[#292929] bg-[#f0f0f0]">
         <div class="absolute inset-y-0 left-0 h-full transition-all duration-500 ease-out ${getProgressColor(value, isOffline)}" style="width:${barWidth(value)}"></div>
     </div>
     </div>
@@ -1173,7 +1179,7 @@ const apiBase = apiBaseProp ?? '';
     if (!cell) return '';
     const icon = cell.querySelector('svg');
     const text = cell.querySelector('span[data-translate]');
-    return `<span class="cell-label hidden items-center gap-0.5 shrink-0 text-[#525252] dark:text-[#a3a3a3]">${icon ? icon.outerHTML : ''}${text ? text.outerHTML : ''}</span>`;
+    return `<span class="cell-label hidden items-center gap-0.5 shrink-0 text-[#595959] dark:text-[#ababab]">${icon ? icon.outerHTML : ''}${text ? text.outerHTML : ''}</span>`;
   };
 
   // The tag row at the top of a row's details: built with the row, and again
@@ -1194,7 +1200,7 @@ const apiBase = apiBaseProp ?? '';
                   const totalNetIn = item.total_net_in_bytes || 0;
                   const formattedIn = formatTotalTraffic(totalNetIn);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#f5f5f5]" data-traffic-tag="in" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="in" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
                     </svg>
@@ -1206,7 +1212,7 @@ const apiBase = apiBaseProp ?? '';
                   const totalNetOut = item.total_net_out_bytes || 0;
                   const formattedOut = formatTotalTraffic(totalNetOut);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#f5f5f5]" data-traffic-tag="out" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="out" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>
                     </svg>
@@ -1218,7 +1224,7 @@ const apiBase = apiBaseProp ?? '';
                   const netInSpeed = item.net_in_mb_s || 0;
                   const formattedSpeed = formatTrafficSpeed(netInSpeed);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#f5f5f5]" data-speed-tag="in" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="in" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="m7 13 5 5 5-5"/><path d="m7 6 5 5 5-5"/>
                     </svg>
@@ -1230,7 +1236,7 @@ const apiBase = apiBaseProp ?? '';
                   const netOutSpeed = item.net_out_mb_s || 0;
                   const formattedSpeed = formatTrafficSpeed(netOutSpeed);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#f5f5f5]" data-speed-tag="out" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="out" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="m17 11-5-5-5 5"/><path d="m17 18-5-5-5 5"/>
                     </svg>
@@ -1294,7 +1300,7 @@ const apiBase = apiBaseProp ?? '';
                 
                 // Regular tag
                 return `
-                <span class="inline-flex items-center rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#f5f5f5]">
+                <span class="inline-flex items-center rounded-md bg-[#262626] dark:bg-[#262626] bg-[#d4d4d4] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]">
                   ${safeTag}
                 </span>
               `;
@@ -1314,77 +1320,77 @@ const apiBase = apiBaseProp ?? '';
     <div class="system-row${isOffline ? ' is-offline' : ''}" data-system-id="${safeId}">
       <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
-          <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-red-400' : 'bg-[#3db866]'} shrink-0"></span>
-          <span class="row-name text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>${isOffline ? offlineChip() : ''}
-          <button class="copy-btn text-[#525252] dark:text-[#737373] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
+          <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-[#fb2c36]' : 'bg-[#3db866]'} shrink-0"></span>
+          <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>${isOffline ? offlineChip() : ''}
+          <button class="copy-btn text-[#595959] dark:text-[#ababab] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
     </div>
-        <div class="cell-uptime text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center">${cardLabel(1)}<span class="cell-value">${escapeHtml(item.time || '-')}</span></div>
+        <div class="cell-uptime text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center">${cardLabel(1)}<span class="cell-value">${escapeHtml(item.time || '-')}</span></div>
         <div class="cell-location h-5 flex items-center" title="${escapeHtmlAttr(item.location || '-')}">
           ${item.location ? (() => {
             const flagIcon = countryToFlag(item.location);
             if (flagIcon) {
-              return `<span class="flag-icon block leading-none w-6 h-6 sm:w-8 sm:h-8" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
+              return `<span class="flag-icon block leading-none w-6 h-6" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
             }
             // SECURITY: Escape location to prevent XSS
             const safeLocation = escapeHtml(item.location);
-            return `<span class="text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3]">${safeLocation}</span>`;
-          })() : '<span class="text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3]">-</span>'}
+            return `<span class="text-[10px] sm:text-xs text-[#595959] dark:text-[#ababab]">${safeLocation}</span>`;
+          })() : '<span class="text-[10px] sm:text-xs text-[#595959] dark:text-[#ababab]">-</span>'}
     </div>
         <div class="cell-cpu h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.cpu || 0, false, isOffline, cardLabel(3))}</div>
         <div class="cell-memory h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.memory || 0, false, isOffline, cardLabel(4))}</div>
         <div class="cell-disk h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline, cardLabel(5))}</div>
-        <div class="cell-net text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel(6)}<span class="cell-value">${formatTrafficSpeed((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0))}</span></div>
-        <div class="cell-os h-5 flex items-center justify-center w-full" title="${escapeHtmlAttr(item.os || '-')}">
-          ${item.os_icon ? `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>` : `<span class="text-[10px] sm:text-xs text-[#404040] dark:text-[#a3a3a3]">${escapeHtml(item.os || '-')}</span>`}
+        <div class="cell-net text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel(6)}<span class="cell-value">${formatTrafficSpeed((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0))}</span></div>
+        <div class="cell-os h-5 flex items-center w-full" title="${escapeHtmlAttr(item.os || '-')}">
+          ${item.os_icon ? `<span class="os-icon block leading-none w-5 h-5" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>` : `<span class="text-[10px] sm:text-xs text-[#595959] dark:text-[#ababab]">${escapeHtml(item.os || '-')}</span>`}
     </div>
     </div>
       <!-- Expandable details section -->
-      <div class="system-details hidden border-t border-[#404040]/50 dark:border-[#404040]/50 border-[#e5e5e5] bg-[#1a1a1a] dark:bg-[#1a1a1a] bg-[#f8f8f8] overflow-hidden" data-details-id="${safeId}" style="width: 100%;">
-        <div class="details-content px-3 sm:px-4 md:px-6 py-2 sm:py-3">
+      <div class="system-details hidden border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60 dark:bg-[#171717] bg-[#f8f8f8] overflow-hidden" data-details-id="${safeId}" style="width: 100%;">
+        <div class="details-content px-3 sm:px-4 md:px-6 py-3 sm:py-4">
           <div class="detail-list flex flex-col gap-1.5 sm:gap-2 items-start">
             <!-- Tags (first row) -->
             ${renderTagStrip(item)}
             <!-- CPU Info -->
             <div class="detail-item flex flex-wrap items-baseline gap-1.5 sm:gap-2" style="min-height: 16px; line-height: 16px;">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 20v2m0-20v2m5 16v2m0-20v2M2 12h2m-2 5h2M2 7h2m16 5h2m-2 5h2M20 7h2M7 20v2M7 2v2"/><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="8" height="8" x="8" y="8" rx="1"/></g></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#a3a3a3] shrink-0" data-translate-detail="cpuInformation">CPU:</div>
-              <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] leading-normal" data-detail="cpu_model">${escapeHtml(item.cpu_model || '-')}</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="cpuInformation">CPU:</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] leading-normal" data-detail="cpu_model">${escapeHtml(item.cpu_model || '-')}</div>
             </div>
             <!-- Memory Info -->
             <div class="detail-item flex flex-wrap items-baseline gap-1.5 sm:gap-2">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 12v-2m0 8v-2m4-4v-2m0 8v-2M2 11h1.5M20 18v-2m.5-5H22M4 18v-2m4-4v-2m0 8v-2"/><rect width="20" height="10" x="2" y="6" rx="2"/></g></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#a3a3a3] shrink-0" data-translate-detail="memoryInfo">Memory:</div>
-              <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] leading-normal" data-detail="memory_info">${escapeHtml(item.memory_info || '-')}</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="memoryInfo">Memory:</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] leading-normal" data-detail="memory_info">${escapeHtml(item.memory_info || '-')}</div>
             </div>
             <!-- Swap Info -->
             <div class="detail-item flex flex-wrap items-baseline gap-1.5 sm:gap-2">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3L4 7l4 4M4 7h16m-4 14l4-4l-4-4m4 4H4"/></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#a3a3a3] shrink-0" data-translate-detail="swapPartition">Swap:</div>
-              <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] leading-normal" data-detail="swap_info">${escapeHtml(item.swap_info || '-')}</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="swapPartition">Swap:</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] leading-normal" data-detail="swap_info">${escapeHtml(item.swap_info || '-')}</div>
             </div>
             <!-- Disk Info -->
             <div class="detail-item flex flex-wrap items-baseline gap-1.5 sm:gap-2">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 12H2m3.45-6.89L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11M6 16h.01M10 16h.01"/></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#a3a3a3] shrink-0" data-translate-detail="diskInformation">Disk:</div>
-              <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5] leading-normal" data-detail="disk_info">${escapeHtml(item.disk_info || '-')}</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="diskInformation">Disk:</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] leading-normal" data-detail="disk_info">${escapeHtml(item.disk_info || '-')}</div>
             </div>
             ${showTrafficInfo ? `
             <!-- Real-time Traffic -->
             <div class="detail-item flex items-center gap-1.5 sm:gap-2" data-traffic-row="speed">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#a3a3a3] shrink-0" data-translate-detail="realtimeTraffic">Traffic:</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="realtimeTraffic">Traffic:</div>
               ${(!item.cpu_model && !item.memory_info && !item.disk_info) ? `
-              <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]" data-traffic-placeholder="speed">-</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-placeholder="speed">-</div>
               ` : `
-              <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]" data-traffic-values="speed">
+              <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-values="speed">
                 <span class="flex items-center gap-0.5" data-detail-speed="in">
                   <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12l7 7 7-7"/></svg>
                   <span>${formatTrafficSpeed(item.net_in_mb_s || 0)}</span>
                 </span>
-                <span class="text-[#525252] dark:text-[#737373] mx-1">|</span>
+                <span class="text-[#595959] dark:text-[#ababab] mx-1">|</span>
                 <span class="flex items-center gap-0.5" data-detail-speed="out">
                   <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-blue-600 dark:text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
                   <span>${formatTrafficSpeed(item.net_out_mb_s || 0)}</span>
@@ -1395,16 +1401,16 @@ const apiBase = apiBaseProp ?? '';
             <!-- Total Traffic -->
             <div class="detail-item flex items-center gap-1.5 sm:gap-2" data-traffic-row="total">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#a3a3a3] shrink-0" data-translate-detail="totalTraffic">Total:</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="totalTraffic">Total:</div>
               ${(!item.cpu_model && !item.memory_info && !item.disk_info) ? `
-              <div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]" data-traffic-placeholder="total">-</div>
+              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-placeholder="total">-</div>
               ` : `
-              <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]" data-traffic-values="total">
+              <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-values="total">
                 <span class="flex items-center gap-0.5" data-detail-total="in">
                   <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12l7 7 7-7"/></svg>
                   <span>${formatTotalTraffic(item.total_net_in_bytes || 0)}</span>
                 </span>
-                <span class="text-[#525252] dark:text-[#737373] mx-1">|</span>
+                <span class="text-[#595959] dark:text-[#ababab] mx-1">|</span>
                 <span class="flex items-center gap-0.5" data-detail-total="out">
                   <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-blue-600 dark:text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
                   <span>${formatTotalTraffic(item.total_net_out_bytes || 0)}</span>
@@ -1417,39 +1423,40 @@ const apiBase = apiBaseProp ?? '';
         </div>
       ${showTCPing ? `<!-- TCPing Chart Section -->
       <div class="px-3 sm:px-4 md:px-6 pb-2 sm:pb-3" data-tcping-chart-container="${safeId}" style="width: 100%;">
-        <div class="rounded-xl border border-[#404040]/50 dark:border-[#404040]/50 border-[#d4d4d4]/50 bg-[#151515] dark:bg-[#151515] bg-white p-2 sm:p-3">
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-2">
-            <div class="text-[10px] sm:text-xs font-medium text-[#404040] dark:text-[#a3a3a3]" data-translate-detail="tcpingLatency">TCPing Latency (24h)</div>
+        <div class="rounded-[12.8px] border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#151515] dark:bg-[#1a1a1a] bg-white p-3 sm:p-4">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 sm:gap-4 mb-3">
+            <div class="min-w-0">
+              <div class="text-sm sm:text-base font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate-detail="tcpingLatency">TCPing Latency (24h)</div>
+              <div class="mt-1 text-xs sm:text-[13px] text-[#595959] dark:text-[#ababab]" data-translate-detail="tcpingChartDesc">TCP handshake time of every probe</div>
+            </div>
             <!-- Statistics display -->
             <div class="flex gap-3 sm:gap-4 text-[10px] sm:text-xs" data-tcping-stats="${safeId}">
               <div class="flex items-center gap-1">
-                <span class="text-[#525252] dark:text-[#a3a3a3]" data-translate-detail="avgLatency">Avg:</span>
-                <span class="font-medium text-[#262626] dark:text-[#f5f5f5]" data-tcping-avg="${safeId}">-</span>
+                <span class="text-[#595959] dark:text-[#ababab]" data-translate-detail="avgLatency">Avg:</span>
+                <span class="font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-tcping-avg="${safeId}">-</span>
           </div>
               <div class="flex items-center gap-1">
-                <span class="text-[#525252] dark:text-[#a3a3a3]" data-translate-detail="packetLoss">Loss:</span>
-                <span class="font-medium text-[#262626] dark:text-[#f5f5f5]" data-tcping-loss="${safeId}">-</span>
+                <span class="text-[#595959] dark:text-[#ababab]" data-translate-detail="packetLoss">Loss:</span>
+                <span class="font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-tcping-loss="${safeId}">-</span>
         </div>
         </div>
         </div>
-          <!-- Tabs for different targets -->
-          <div class="flex gap-1 mb-3 flex-wrap" data-tcping-tabs="${safeId}"></div>
           <!-- Chart canvas -->
           <div class="relative" style="height: 200px; width: 100%; min-height: 200px;">
             <!-- Loading state -->
-            <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#151515] bg-white rounded" data-tcping-loading="${safeId}" style="height: 200px; min-height: 200px;">
+            <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#1a1a1a] bg-white rounded" data-tcping-loading="${safeId}" style="height: 200px; min-height: 200px;">
               <div class="flex flex-col items-center gap-2">
                 <div class="w-6 h-6 border-2 border-[#d4d4d4] dark:border-[#404040] border-t-[#525252] dark:border-t-[#d4d4d4] rounded-full animate-spin"></div>
-                <span class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate-detail="loading">Loading...</span>
+                <span class="text-xs text-[#595959] dark:text-[#ababab]" data-translate-detail="loading">Loading...</span>
         </div>
       </div>
             <!-- No data state -->
-            <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#151515] bg-white rounded hidden" data-tcping-no-data="${safeId}" style="height: 200px; min-height: 200px;">
+            <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#1a1a1a] bg-white rounded hidden" data-tcping-no-data="${safeId}" style="height: 200px; min-height: 200px;">
               <div class="flex flex-col items-center gap-2">
-                <svg class="w-8 h-8 text-[#737373] dark:text-[#a3a3a3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-8 h-8 text-[#595959] dark:text-[#ababab]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                 </svg>
-                <span class="text-xs text-[#525252] dark:text-[#a3a3a3]" data-translate-detail="noData">No data</span>
+                <span class="text-xs text-[#595959] dark:text-[#ababab]" data-translate-detail="noData">No data</span>
     </div>
   </div>
             <!-- "Target unreachable from this node" state.
@@ -1459,16 +1466,19 @@ const apiBase = apiBaseProp ?? '';
                  changes. Same absolute / inset-0 / fixed-200px box as the
                  other two overlays, so switching between them never changes
                  the row height. -->
-            <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#151515] bg-white rounded hidden" data-tcping-unreachable="${safeId}" style="height: 200px; min-height: 200px;">
+            <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#1a1a1a] bg-white rounded hidden" data-tcping-unreachable="${safeId}" style="height: 200px; min-height: 200px;">
               <div class="flex flex-col items-center gap-2 px-4 text-center">
-                <svg class="w-8 h-8 text-[#737373] dark:text-[#a3a3a3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-8 h-8 text-[#595959] dark:text-[#ababab]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636L5.636 18.364M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
-                <span class="text-xs text-[#525252] dark:text-[#a3a3a3] max-w-[18rem] leading-relaxed" data-translate-detail="tcpingUnreachable">This node cannot reach this target (no IPv4/IPv6 route)</span>
+                <span class="text-xs text-[#595959] dark:text-[#ababab] max-w-[18rem] leading-relaxed" data-translate-detail="tcpingUnreachable">This node cannot reach this target (no IPv4/IPv6 route)</span>
     </div>
   </div>
             <canvas data-tcping-chart="${safeId}" style="width: 100%; height: 200px; min-height: 200px;" class="opacity-0 transition-opacity duration-300" data-tcping-canvas="${safeId}"></canvas>
 </div>
+          <!-- The legend under the chart, as Beszel's: a colour square and the
+               target per entry. Each entry also picks its target (again: all). -->
+          <div class="flex items-center justify-center gap-x-1 gap-y-1 flex-wrap pt-2" data-tcping-tabs="${safeId}"></div>
       </div>` : ''}
     </div>
   </div>
@@ -1491,6 +1501,7 @@ const apiBase = apiBaseProp ?? '';
     'realtimeTraffic': { en: 'Traffic:', zh: '流量:' },
     'totalTraffic': { en: 'Total:', zh: '总量:' },
     'tcpingLatency': { en: 'TCPing Latency (24h)', zh: 'TCPing 延迟 (24 小时)' },
+    'tcpingChartDesc': { en: 'TCP handshake time of every probe', zh: '每次探测的 TCP 握手时间' },
     'avgLatency': { en: 'Avg:', zh: '平均:' },
     'packetLoss': { en: 'Loss:', zh: '丢包:' },
     'loading': { en: 'Loading...', zh: '加载中...' },
@@ -1509,7 +1520,7 @@ const apiBase = apiBaseProp ?? '';
     'tcpingTimeout': { en: 'Timeout', zh: '超时' },
     // Offline row chip and the summary beside the title.
     'offlineChip': { en: 'Offline', zh: '离线' },
-    'summaryTotal': { en: 'servers', zh: '台' },
+    'summaryTotal': { en: 'services', zh: '个服务' },
     'summaryOnline': { en: 'online', zh: '在线' },
     'summaryOffline': { en: 'offline', zh: '离线' },
     'connectionLost': { en: 'Connection lost, reconnecting…', zh: '连接中断，正在重连…' },
@@ -1583,18 +1594,21 @@ const apiBase = apiBaseProp ?? '';
     updateChartTooltipStyles(theme);
   });
   
-  // Axis labels: #a3a3a3 was 2.5:1 on the light chart card.
+  // Beszel's chart colours: axis text in its muted-foreground, horizontal
+  // grid lines in its border at half strength, the cursor in its border.
   function axisLabelColor(isDarkMode) {
-    return isDarkMode ? '#a0a2a6' : '#767370';
+    return isDarkMode ? '#a7aaae' : '#5c5957';
   }
-  // Horizontal grid hairlines, quieter than the lines in either theme (one
-  // rgba(64, 64, 64, .3) for both was mid-grey on the light card).
   function gridLineColor(isDarkMode) {
-    return isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
+    return isDarkMode ? 'rgba(42, 43, 45, 0.5)' : 'rgba(221, 218, 215, 0.5)';
+  }
+  function cursorLineColor(isDarkMode) {
+    return isDarkMode ? '#2a2b2d' : '#dddad7';
   }
 
   // Time-axis ticks on round steps (5 min … 12 h, counted from local
-  // midnight), as many as the axis width holds, at most 6. Chart.js's own
+  // midnight), as many as the axis width holds, at most 12 (Beszel's 24 h
+  // axis has one every 2 hours). Chart.js's own
   // pick thins its unit ticks by the factors of their count: 25 hourly ticks
   // gave a label every 5 hours on a phone (04:00, 09:00, 14:00…), 295 minute
   // ticks one every 59 minutes. Spans too short for two round ticks keep
@@ -1603,7 +1617,7 @@ const apiBase = apiBaseProp ?? '';
   function roundTimeTicks(scale) {
     const { min, max } = scale;
     if (!(max > min)) return;
-    const fit = Math.max(2, Math.min(6, Math.floor(scale.width / 64)));
+    const fit = Math.max(2, Math.min(12, Math.floor(scale.width / 56)));
     const spanMin = (max - min) / 60000;
     const step = TIME_TICK_STEPS_MIN.find((s) => Math.floor(spanMin / s) + 1 <= fit);
     if (!step) return;
@@ -1643,11 +1657,9 @@ const apiBase = apiBaseProp ?? '';
           if (chart.options.scales.y && chart.options.scales.y.ticks) chart.options.scales.y.ticks.color = axisLabelColor(isDarkMode);
           if (chart.options.scales.y && chart.options.scales.y.grid) chart.options.scales.y.grid.color = gridLineColor(isDarkMode);
         }
-        // Each theme has its own line colours; the grey of the lines that
-        // are not selected stays.
+        // Each theme has its own line colours (faded ones included).
         chart.data.datasets.forEach((dataset, index) => {
-          if (dataset.borderColor === TCPING_UNSELECTED_COLOR) return;
-          dataset.borderColor = tcpingLineColor(dataset.targetIndex !== undefined ? dataset.targetIndex : index, isDarkMode);
+          dataset.borderColor = tcpingRoleColor(dataset.targetIndex !== undefined ? dataset.targetIndex : index, dataset.role || 'all', isDarkMode);
           dataset.backgroundColor = dataset.borderColor;
         });
 
@@ -1699,13 +1711,13 @@ const apiBase = apiBaseProp ?? '';
       const [titleKey, hintKey] = emptyMessageKeys[currentFilter.trim() ? 1 : 0];
       body.innerHTML = `
         <div class="flex flex-col items-center justify-center py-12 text-center">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-[#737373] dark:text-[#a3a3a3] mb-3">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-[#595959] dark:text-[#ababab] mb-3">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
             <line x1="8" y1="21" x2="16" y2="21"/>
             <line x1="12" y1="17" x2="12" y2="21"/>
           </svg>
-          <p class="text-sm font-medium text-[#525252] dark:text-[#a3a3a3]">${translations[titleKey][lang]}</p>
-          <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-1">${translations[hintKey][lang]}</p>
+          <p class="text-sm font-medium text-[#595959] dark:text-[#ababab]">${translations[titleKey][lang]}</p>
+          <p class="text-xs text-[#595959] dark:text-[#ababab] mt-1">${translations[hintKey][lang]}</p>
     </div>
   `;
     }
@@ -1878,7 +1890,7 @@ const apiBase = apiBaseProp ?? '';
         if (statusDot) {
           // Offline/paused state: red, Online state: green
           // Preserve responsive classes: h-1.5 w-1.5 sm:h-2 sm:w-2
-          statusDot.className = `h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${item.alert ? 'bg-red-400' : 'bg-[#3db866]'} shrink-0`;
+          statusDot.className = `h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${item.alert ? 'bg-[#fb2c36]' : 'bg-[#3db866]'} shrink-0`;
         }
         const rowEl = systemCell.closest('.system-row');
         if (rowEl) rowEl.classList.toggle('is-offline', !!item.alert);
@@ -1928,17 +1940,17 @@ const apiBase = apiBaseProp ?? '';
         if (item.location) {
           const flagIcon = countryToFlag(item.location);
           if (flagIcon) {
-            locationCell.innerHTML = `<span class="flag-icon block leading-none w-6 h-6 sm:w-8 sm:h-8" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
+            locationCell.innerHTML = `<span class="flag-icon block leading-none w-6 h-6" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
             locationCell.title = item.location; // Set title for tooltip
             setTimeout(() => loadFlagIcons(), 0);
           } else {
             // SECURITY: Escape HTML to prevent XSS (same helper as renderRow)
             const escapedLocation = escapeHtml(item.location || '');
-            locationCell.innerHTML = `<span class="text-xs text-[#404040] dark:text-[#a3a3a3]">${escapedLocation}</span>`;
+            locationCell.innerHTML = `<span class="text-xs text-[#595959] dark:text-[#ababab]">${escapedLocation}</span>`;
             locationCell.title = item.location || '';
           }
         } else {
-          locationCell.innerHTML = '<span class="text-xs text-[#404040] dark:text-[#a3a3a3]">-</span>';
+          locationCell.innerHTML = '<span class="text-xs text-[#595959] dark:text-[#ababab]">-</span>';
           locationCell.title = '-';
         }
       }
@@ -1954,13 +1966,7 @@ const apiBase = apiBaseProp ?? '';
     const shownChanged = (a, b) => pctLabel(a) !== pctLabel(b) || barWidth(a) !== barWidth(b);
     const cpuChanged = shownChanged(oldItemNormalized.cpu, newItemNormalized.cpu);
     // Helper function for dynamic color updates (same logic as getProgressColor)
-    const getDynamicProgressColor = (value, isOffline = false) => {
-      if (isOffline) return OFFLINE_BAR;
-      if (value >= 90) return 'bg-red-500';
-      if (value >= 80) return 'bg-orange-500';
-      if (value >= 70) return 'bg-yellow-500';
-      return 'bg-[#3db866]';
-    };
+    const getDynamicProgressColor = getProgressColor;
     
     const cpuStatusChanged = oldItemNormalized.alert !== newItemNormalized.alert;
     if (shouldUpdateAll || cpuChanged || cpuStatusChanged) {
@@ -2047,12 +2053,12 @@ const apiBase = apiBaseProp ?? '';
       const osCell = cells[7];
       if (osCell) {
         if (item.os_icon) {
-          osCell.innerHTML = `<span class="os-icon block leading-none w-5 h-5 sm:w-[26px] sm:h-[26px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>`;
+          osCell.innerHTML = `<span class="os-icon block leading-none w-5 h-5" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>`;
           setTimeout(() => loadOSIcons(), 0);
         } else {
           // SECURITY: Escape HTML to prevent XSS (same helper as renderRow)
           const escapedOS = escapeHtml(item.os || '-');
-          osCell.innerHTML = `<span class="text-xs text-[#404040] dark:text-[#a3a3a3]">${escapedOS}</span>`;
+          osCell.innerHTML = `<span class="text-xs text-[#595959] dark:text-[#ababab]">${escapedOS}</span>`;
         }
       }
     }
@@ -2117,12 +2123,12 @@ const apiBase = apiBaseProp ?? '';
             if (hasData && speedPlaceholder) {
               // Transition from placeholder to values
               const valuesHtml = `
-                <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]" data-traffic-values="speed">
+                <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-values="speed">
                   <span class="flex items-center gap-0.5" data-detail-speed="in">
                     <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12l7 7 7-7"/></svg>
                     <span>${formatTrafficSpeed(item.net_in_mb_s || 0)}</span>
                   </span>
-                  <span class="text-[#525252] dark:text-[#737373] mx-1">|</span>
+                  <span class="text-[#595959] dark:text-[#ababab] mx-1">|</span>
                   <span class="flex items-center gap-0.5" data-detail-speed="out">
                     <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-blue-600 dark:text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
                     <span>${formatTrafficSpeed(item.net_out_mb_s || 0)}</span>
@@ -2133,7 +2139,7 @@ const apiBase = apiBaseProp ?? '';
             } else if (!hasData && speedValues) {
               // Transition from values to placeholder
               speedValues.remove();
-              speedRow.insertAdjacentHTML('beforeend', '<div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]" data-traffic-placeholder="speed">-</div>');
+              speedRow.insertAdjacentHTML('beforeend', '<div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-placeholder="speed">-</div>');
             } else if (hasData && speedValues) {
               // Update existing values
               const speedInEl = speedValues.querySelector('[data-detail-speed="in"] span:last-child');
@@ -2158,12 +2164,12 @@ const apiBase = apiBaseProp ?? '';
             if (hasData && totalPlaceholder) {
               // Transition from placeholder to values
               const valuesHtml = `
-                <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]" data-traffic-values="total">
+                <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-values="total">
                   <span class="flex items-center gap-0.5" data-detail-total="in">
                     <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12l7 7 7-7"/></svg>
                     <span>${formatTotalTraffic(item.total_net_in_bytes || 0)}</span>
                   </span>
-                  <span class="text-[#525252] dark:text-[#737373] mx-1">|</span>
+                  <span class="text-[#595959] dark:text-[#ababab] mx-1">|</span>
                   <span class="flex items-center gap-0.5" data-detail-total="out">
                     <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-blue-600 dark:text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
                     <span>${formatTotalTraffic(item.total_net_out_bytes || 0)}</span>
@@ -2174,7 +2180,7 @@ const apiBase = apiBaseProp ?? '';
             } else if (!hasData && totalValues) {
               // Transition from values to placeholder
               totalValues.remove();
-              totalRow.insertAdjacentHTML('beforeend', '<div class="text-[10px] sm:text-xs font-medium text-[#262626] dark:text-[#f5f5f5]" data-traffic-placeholder="total">-</div>');
+              totalRow.insertAdjacentHTML('beforeend', '<div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-placeholder="total">-</div>');
             } else if (hasData && totalValues) {
               // Update existing values
               const totalInEl = totalValues.querySelector('[data-detail-total="in"] span:last-child');
@@ -2685,21 +2691,21 @@ const apiBase = apiBaseProp ?? '';
     '#db2777', // pink-600
     '#6366f1', // indigo-500
   ];
-  const TCPING_UNSELECTED_COLOR = 'rgba(163, 163, 163, 0.5)';
   const tcpingLineColor = (index, dark = document.documentElement.classList.contains('dark')) => {
     const colors = dark ? TCPING_LINE_COLORS_DARK : TCPING_LINE_COLORS_LIGHT;
     return colors[index % colors.length];
   };
-  // Line width by role ('all' targets shown, the 'selected' one, the grey
-  // 'other' ones), as a scriptable option: on a chart narrower than 600 px
-  // several 2 px lines ran together, so they are drawn thinner there.
-  function tcpingLineWidth(role) {
-    return (ctx) => {
-      const narrow = ctx.chart.width < 600 && ctx.chart.data.datasets.length > 1;
-      if (role === 'other') return narrow ? 1 : 1.5;
-      if (role === 'selected') return narrow ? 1.5 : 2;
-      return narrow ? 1.25 : 2;
-    };
+  // A line by its role: every target shown ('all'), the 'selected' one, or
+  // an 'other' one while a target is selected. The others keep their own
+  // colour, faded, as Beszel fades the sensors its chart filter leaves out
+  // (stroke opacity 0.1), so each stays recognisable behind the selected
+  // one, which is drawn on top. Every line is Beszel's 1.5 px.
+  const TCPING_LINE_WIDTH = 1.5;
+  function tcpingRoleColor(index, role, dark, alpha = 0.15) {
+    const color = tcpingLineColor(index, dark);
+    if (role !== 'other') return color;
+    const n = parseInt(color.slice(1), 16);
+    return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
   }
 
   // The chart's tooltip as HTML, like Beszel's: a card with the time on top
@@ -2737,8 +2743,10 @@ const apiBase = apiBaseProp ?? '';
       listed.add(key);
       const value = item.parsed.y;
       const timedOut = value === null || value === undefined;
-      rows.push({ color: dataset.borderColor, name: dataset.label || '', value: timedOut ? translations.tcpingTimeout[lang] : `${value.toFixed(2)} ms`, muted: timedOut });
+      rows.push({ color: dataset.borderColor, name: dataset.label || '', y: timedOut ? -1 : value, value: timedOut ? translations.tcpingTimeout[lang] : `${value.toFixed(2)} ms`, muted: timedOut });
     });
+    // Highest first, as Beszel sorts its temperature tooltip.
+    rows.sort((a, b) => b.y - a.y);
     (tooltip.footer || []).forEach((line) => {
       const at = line.lastIndexOf(': ');
       if (at > 0) rows.push({ color: null, name: line.slice(0, at), value: line.slice(at + 2), muted: true });
@@ -2794,9 +2802,7 @@ const apiBase = apiBaseProp ?? '';
     tabsContainer.querySelectorAll('button').forEach((tab, index) => {
       const dot = tab.querySelector('[data-tcping-dot]');
       if (!dot) return;
-      dot.style.backgroundColor = selectedTarget === null || tab.dataset.target === selectedTarget
-        ? tcpingLineColor(index, dark)
-        : TCPING_UNSELECTED_COLOR;
+      dot.style.backgroundColor = tcpingRoleColor(index, selectedTarget === null || tab.dataset.target === selectedTarget ? 'all' : 'other', dark, 0.35);
     });
   }
 
@@ -2804,19 +2810,19 @@ const apiBase = apiBaseProp ?? '';
   // reported this target as skipped.
   //
   // A skipped tab is muted and carries the translated "cannot reach" string
-  // as its tooltip, so the state is legible from the tab strip without having
+  // as its tooltip, so the state is legible from the legend without having
   // to open the tab. The mute is COLOUR ONLY — no added glyphs, no italics,
-  // no border — because the strip is `flex-wrap` directly above the chart: any
-  // change to a tab's measured width could push it onto a second line and
-  // shift every row below. A target flipping between skipped and measured
-  // therefore repaints in place and never moves anything.
-  // Every tab has a hairline border, so the strip reads as a row of
-  // controls rather than a static legend; the selected one gets a light tint
-  // and a firmer border. Same 1 px border in every state: the box never
-  // changes size.
-  const TCPING_TAB_BASE = 'px-3 py-1 text-xs font-medium rounded-md border transition-colors';
-  const TCPING_TAB_ACTIVE = 'border-black/20 dark:border-white/20 bg-black/[0.06] dark:bg-white/10 text-[#151515] dark:text-[#f5f5f5]';
-  const TCPING_TAB_INACTIVE = 'border-black/10 dark:border-white/10 bg-transparent text-[#525252] dark:text-[#a3a3a3] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]';
+  // no weight — because the legend is `flex-wrap` under the chart: any
+  // change to an entry's measured width could push it onto a second line and
+  // change the height of the card. A target flipping between skipped and
+  // measured therefore repaints in place and never moves anything.
+  // The entries look like Beszel's legend (a square and the muted name, no
+  // border); the selected one gets a light tint and the text colour, and
+  // the pointer a tint on hover, so they read as controls. Every state has
+  // the same box.
+  const TCPING_TAB_BASE = 'inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded-md cursor-pointer transition-colors';
+  const TCPING_TAB_ACTIVE = 'bg-black/[0.06] dark:bg-white/10 text-[#151515] dark:text-[#f5f5f5]';
+  const TCPING_TAB_INACTIVE = 'bg-transparent text-[#595959] dark:text-[#ababab] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]';
   // A skipped target is de-emphasised with an explicit muted grey rather than
   // `opacity-50`. Blending the normal colours to 50% measures 2.38:1 in light
   // mode (#525252 over the card's #ffffff) and 2.73:1 in dark (#a3a3a3 over
@@ -2831,8 +2837,8 @@ const apiBase = apiBaseProp ?? '';
   // appended after them — two competing `text-*` utilities in one class list
   // resolve by stylesheet order, not by the order they appear in the
   // attribute, so layering would be a coin flip.
-  const TCPING_TAB_SKIPPED_ACTIVE = 'border-black/20 dark:border-white/20 bg-black/[0.06] dark:bg-white/10 text-[#333333] dark:text-[#9a9a9a]';
-  const TCPING_TAB_SKIPPED_INACTIVE = 'border-black/10 dark:border-white/10 bg-transparent text-[#6b6b6b] dark:text-[#8a8a8a] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]';
+  const TCPING_TAB_SKIPPED_ACTIVE = 'bg-black/[0.06] dark:bg-white/10 text-[#333333] dark:text-[#9a9a9a]';
+  const TCPING_TAB_SKIPPED_INACTIVE = 'bg-transparent text-[#6b6b6b] dark:text-[#8a8a8a] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]';
 
   function applyTCPingTabAppearance(tab, isActive, isSkipped) {
     const variant = isSkipped
@@ -2908,7 +2914,7 @@ const apiBase = apiBaseProp ?? '';
       const dot = document.createElement('span');
       dot.setAttribute('data-tcping-dot', '');
       dot.setAttribute('aria-hidden', 'true');
-      dot.className = 'inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle';
+      dot.className = 'inline-block w-2 h-2 shrink-0 rounded-[2px]';
       tab.append(dot, document.createTextNode(target.name || target.address));
       tab.dataset.target = target.address;
       tab.dataset.targetName = target.name || target.address;
@@ -3261,28 +3267,31 @@ const apiBase = apiBaseProp ?? '';
         if (minTime === null || dsMin < minTime) minTime = dsMin;
         if (maxTime === null || dsMax > maxTime) maxTime = dsMax;
       }
-    
-      // Determine color based on whether a target is selected
-      // If no target is selected (selectedTarget === null), all lines have distinct colors
-      // If a target is selected, only that target is colored, others are gray
+
+      // The selected target on top in its colour, the others faded; with
+      // none selected every line in its own colour.
       const isSelected = selectedTarget !== null && targetConfig.address === selectedTarget;
       const role = selectedTarget === null ? 'all' : (isSelected ? 'selected' : 'other');
-      const borderColor = role === 'other' ? TCPING_UNSELECTED_COLOR : tcpingLineColor(index);
-      
+      const borderColor = tcpingRoleColor(index, role);
+
       datasets.push({
         // The tooltip adds the unit to each value ("CU: 231.67 ms").
         label: targetConfig.name || targetConfig.address,
         data: chartData,
+        role,
+        order: role === 'selected' ? 0 : 1,
         borderColor: borderColor,
-        // Not filled: this is the tooltip's colour dot.
+        // Not filled: the colour of the dot under the pointer.
         backgroundColor: borderColor,
-        borderWidth: tcpingLineWidth(role),
+        borderWidth: TCPING_LINE_WIDTH,
         fill: false,
         tension: 0.1,
         spanGaps: true,
         segment: tcpingGapSegment(chartData),
         pointRadius: 0,
-        pointHoverRadius: 0,
+        // Beszel's active dot on the probes under the pointer.
+        pointHoverRadius: 4,
+        pointHoverBorderWidth: 0,
         pointHitRadius: 5,
         showLine: true,
         targetAddress: targetConfig.address, // Store target address for color updates
@@ -3717,8 +3726,7 @@ const apiBase = apiBaseProp ?? '';
             
             // A solid hairline, quieter than the lines (a dashed one read as
             // a threshold), as Beszel's chart cursor.
-            const currentIsDarkMode = document.documentElement.classList.contains('dark');
-            const crosshairColor = currentIsDarkMode ? 'rgba(163, 163, 163, 0.5)' : 'rgba(115, 115, 115, 0.45)';
+            const crosshairColor = cursorLineColor(document.documentElement.classList.contains('dark'));
             
             // Save context state
             ctx.save();
@@ -3938,33 +3946,46 @@ const apiBase = apiBaseProp ?? '';
             ticks: {
               color: axisLabelColor(isDarkMode),
               font: {
-                size: 10
+                size: 12
               },
               maxRotation: 0,
               minRotation: 0,
-              maxTicksLimit: 6, // Show up to 6 ticks
+              maxTicksLimit: 12,
               autoSkip: true,
-              autoSkipPadding: 30
+              autoSkipPadding: 12
             },
+            // No vertical grid lines; a short mark under each time, as
+            // recharts draws them in Beszel's charts (6 px, #666 in either
+            // theme), and no axis line.
             grid: {
-              display: false, // Hide vertical grid lines (only show horizontal)
-              drawOnChartArea: false
+              display: true,
+              drawOnChartArea: false,
+              drawTicks: true,
+              tickLength: 6,
+              tickColor: '#666666',
+              tickWidth: 1
+            },
+            border: {
+              display: false
             },
             bounds: 'ticks', // Use 'ticks' instead of 'data' to ensure proper tooltip positioning
             afterBuildTicks: roundTimeTicks
           },
+          // Fitted to the lines (Beszel's ["auto", "auto"] domain for
+          // response times), never below 0 ms.
           y: {
-            beginAtZero: true,
+            beginAtZero: false,
+            grace: '5%',
+            afterDataLimits: (scale) => { if (scale.min < 0) scale.min = 0; },
             ticks: {
               color: axisLabelColor(isDarkMode),
               font: {
-                size: 10
+                size: 12
               },
               callback: function(value) {
                 return value + ' ms';
               },
-              // Make grid lines sparser by limiting number of ticks
-              maxTicksLimit: 6 // Limit to 6 ticks to make grid lines sparser
+              maxTicksLimit: 5
             },
             grid: {
               color: gridLineColor(isDarkMode),
@@ -4211,14 +4232,15 @@ const apiBase = apiBaseProp ?? '';
     const config = tcpingConfigs.get(systemId);
     if (!config || !config.targets) return;
     
-    // Every line in its own colour, or the selected one in its colour and
-    // the others grey.
+    // Every line in its own colour, or the selected one on top and the
+    // others faded.
     chart.data.datasets.forEach((dataset, index) => {
       const targetIndex = dataset.targetIndex !== undefined ? dataset.targetIndex : index;
       const role = selectedTarget === null ? 'all' : (dataset.targetAddress === selectedTarget ? 'selected' : 'other');
-      dataset.borderColor = role === 'other' ? TCPING_UNSELECTED_COLOR : tcpingLineColor(targetIndex);
+      dataset.role = role;
+      dataset.order = role === 'selected' ? 0 : 1;
+      dataset.borderColor = tcpingRoleColor(targetIndex, role);
       dataset.backgroundColor = dataset.borderColor;
-      dataset.borderWidth = tcpingLineWidth(role);
     });
     
     chart.update('none');
@@ -5021,15 +5043,15 @@ const apiBase = apiBaseProp ?? '';
     const lang = getCurrentLanguage();
     const { total, offline } = systemsSummary;
     const chip = 'inline-flex items-center gap-1.5 rounded-full px-2 py-1';
-    const quiet = `${chip} bg-black/5 dark:bg-white/[0.06] text-[#404040] dark:text-[#d4d4d4]`;
+    const quiet = `${chip} bg-black/5 dark:bg-white/[0.06] text-[#595959] dark:text-[#d4d4d4]`;
     const dot = (c) => `<span class="h-1.5 w-1.5 rounded-full ${c}"></span>`;
     let html = `<span class="${quiet}">${total} ${translations.summaryTotal[lang]}</span>`
       + `<span class="${quiet}">${dot('bg-[#3db866]')}${total - offline} ${translations.summaryOnline[lang]}</span>`;
     if (offline > 0) {
-      html += `<span class="${chip} bg-red-500/10 dark:bg-red-400/15 text-red-700 dark:text-red-300">${dot('bg-red-400')}${offline} ${translations.summaryOffline[lang]}</span>`;
+      html += `<span class="${chip} bg-red-500/10 dark:bg-red-400/15 text-red-700 dark:text-red-300">${dot('bg-[#fb2c36]')}${offline} ${translations.summaryOffline[lang]}</span>`;
     }
     if (connectionLost) {
-      html += `<span class="${chip} bg-black/5 dark:bg-white/[0.06] text-[#525252] dark:text-[#a3a3a3]" role="status">${dot('bg-[#a3a3a3]')}${translations.connectionLost[lang]}</span>`;
+      html += `<span class="${chip} bg-black/5 dark:bg-white/[0.06] text-[#595959] dark:text-[#ababab]" role="status">${dot('bg-[#a3a3a3]')}${translations.connectionLost[lang]}</span>`;
     }
     if (el.innerHTML !== html) el.innerHTML = html;
     el.classList.toggle('hidden', total === 0);
@@ -5065,7 +5087,7 @@ const apiBase = apiBaseProp ?? '';
             loadingIndicator.innerHTML = `
               <div class="text-center">
                 <p class="text-sm text-red-500 dark:text-red-400">Failed to render data</p>
-                <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-1">${escapeHtml(err.message)}</p>
+                <p class="text-xs text-[#595959] dark:text-[#ababab] mt-1">${escapeHtml(err.message)}</p>
               </div>
             `;
           }
@@ -5214,7 +5236,7 @@ const apiBase = apiBaseProp ?? '';
         loadingIndicator.innerHTML = `
           <div class="text-center">
             <p class="text-sm text-red-500 dark:text-red-400">Failed to connect to backend</p>
-            <p class="text-xs text-[#737373] dark:text-[#a3a3a3] mt-1">${escapeHtml(err.message)}</p>
+            <p class="text-xs text-[#595959] dark:text-[#ababab] mt-1">${escapeHtml(err.message)}</p>
           </div>
         `;
       }
@@ -5772,6 +5794,8 @@ const apiBase = apiBaseProp ?? '';
     }
     #monitor-root .cell-location { grid-area: loc; justify-self: end; }
     #monitor-root .cell-os { grid-area: os; justify-self: end; width: auto; }
+    /* The flag beside the OS logo (8 px apart), not a column away. */
+    #monitor-root:not(.hide-col-os) .cell-location { grid-area: os; margin-right: 28px; }
     #monitor-root .cell-cpu { grid-area: cpu; }
     #monitor-root .cell-memory { grid-area: mem; }
     #monitor-root .cell-disk { grid-area: disk; }
@@ -5798,6 +5822,13 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .cell-label { display: inline-flex; font-size: 11px; font-weight: 400; }
     #monitor-root .cell-label svg { width: 12px; height: 12px; }
     #monitor-root .system-details .details-content { padding-left: 14px; padding-right: 14px; }
+  }
+  /* Under 390 px "Memory 36.5%" no longer fits its third of a card and the
+     value dropped below the label, out of line with CPU and disk: there
+     the three meters keep their icons and give up the words (Chinese
+     labels fit). */
+  @media (max-width: 389.98px) {
+    html:lang(en) #monitor-root .system-row :is(.cell-cpu, .cell-memory, .cell-disk) .cell-label > span { display: none; }
   }
 
   /* Optional sticky column header (自定义设置 → 表头吸顶, off by default):
@@ -5886,13 +5917,17 @@ const apiBase = apiBaseProp ?? '';
   }
 
   /* From 1280 px the table reads like Beszel's: 14 px text and 16 px header
-     icons, an 8 px status dot 8 px from the name, 16 px above and below each
-     row (53 px rows) and 14 px bars after a 48 px percentage. Narrower tables
-     keep 12 px text and 12 px bars, which their columns are sized for (the
-     tiers above); calculateServerNameColumnWidth measures the names at the
-     same sizes. */
+     icons, an 8 px status dot 8 px from the name, 56 px rows (Beszel's for
+     more than ten systems), 14 px bars after a 48 px percentage, and the
+     values in its regular weight with tabular, slightly tightened figures
+     (the name stays medium). The header is Beszel's 48 px band of 36 px
+     ghost buttons. Narrower
+     tables keep 12 px text and 12 px bars, which their columns are sized
+     for (the tiers above); calculateServerNameColumnWidth measures the
+     names at the same sizes. */
   @media (min-width: 1280px) {
-    #monitor-root .system-row > [data-system-id] { padding-top: 16px; padding-bottom: 16px; }
+    #monitor-root .system-row > [data-system-id] { padding-top: 18px; padding-bottom: 18px; }
+    #monitor-root .system-row :is(.cell-uptime, .cell-net, .cell-cpu span.font-medium, .cell-memory span.font-medium, .cell-disk span.font-medium) { font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; }
     #monitor-root .system-row :is(.row-name, .cell-uptime, .cell-net, .cell-location > span:not(.flag-icon), .cell-os > span:not(.os-icon)),
     #monitor-root .system-row :is(.cell-cpu, .cell-memory, .cell-disk) span.font-medium { font-size: 14px; line-height: 20px; }
     #monitor-root .system-row .cell-name { gap: 8px; }
@@ -5900,17 +5935,21 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .system-row :is(.cell-cpu, .cell-memory, .cell-disk) > div { gap: 8px; }
     #monitor-root .system-row :is(.cell-cpu, .cell-memory, .cell-disk) span.font-medium { width: 48px; }
     #monitor-root .system-row .progress-track { height: 14px; }
-    #monitor-root #system-table-header-row { padding-top: 15px; padding-bottom: 15px; font-size: 14px; letter-spacing: normal; }
-    #monitor-root #system-table-header-row .sort-header { gap: 8px; }
+    #monitor-root #system-table-header-row { padding-top: 5px; padding-bottom: 5px; font-size: 14px; letter-spacing: normal; }
+    #monitor-root #system-table-header-row > div { height: 36px; }
+    #monitor-root #system-table-header-row .sort-header { gap: 8px; height: 36px; margin: 0 -12px; padding: 0 12px; border-radius: 10.8px; }
     #monitor-root #system-table-header-row svg { width: 16px; height: 16px; }
-    #monitor-root #system-table-header-row .sort-header-arrow svg { width: 14px; height: 14px; }
   }
 
   /* Column names sort the table, as in Beszel: a soft pill on hover, the
      sorted column's highlighted with its arrow (pointing to where the larger
      values go), ⇅ on the others under the pointer. The negative margin keeps
-     the header where it was. From 1280 px the arrow follows the name; below,
-     where the columns are tight, it takes the place of the column's icon. */
+     the header where it was. Unlike Beszel, whose table scrolls sideways and
+     shows ⇅ after every name, the arrow takes the place of the column's
+     icon, at every width: Pulse's columns are sized to fit the table without
+     scrolling, and a third glyph would push the narrow ones (uptime,
+     location) into their neighbours and change a header's width as the
+     pointer passes. */
   #system-table-header-row .sort-header {
     display: inline-flex;
     align-items: center;
@@ -5926,18 +5965,16 @@ const apiBase = apiBaseProp ?? '';
     transition: background-color 0.15s ease, color 0.15s ease;
   }
   #system-table-header-row .sort-header:hover,
-  #system-table-header-row .sort-header:focus-visible { background-color: rgba(0, 0, 0, 0.045); color: #262626; outline: none; }
+  #system-table-header-row .sort-header:focus-visible { background-color: rgba(0, 0, 0, 0.045); color: #1d1d20; outline: none; }
   html.dark #system-table-header-row .sort-header:hover,
   html.dark #system-table-header-row .sort-header:focus-visible { background-color: rgba(255, 255, 255, 0.06); color: #f5f5f5; }
-  #system-table-header-row .sort-header[data-active="true"] { background-color: rgba(0, 0, 0, 0.06); color: #262626; }
+  #system-table-header-row .sort-header[data-active="true"] { background-color: rgba(0, 0, 0, 0.06); color: #1d1d20; }
   html.dark #system-table-header-row .sort-header[data-active="true"] { background-color: rgba(255, 255, 255, 0.08); color: #f5f5f5; }
   #system-table-header-row .sort-header-arrow { display: none; flex: none; }
-  #system-table-header-row .sort-header-arrow svg { width: 12px; height: 12px; }
+  #system-table-header-row .sort-header-arrow svg { width: 14px; height: 14px; }
   #system-table-header-row .sort-header:is(:hover, :focus-visible, [data-active="true"]) .sort-header-arrow { display: inline-flex; }
-  @media (max-width: 1279.98px) {
-    #system-table-header-row .sort-header-arrow { order: -1; }
-    #system-table-header-row .sort-header:is(:hover, :focus-visible, [data-active="true"]) > svg:first-child { display: none; }
-  }
+  #system-table-header-row .sort-header-arrow { order: -1; }
+  #system-table-header-row .sort-header:is(:hover, :focus-visible, [data-active="true"]) > svg:first-child { display: none; }
 
   /* Fields hidden in the view menu (applyViewLayout): their cells and
      header go; from 768 px the table takes the template built from the
@@ -5960,78 +5997,134 @@ const apiBase = apiBaseProp ?? '';
   }
 
   /* The card layout from 768 px (view menu → 布局 → 卡片), Beszel's grid
-     view: the phones' cards (the block above; keep the two in step) in a
-     grid of 300 px columns, each with its own border, without the table's
-     box and header. Two ids in each selector outrank the table tiers. */
+     view (SystemCard): two columns, three from 1024 px, 16 px apart. A card
+     is a bordered box with a shaded header band (status dot, name, flag and
+     OS) over rows of icon, label and value that share one grid, so the
+     labels and bars line up from row to row. The row's own cells are laid
+     out with display: contents and order (CPU, memory, disk, net, uptime),
+     so switching layouts re-renders nothing and hidden fields leave no gap.
+     An opened card stays where it is: the row wrapper is display: contents,
+     so the details become a grid item of their own that spans the grid
+     under the card's row, and dense placement lets the cards after it fill
+     that row first (in their order). Two ids in each selector outrank the
+     table tiers. Phones keep their own cards (the block above). */
   @media (min-width: 768px) {
     #monitor-root.layout-grid .glass-inner { border-color: transparent; background-color: transparent; overflow: visible; }
     #monitor-root.layout-grid .table-scroll-content { min-width: 0 !important; }
     #monitor-root.layout-grid #system-table-header-row { display: none !important; }
-    #monitor-root.layout-grid #systems-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; align-items: start; }
-    #monitor-root.layout-grid #systems-body > .system-row {
-      border: 1px solid #e5e5e5 !important;
-      border-radius: 12px;
-      overflow: hidden;
-      background-color: #ffffff;
-    }
-    html.dark #monitor-root.layout-grid #systems-body > .system-row { border-color: #2b2b2b !important; background-color: #1a1a1a; }
-    /* An opened card takes the whole row: its details and chart get the
-       width, and the cards beside it do not stand over a gap. */
-    #monitor-root.layout-grid #systems-body > .system-row:has(> [data-system-id][aria-expanded="true"]) { grid-column: 1 / -1; }
+    #monitor-root.layout-grid #systems-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: row dense; gap: 16px; align-items: start; }
+    #monitor-root.layout-grid #systems-body > .system-row { display: contents; }
     #monitor-root.layout-grid #systems-body .system-row > [data-system-id] {
-      grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
-      grid-template-areas:
-        "name name name name loc os"
-        "cpu cpu mem mem disk disk"
-        "net net net up up up";
-      column-gap: 12px;
-      row-gap: 8px;
-      padding: 14px 16px;
-    }
-    #monitor-root.layout-grid.cols-custom #systems-body .system-row > [data-system-id] { grid-template-areas: var(--card-areas) !important; }
-    #monitor-root.layout-grid #systems-body .system-row > [data-system-id] > div { height: auto; min-height: 0; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-name { grid-area: name; min-width: 0; align-items: flex-start; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-name > .rounded-full:first-child { margin-top: 0.42em; }
-    #monitor-root.layout-grid #systems-body .system-row .row-name {
-      white-space: normal;
-      overflow-wrap: anywhere;
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-      overflow: hidden;
-      text-overflow: clip;
+      grid-template-columns: 16px minmax(80px, max-content) max-content minmax(0, 1fr) !important;
+      grid-template-areas: none !important;
+      column-gap: 10px;
+      row-gap: 10px;
+      align-items: center;
+      align-self: stretch;
+      padding: 0 20px 16px;
       font-size: 14px;
-      line-height: 1.3;
+      line-height: 20px;
+      border: 1px solid rgba(221, 218, 215, 0.6);
+      border-radius: 12.8px;
+      overflow: hidden;
+      background-color: transparent;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
     }
-    #monitor-root.layout-grid:not(.hide-col-location) #systems-body .system-row .cell-location { display: flex !important; grid-area: loc; justify-self: end; }
-    #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-os { display: flex !important; grid-area: os; justify-self: end; width: auto; }
-    #monitor-root.layout-grid:not(.hide-col-uptime) #systems-body .system-row .cell-uptime { display: flex !important; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-cpu { grid-area: cpu; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-memory { grid-area: mem; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-disk { grid-area: disk; }
-    #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) { display: block; padding-right: 0; }
-    #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) > div { flex-wrap: wrap; row-gap: 4px; gap: 4px; padding-right: 0; }
-    #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) > div > span.font-medium { order: 1; flex: 1 1 auto; width: auto; text-align: right; font-size: 12px; line-height: 16px; }
-    #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) .progress-track { order: 2; flex: 0 0 100%; min-width: 0; height: 10px; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-net { grid-area: net; gap: 4px; font-size: 12px; line-height: 16px; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-uptime { grid-area: up; justify-self: end; gap: 4px; font-size: 12px; line-height: 16px; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-label { display: inline-flex; font-size: 11px; font-weight: 400; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-label svg { width: 12px; height: 12px; }
-    #monitor-root.layout-grid #systems-body .system-row .flag-icon { width: 24px; height: 24px; }
-    #monitor-root.layout-grid #systems-body .system-row .os-icon { width: 20px; height: 20px; }
-    #monitor-root.layout-grid #systems-body .system-details .details-content { padding-left: 16px; padding-right: 16px; }
+    #monitor-root.layout-grid #systems-body .system-row > [data-system-id]:hover { background: transparent; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
+    #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #c9c9c9; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
+    html.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id] { border-color: #2c2c2c; }
+    html.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #474747; }
+    /* The opened card's details: a panel across the grid, under its row */
+    #monitor-root.layout-grid #systems-body .system-details {
+      grid-column: 1 / -1;
+      border: 1px solid rgba(221, 218, 215, 0.6);
+      border-radius: 12.8px;
+    }
+    html.dark #monitor-root.layout-grid #systems-body .system-details { border-color: #2c2c2c; }
+    /* Header band */
+    #monitor-root.layout-grid #systems-body .system-row .cell-name {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      align-self: stretch;
+      min-width: 0;
+      height: auto;
+      margin: 0 -20px 4px;
+      padding: 12px var(--card-head-reserve, 16px) 12px 16px;
+      gap: 10px;
+      background-color: rgba(240, 240, 240, 0.3);
+      border-bottom: 1px solid rgba(221, 218, 215, 0.6);
+    }
+    #monitor-root.layout-grid:not(.hide-col-location) #systems-body .system-row .cell-name { --card-head-reserve: 52px; }
+    #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-name { --card-head-reserve: 48px; }
+    #monitor-root.layout-grid:not(.hide-col-location):not(.hide-col-os) #systems-body .system-row .cell-name { --card-head-reserve: 80px; }
+    html.dark #monitor-root.layout-grid #systems-body .system-row .cell-name { background-color: rgba(41, 41, 41, 0.3); border-bottom-color: rgba(42, 43, 45, 0.6); }
+    #monitor-root.layout-grid #systems-body .system-row .cell-name > .rounded-full:first-child { width: 8px; height: 8px; }
+    #monitor-root.layout-grid #systems-body .system-row .row-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 15.2px;
+      line-height: 24px;
+      font-weight: 600;
+    }
+    #monitor-root.layout-grid:not(.hide-col-location) #systems-body .system-row .cell-location,
+    #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-os {
+      display: flex !important;
+      grid-column: 1 / -1;
+      grid-row: 1;
+      justify-self: end;
+      align-self: center;
+      width: auto;
+      height: auto;
+      margin-bottom: 4px;
+      position: relative;
+    }
+    #monitor-root.layout-grid #systems-body .system-row .cell-os { margin-right: -4px; }
+    #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-location { margin-right: 24px; }
+    #monitor-root.layout-grid.hide-col-os #systems-body .system-row .cell-location { margin-right: -4px; }
+    #monitor-root.layout-grid #systems-body .system-row .flag-icon { width: 22px; height: 22px; }
+    #monitor-root.layout-grid #systems-body .system-row .os-icon { width: 18px; height: 18px; }
+    /* Rows: icon, label, value and (for the meters) the bar */
+    #monitor-root.layout-grid:not(.hide-col-cpu) #systems-body .system-row :is(.cell-cpu, .cell-cpu > div),
+    #monitor-root.layout-grid:not(.hide-col-memory) #systems-body .system-row :is(.cell-memory, .cell-memory > div),
+    #monitor-root.layout-grid:not(.hide-col-disk) #systems-body .system-row :is(.cell-disk, .cell-disk > div),
+    #monitor-root.layout-grid:not(.hide-col-net) #systems-body .system-row .cell-net,
+    #monitor-root.layout-grid:not(.hide-col-uptime) #systems-body .system-row .cell-uptime,
+    #monitor-root.layout-grid #systems-body .system-row .cell-label { display: contents !important; }
+    #monitor-root.layout-grid #systems-body .system-row .cell-label { color: #595959; }
+    html.dark #monitor-root.layout-grid #systems-body .system-row .cell-label { color: #ababab; }
+    #monitor-root.layout-grid #systems-body .system-row .cell-label svg { width: 16px; height: 16px; }
+    #monitor-root.layout-grid #systems-body .system-row .cell-label > span { font-size: 14px; font-weight: 400; white-space: nowrap; padding-right: 12px; }
+    #monitor-root.layout-grid #systems-body .system-row .cell-label > span::after { content: ':'; }
+    #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) span.font-medium { width: auto; min-width: 32px; font-size: 14px; line-height: 20px; font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; }
+    #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) .progress-track { min-width: 0; height: 14px; }
+    #monitor-root.layout-grid #systems-body .system-row :is(.cell-net, .cell-uptime) { font-size: 14px; font-weight: 400; font-variant-numeric: tabular-nums; }
+    #monitor-root.layout-grid #systems-body .system-row :is(.cell-net, .cell-uptime) .cell-value { grid-column: 3 / -1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #monitor-root.layout-grid #systems-body .system-row .cell-cpu * { order: 1; }
+    #monitor-root.layout-grid #systems-body .system-row .cell-memory * { order: 2; }
+    #monitor-root.layout-grid #systems-body .system-row .cell-disk * { order: 3; }
+    #monitor-root.layout-grid #systems-body .system-row .cell-net * { order: 4; }
+    #monitor-root.layout-grid #systems-body .system-row .cell-uptime * { order: 5; }
+    #monitor-root.layout-grid #systems-body .system-details .details-content { padding-left: 20px; padding-right: 20px; }
+  }
+  @media (min-width: 1024px) {
+    #monitor-root.layout-grid #systems-body { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   html.glass-enabled #monitor-root.layout-grid .glass-inner { background: transparent !important; border-color: transparent !important; }
-  html.glass-enabled.light #monitor-root.layout-grid #systems-body > .system-row { background: rgba(255, 255, 255, 0.45) !important; border-color: rgba(255, 255, 255, 0.65) !important; }
-  html.glass-enabled.dark #monitor-root.layout-grid #systems-body > .system-row { background: rgba(255, 255, 255, 0.03) !important; border-color: rgba(255, 255, 255, 0.07) !important; }
+  html.glass-enabled.light #monitor-root.layout-grid #systems-body .system-row > [data-system-id],
+  html.glass-enabled.light #monitor-root.layout-grid #systems-body .system-details { background: rgba(255, 255, 255, 0.45) !important; border-color: rgba(255, 255, 255, 0.65) !important; }
+  html.glass-enabled.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id],
+  html.glass-enabled.dark #monitor-root.layout-grid #systems-body .system-details { background: rgba(255, 255, 255, 0.03) !important; border-color: rgba(255, 255, 255, 0.07) !important; }
 
   /* An opened row's details, after Beszel's info bar: each item an icon,
      its muted label and the value; from 768 px they run on in a wrapping
      line with hairline dividers, on phones one under another. From 1280 px
      the text is 13 px and the TCPing card's title steps up to 14 px. */
   #monitor-root .detail-item { align-items: center; }
-  #monitor-root .detail-icon { width: 14px; height: 14px; flex: none; color: #737373; }
-  html.dark #monitor-root .detail-icon { color: #a3a3a3; }
+  #monitor-root .detail-icon { width: 14px; height: 14px; flex: none; color: #595959; }
+  html.dark #monitor-root .detail-icon { color: #ababab; }
   @media (min-width: 768px) {
     #monitor-root .detail-list { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 0; row-gap: 8px; }
     #monitor-root .detail-list > [data-tag-strip] { flex-basis: 100%; }
@@ -6041,8 +6134,6 @@ const apiBase = apiBaseProp ?? '';
   @media (min-width: 1280px) {
     #monitor-root .detail-list :is([data-translate-detail], [data-detail], [data-traffic-values], [data-traffic-placeholder]) { font-size: 13px; }
     #monitor-root .detail-icon { width: 15px; height: 15px; }
-    #monitor-root [data-tcping-chart-container] [data-translate-detail="tcpingLatency"] { font-size: 14px; color: #262626; }
-    html.dark #monitor-root [data-tcping-chart-container] [data-translate-detail="tcpingLatency"] { color: #f5f5f5; }
     #monitor-root [data-tcping-stats] { font-size: 13px; }
   }
 
@@ -6062,7 +6153,7 @@ const apiBase = apiBaseProp ?? '';
     border-radius: 8px;
     border: 1px solid rgba(218, 218, 218, 0.7);
     background: #fafafa;
-    color: #262626;
+    color: #1d1d20;
     font-size: 12px;
     line-height: 1;
     box-shadow: 0 16px 24px -6px rgba(0, 0, 0, 0.12), 0 6px 10px -6px rgba(0, 0, 0, 0.1);
@@ -6084,11 +6175,11 @@ const apiBase = apiBaseProp ?? '';
   .tcping-tooltip-title { font-weight: 500; padding-bottom: 2px; }
   .tcping-tooltip-row { display: flex; align-items: center; gap: 8px; }
   .tcping-tooltip-key { width: 10px; height: 10px; flex: none; border-radius: 2px; }
-  .tcping-tooltip-name { flex: 1; color: #737373; }
-  html.dark .tcping-tooltip-name { color: #a3a3a3; }
+  .tcping-tooltip-name { flex: 1; color: #595959; }
+  html.dark .tcping-tooltip-name { color: #ababab; }
   .tcping-tooltip-value { font-weight: 500; font-variant-numeric: tabular-nums; }
-  .tcping-tooltip-value.is-muted { font-weight: 400; color: #737373; }
-  html.dark .tcping-tooltip-value.is-muted { color: #a3a3a3; }
+  .tcping-tooltip-value.is-muted { font-weight: 400; color: #595959; }
+  html.dark .tcping-tooltip-value.is-muted { color: #ababab; }
 
   /* A new TCPing chart draws in from left to right: Chart.js renders it
      once, and a soft-edged mask sweeps across the canvas while it rises
@@ -6123,10 +6214,10 @@ const apiBase = apiBaseProp ?? '';
   /* An offline server: its last known values stay, muted (the bars turn
      grey in getProgressColor and a chip follows the name). */
   .system-row.is-offline :is(.cell-uptime, .cell-net, .cell-cpu, .cell-memory, .cell-disk) :is(span.font-medium, .cell-value) {
-    color: #737373;
+    color: #595959;
   }
   html.dark .system-row.is-offline :is(.cell-uptime, .cell-net, .cell-cpu, .cell-memory, .cell-disk) :is(span.font-medium, .cell-value) {
-    color: #a3a3a3;
+    color: #ababab;
   }
 
   /* A row reached with Tab (Enter/Space opens it) shows a ring in the

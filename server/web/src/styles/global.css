@@ -19,9 +19,12 @@
 }
 
 body {
-  background: #151515;
+  background: #171717;
   color: #e5e7eb;
   font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* As Beszel: no contextual alternates (Inter turns "->" into an arrow and
+     shifts glyphs around "x" between digits). */
+  font-variant-ligatures: no-contextual;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -30,7 +33,7 @@ body {
 /* `body.light` / `body.dark` have higher specificity than Tailwind's
    `bg-[#fafafa]` utility applied on the body element, so the colours
    declared here are what actually paints the page in each theme. Keep
-   these in sync with the page-level `<body class="bg-[#fafafa] dark:bg-[#151515]">`
+   these in sync with the page-level `<body class="bg-[#fafafa] dark:bg-[#171717]">`
    intent — using pure white here previously silently clobbered the
    page's #fafafa choice and produced a slightly brighter-than-designed
    light surface. */
@@ -40,7 +43,7 @@ body.light {
 }
 
 body.dark {
-  background: #151515;
+  background: #171717;
   color: #e5e7eb;
 }
 
@@ -52,73 +55,65 @@ html[data-theme-pref="light"] #theme-btn .theme-icon-sun,
 html[data-theme-pref="dark"] #theme-btn .theme-icon-moon,
 html[data-theme-pref="system"] #theme-btn .theme-icon-system,
 html:not([data-theme-pref]) #theme-btn .theme-icon-system { display: block; }
-/* Beszel's input and outline button: 40 px high (36 on phones), a 10 px
-   radius, the hairline border, and the page's own ground, so they sit a
+/* Beszel's input and outline button: 40 px high, its radius-md
+   (10.8 px), the hairline border, and the page's own ground, so they sit a
    step below the card (the dashboard's filter and view button, the login
    fields). */
 .toolbar-control {
-  height: 36px;
-  border-radius: 10px;
+  height: 40px;
+  border-radius: 10.8px;
   border: 1px solid #dadada;
   background-color: #fafafa;
-  color: #262626;
+  color: #1d1d20;
   outline: none;
   transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 html.dark .toolbar-control {
-  border-color: #2b2b2b;
-  background-color: #161616;
+  border-color: #2c2c2c;
+  background-color: #171717;
   color: #f5f5f5;
 }
-@media (min-width: 640px) {
-  .toolbar-control { height: 40px; }
+.toolbar-icon-btn { width: 40px; }
+/* Beszel's placeholder (muted text), focus ring (2 px of its ring colour
+   2 px off the field) and outline-button hover (its accent). */
+.toolbar-control::placeholder { color: #595959; }
+html.dark .toolbar-control::placeholder { color: #ababab; }
+.toolbar-control:focus-visible {
+  box-shadow: 0 0 0 2px #fafafa, 0 0 0 4px #837e79;
 }
-.toolbar-icon-btn { width: 36px; }
-@media (min-width: 640px) {
-  .toolbar-icon-btn { width: 40px; }
+html.dark .toolbar-control:focus-visible {
+  box-shadow: 0 0 0 2px #171717, 0 0 0 4px #cacbce;
 }
-.toolbar-control::placeholder { color: #737373; }
-html.dark .toolbar-control::placeholder { color: #a3a3a3; }
-.toolbar-control:focus-visible,
-.toolbar-icon-btn[aria-expanded="true"] {
-  border-color: #a3a3a3;
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
-}
-html.dark .toolbar-control:focus-visible,
-html.dark .toolbar-icon-btn[aria-expanded="true"] {
-  border-color: #525252;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
-}
-.toolbar-icon-btn:hover { background-color: #f0f0f0; }
-html.dark .toolbar-icon-btn:hover { background-color: #222222; }
+.toolbar-icon-btn:hover,
+.toolbar-icon-btn[aria-expanded="true"] { background-color: rgba(243, 239, 236, 0.7); }
+html.dark .toolbar-icon-btn:hover,
+html.dark .toolbar-icon-btn[aria-expanded="true"] { background-color: rgba(40, 40, 40, 0.5); }
 
-/* Tooltips of icon-only controls (utils/tooltip.ts), Beszel's: the card
-   ground, a hairline border, 14 px text, a small arrow, a quick fade and
-   zoom from 95 %. */
+/* Tooltips of icon-only controls (utils/tooltip.ts), Beszel's: the popover
+   ground, a hairline border, radius-md, 14/20 px text, no shadow, a small
+   arrow, a quick fade and zoom from 95 %. */
 .pulse-tooltip {
   position: fixed;
   z-index: 1000;
   display: none;
   max-width: min(280px, calc(100vw - 16px));
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: 10.8px;
   border: 1px solid #dadada;
   background: #ffffff;
-  color: #262626;
+  color: #1d1d20;
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 20px;
   text-wrap: balance;
-  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.16);
   pointer-events: none;
   opacity: 0;
   transform: scale(0.95);
   transition: opacity 0.12s ease, transform 0.12s ease;
 }
 html.dark .pulse-tooltip {
-  border-color: #2b2b2b;
-  background: #161616;
+  border-color: #2c2c2c;
+  background: #171717;
   color: #f5f5f5;
-  box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.6);
 }
 .pulse-tooltip.is-open { opacity: 1; transform: none; }
 .pulse-tooltip[data-side="bottom"] { transform-origin: top center; }
@@ -642,15 +637,15 @@ html.light :focus-visible {
    Glassmorphism (Frosted Glass) Effect
    Activated by .glass-enabled on <html>.
 
-   Frosted glass over a misty blue wallpaper: the panes read as matte
-   glass, not metal, and the colour stays faint enough for the mode to
-   remain an extension of the default theme (hues keep meaning status and
-   chart targets).
-     - The page is a pale (dark: deep) wallpaper with a few large, very
-       soft spots of light in muted blue-grey, lavender-grey and
-       mint-grey, fixed to the screen. The spots also lie behind the
-       panes, so the frosting shows as a gentle shift of light and colour
-       across them.
+   Beszel's theme in frosted glass: the same anatomy (panes, the table's
+   box and header band, menus and tooltips floating above), each level
+   turned into a translucent material, and a ground taken from Beszel's
+   own: warm paper in the light theme, cool graphite in the dark one.
+     - The ground carries a few large, very soft fields of light in
+       Beszel's chart hues (blue, purple, green, orange), pale enough that
+       hues keep meaning status and chart targets. They are fixed to the
+       screen and lie behind the panes too, so the frosting shows as a
+       gentle shift of light and colour across them.
      - Navbar, main cards and the login card are frosted panes: a milky
        translucent tint with a fine grain (the matte texture), a soft
        light edge and a soft shadow. No sheen and no hard top highlight:
@@ -669,11 +664,11 @@ html.light :focus-visible {
    Each spot fades to its own colour at zero alpha, not to `transparent`:
    WebKit blends towards transparent black, which greys the edges. */
 html.glass-enabled.light body {
-  background-color: #e9edf2 !important;
+  background-color: #eeece9 !important;
   background-image: none !important;
 }
 html.glass-enabled.dark body {
-  background-color: #0d1016 !important;
+  background-color: #0e0f11 !important;
   background-image: none !important;
 }
 html.glass-enabled body::before {
@@ -685,19 +680,19 @@ html.glass-enabled body::before {
 }
 html.glass-enabled.light body::before {
   background:
-    radial-gradient(48% 52% at 8% 2%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 70%),
-    radial-gradient(38% 44% at 88% 22%, rgba(170, 198, 240, 0.7), rgba(170, 198, 240, 0) 70%),
-    radial-gradient(36% 40% at 30% 58%, rgba(204, 196, 240, 0.55), rgba(204, 196, 240, 0) 70%),
-    radial-gradient(40% 42% at 78% 82%, rgba(182, 226, 212, 0.6), rgba(182, 226, 212, 0) 70%),
-    radial-gradient(34% 38% at 10% 96%, rgba(186, 206, 236, 0.6), rgba(186, 206, 236, 0) 70%);
+    radial-gradient(48% 52% at 8% 2%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 70%),
+    radial-gradient(38% 44% at 88% 22%, rgba(178, 200, 240, 0.62), rgba(178, 200, 240, 0) 70%),
+    radial-gradient(36% 40% at 30% 58%, rgba(214, 196, 236, 0.45), rgba(214, 196, 236, 0) 70%),
+    radial-gradient(40% 42% at 78% 82%, rgba(180, 226, 206, 0.55), rgba(180, 226, 206, 0) 70%),
+    radial-gradient(34% 38% at 10% 96%, rgba(244, 210, 176, 0.5), rgba(244, 210, 176, 0) 70%);
 }
 html.glass-enabled.dark body::before {
   background:
-    radial-gradient(48% 52% at 8% 2%, rgba(120, 150, 210, 0.26), rgba(120, 150, 210, 0) 70%),
-    radial-gradient(38% 44% at 88% 22%, rgba(56, 92, 170, 0.36), rgba(56, 92, 170, 0) 70%),
-    radial-gradient(36% 40% at 30% 58%, rgba(84, 70, 160, 0.28), rgba(84, 70, 160, 0) 70%),
-    radial-gradient(40% 42% at 78% 82%, rgba(30, 110, 104, 0.26), rgba(30, 110, 104, 0) 70%),
-    radial-gradient(34% 38% at 10% 96%, rgba(50, 70, 130, 0.3), rgba(50, 70, 130, 0) 70%);
+    radial-gradient(48% 52% at 8% 2%, rgba(130, 150, 200, 0.18), rgba(130, 150, 200, 0) 70%),
+    radial-gradient(38% 44% at 88% 22%, rgba(50, 90, 180, 0.3), rgba(50, 90, 180, 0) 70%),
+    radial-gradient(36% 40% at 30% 58%, rgba(100, 70, 160, 0.22), rgba(100, 70, 160, 0) 70%),
+    radial-gradient(40% 42% at 78% 82%, rgba(30, 120, 100, 0.24), rgba(30, 120, 100, 0) 70%),
+    radial-gradient(34% 38% at 10% 96%, rgba(150, 90, 40, 0.2), rgba(150, 90, 40, 0) 70%);
 }
 
 /* The access check that covers the home and admin pages while they load
@@ -728,13 +723,13 @@ html.glass-enabled {
 html.glass-enabled.light .glass-nav,
 html.glass-enabled.light .glass-card,
 html.glass-enabled.light .glass-login {
-  background-color: rgba(255, 255, 255, 0.6) !important;
+  background-color: rgba(255, 255, 255, 0.72) !important;
   background-image: var(--glass-grain-on-light) !important;
-  border-color: rgba(255, 255, 255, 0.75) !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
-    0 1px 2px rgba(20, 28, 45, 0.05),
-    0 18px 44px -20px rgba(20, 28, 45, 0.25) !important;
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 20px -12px rgba(0, 0, 0, 0.12) !important;
 }
 html.glass-enabled.dark .glass-nav,
 html.glass-enabled.dark .glass-card,
@@ -759,13 +754,14 @@ html.glass-enabled.dark .glass-inner {
   box-shadow: none !important;
 }
 
-/* Table header row: a hairline, not a surface of its own */
+/* Table header row: Beszel's header band as a faint tint, cool like its
+   table-header colour (light) and a touch lighter than the box (dark). */
 html.glass-enabled.light #system-table-header-row {
-  background: transparent !important;
+  background: rgba(110, 120, 140, 0.06) !important;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
 }
 html.glass-enabled.dark #system-table-header-row {
-  background: transparent !important;
+  background: rgba(255, 255, 255, 0.035) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
 }
 
@@ -987,6 +983,41 @@ html.glass-enabled.dark [data-modal-content] textarea {
   border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
+/* --- Small surfaces of the Beszel toolbar and navbar ---
+   Hovers become tints, so no opaque square lands on the frosted panes. */
+html.glass-enabled.light #navbar-icons-container :is(a, button):hover,
+html.glass-enabled.light #system-filter-clear:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+html.glass-enabled.dark #navbar-icons-container :is(a, button):hover,
+html.glass-enabled.dark #system-filter-clear:hover {
+  background-color: rgba(255, 255, 255, 0.07) !important;
+}
+/* Cards: the header band as a tint */
+html.glass-enabled.light #monitor-root.layout-grid #systems-body .system-row .cell-name {
+  background-color: rgba(110, 120, 140, 0.06) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.06) !important;
+}
+html.glass-enabled.dark #monitor-root.layout-grid #systems-body .system-row .cell-name {
+  background-color: rgba(255, 255, 255, 0.035) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.07) !important;
+}
+/* --- Floating: tooltips, the chart's tooltip and notices ---
+   The material of the menus and dialogs: frosted, so what they cover
+   stays a soft shape behind them. The tooltip's arrow is a square of its
+   own and takes the same material. */
+html.glass-enabled.light :is(.pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
+  background: rgba(250, 250, 252, 0.86) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+html.glass-enabled.dark :is(.pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
+  background: rgba(38, 38, 42, 0.82) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
 /* ========================================
    Glassmorphism — Accessibility & Fallbacks
    Keep this block at the end so it overrides the translucent
@@ -1001,34 +1032,23 @@ html.glass-enabled.dark [data-modal-content] textarea {
         relied on a blur.
    ======================================== */
 @media (prefers-reduced-transparency: reduce) {
-  html.glass-enabled #columns-dropdown,
-  html.glass-enabled [data-modal-content] {
+  html.glass-enabled :is(#columns-dropdown, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
-  html.glass-enabled.dark .glass-nav,
-  html.glass-enabled.dark .glass-card,
-  html.glass-enabled.dark .glass-login,
-  html.glass-enabled.dark #columns-dropdown,
-  html.glass-enabled.dark [data-modal-content] {
+  html.glass-enabled.dark :is(.glass-nav, .glass-card, .glass-login, #columns-dropdown, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
     background: #26262a !important;
   }
-  html.glass-enabled.light .glass-nav,
-  html.glass-enabled.light .glass-card,
-  html.glass-enabled.light .glass-login,
-  html.glass-enabled.light #columns-dropdown,
-  html.glass-enabled.light [data-modal-content] {
+  html.glass-enabled.light :is(.glass-nav, .glass-card, .glass-login, #columns-dropdown, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
     background: #ffffff !important;
   }
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  html.glass-enabled.dark #columns-dropdown,
-  html.glass-enabled.dark [data-modal-content] {
+  html.glass-enabled.dark :is(#columns-dropdown, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
     background: rgba(38, 38, 42, 0.97) !important;
   }
-  html.glass-enabled.light #columns-dropdown,
-  html.glass-enabled.light [data-modal-content] {
+  html.glass-enabled.light :is(#columns-dropdown, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
     background: rgba(250, 250, 252, 0.97) !important;
   }
 }

@@ -8,7 +8,7 @@ interface Props {
 const { isAdmin = false } = Astro.props;
 ---
 
-<nav class="glass-nav mx-auto mt-2 sm:mt-4 max-w-[1500px] flex items-center justify-between rounded-xl border border-[#404040]/50 bg-[#1c1c1c] dark:border-[#404040]/50 dark:bg-[#1c1c1c] border-[#d4d4d4]/50 bg-white px-3 sm:px-4 md:px-6 py-2 sm:py-3">
+<nav class="glass-nav mx-auto mt-4 max-w-[1500px] flex items-center justify-between rounded-[10.8px] border border-[#404040]/50 bg-[#1c1c1c] dark:border-[#2c2c2c]/60 dark:bg-[#1a1a1a] border-[#d4d4d4]/50 bg-white px-3 sm:px-4 md:px-6 py-0 h-14 sm:h-16">
   <!-- Logo -->
   <a href="/" class="flex items-center gap-1.5 sm:gap-2">
     <!-- Logo Container -->
@@ -22,62 +22,62 @@ const { isAdmin = false } = Astro.props;
       </svg>
     </span>
     <!-- Text Container -->
-    <span id="navbar-text" class="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-[#262626] dark:text-white" style="opacity: 0;">Pulse</span>
+    <span id="navbar-text" class="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-[#1d1d20] dark:text-white" style="opacity: 0;">Pulse</span>
   </a>
 
   <!-- Right Side Icons -->
   <div id="navbar-icons-container" class="flex items-center gap-0.5 sm:gap-1" style="opacity: 0;">
     <button
       id="language-btn"
-      class="rounded-lg p-1.5 sm:p-2.5 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
+      class="rounded-[10.8px] p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
       aria-label="Toggle language"
       title="Toggle language"
     >
-      <Icon name="languages" size={16} class="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200" />
+      <Icon name="languages" size={16} class="w-5 h-5 transition-transform duration-200" />
     </button>
     <button
       id="theme-btn"
-      class="rounded-lg p-1.5 sm:p-2.5 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
+      class="rounded-[10.8px] p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
       aria-label="Toggle theme"
       title="Toggle theme"
     >
       <Icon
-        name="moon"
+        name="moon-star"
         size={16}
-        class="theme-icon theme-icon-moon w-4 h-4 sm:w-5 sm:h-5 transition-all duration-300"
+        class="theme-icon theme-icon-moon w-5 h-5 transition-all duration-300"
       />
       <Icon
         name="sun"
         size={16}
-        class="theme-icon theme-icon-sun w-4 h-4 sm:w-5 sm:h-5 transition-all duration-300"
+        class="theme-icon theme-icon-sun w-5 h-5 transition-all duration-300"
       />
       <Icon
         name="sun-moon"
         size={16}
-        class="theme-icon theme-icon-system w-4 h-4 sm:w-5 sm:h-5 transition-all duration-300"
+        class="theme-icon theme-icon-system w-5 h-5 transition-all duration-300"
       />
     </button>
     {isAdmin ? (
       <a
         id="navbar-home-link"
         href="/"
-        class="rounded-lg p-1.5 sm:p-2.5 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
+        class="rounded-[10.8px] p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
         aria-label="Home"
         title="Home"
         data-nav-link="home"
       >
-        <Icon name="home" size={16} class="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200" />
+        <Icon name="home" size={16} class="w-5 h-5 transition-transform duration-200" />
       </a>
     ) : (
       <a
         id="navbar-admin-link"
         href="/admin"
-        class="rounded-lg p-1.5 sm:p-2.5 text-[#525252] dark:text-[#a3a3a3] transition-all duration-200 hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#262626] dark:hover:text-[#e5e5e5] active:scale-90"
+        class="rounded-[10.8px] p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
         aria-label="Admin"
         title="Admin"
         data-nav-link="admin"
       >
-        <Icon name="user" size={16} class="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200" />
+        <Icon name="user" size={16} class="w-5 h-5 transition-transform duration-200" />
       </a>
     )}
     </div>
@@ -273,6 +273,11 @@ const { isAdmin = false } = Astro.props;
         });
         // The page head defines this (the glass appearance changes the colour).
         if (window.__pulseSyncThemeColor) window.__pulseSyncThemeColor();
+        // Told here, with the classes, so a canvas chart repaints in the same
+        // step as the page: inside a view transition this runs after the old
+        // page is captured, and the chart is not caught in the new colours
+        // on the old background for the length of the cross-fade.
+        window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: theme } }));
       };
 
       // Check if View Transitions API is supported for smooth cross-fade effect
@@ -310,8 +315,6 @@ const { isAdmin = false } = Astro.props;
       }
       
       updateThemeIcon(theme);
-      // Trigger theme change event for other components
-      window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: theme } }));
     }
 
     // The button shows the choice: sun, moon, or sun-and-moon for "follow

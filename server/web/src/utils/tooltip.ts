@@ -1,12 +1,12 @@
 // Tooltips like Beszel's for buttons and links that show only an icon: the
 // control's name in a small bordered card with an arrow, under the control
-// (above it when there is no room), after 100 ms of hover or at once on
-// keyboard focus. The browser's own title tooltip is taken off those
-// controls (the title becomes the aria-label, which keeps the name for
-// screen readers), or both would show. A control can also ask for one with
-// data-tooltip="…", or opt out with data-no-tooltip.
+// (above it when there is no room), after 50 ms of hover (Beszel's delay)
+// or at once on keyboard focus. The browser's own title tooltip is taken
+// off those controls (the title becomes the aria-label, which keeps the
+// name for screen readers), or both would show. A control can also ask for
+// one with data-tooltip="…", or opt out with data-no-tooltip.
 
-const SHOW_DELAY_MS = 100;
+const SHOW_DELAY_MS = 50;
 const GAP_PX = 8;
 const EDGE_PX = 8;
 

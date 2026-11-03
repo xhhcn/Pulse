@@ -26,7 +26,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <meta name="format-detection" content="telephone=no" />
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#141516" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#161718" media="(prefers-color-scheme: dark)" />
     <meta property="og:title" content="Pulse Monitor" />
     <meta property="og:description" content="Lightweight, real-time server monitoring dashboard." />
     <meta property="og:type" content="website" />
@@ -152,7 +152,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
         window.__pulseSyncThemeColor = function () {
           var dark = html.classList.contains('dark');
           var glass = html.classList.contains('glass-enabled');
-          var colour = glass ? (dark ? '#141925' : '#ebeff4') : (dark ? '#141516' : '#fafafa');
+          var colour = glass ? (dark ? '#12151b' : '#efeeee') : (dark ? '#161718' : '#fafafa');
           document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
             m.removeAttribute('media');
             m.setAttribute('content', colour);
@@ -302,12 +302,12 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
       })();
     </script>
   </head>
-  <body class="min-h-screen overflow-x-hidden flex flex-col bg-[#fafafa] dark:bg-[#151515] text-[#151515] dark:text-[#f5f5f5]">
+  <body class="min-h-screen overflow-x-hidden flex flex-col bg-[#fafafa] dark:bg-[#171717] text-[#151515] dark:text-[#f5f5f5]">
     <div id="auth-check" class="hidden min-h-screen flex flex-col">
       <div class="px-2 sm:px-4 md:px-6 animate-navbar">
         <NavBar />
       </div>
-      <main class="flex-1 px-2 sm:px-4 md:px-6 pt-2 sm:pt-4 pb-2 sm:pb-4 animate-content">
+      <main class="flex-1 px-2 sm:px-4 md:px-6 pt-4 pb-2 sm:pb-4 animate-content">
         <SystemTable apiBase={apiBase} />
       </main>
       <div class="px-2 sm:px-4 md:px-6">
@@ -327,10 +327,10 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
       rather than a snap-out / blank-frame / fade-in. The `z-50` ensures
       the overlay stays above the main content while it fades.
     -->
-    <div id="login-redirect" class="fixed inset-0 z-50 flex items-center justify-center bg-[#fafafa] dark:bg-[#151515] transition-opacity duration-200 ease-out">
+    <div id="login-redirect" class="fixed inset-0 z-50 flex items-center justify-center bg-[#fafafa] dark:bg-[#171717] transition-opacity duration-200 ease-out">
       <div class="text-center animate-page-in">
         <div class="w-8 h-8 border-[3px] border-[#d4d4d4] dark:border-[#404040] border-t-[#525252] dark:border-t-[#d4d4d4] rounded-full animate-spin-smooth mx-auto mb-4"></div>
-        <p id="access-check-text" class="text-sm text-[#525252] dark:text-[#a3a3a3]">Checking access...</p>
+        <p id="access-check-text" class="text-sm text-[#595959] dark:text-[#ababab]">Checking access...</p>
         <script is:inline>
           // <head> has set the page language by now; the check speaks it too.
           if ((document.documentElement.lang || '').indexOf('zh') === 0) document.getElementById('access-check-text').textContent = '正在检查访问权限...';
