@@ -146,29 +146,30 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} finishes the Beszel alignment, measured against a running Beszel 0.21.1 down to phone width: an opened row's details read like Beszel's info bar, flags and OS logos sit at the size of the icons around them, the page takes Beszel's width and margins (on phones too), and the card layout reaches phones — picked by each visitor or made the phones' default in 自定义设置. A reload now starts unfiltered. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} gives the desktop table Beszel's icon-and-value cells: a server's location reads as its flag and country code, its OS as the logo and name, and the columns run from who a server is through its health to the slower facts. The default layout can now be set for desktop as well as phones, and the page no longer moves sideways when the scrollbar comes and goes. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: an opened row's details follow Beszel's info bar: a 16 px hairline 12 px from the items on either side that never starts a line (a wrapped line used to begin with one), wrapped lines 10 px apart, and down / up traffic as one pair without a rule between them; from 1280 px Beszel's 14 px text with 16 px icons, 13 px below; on phones the icon, label and value line up in columns at 12 px (10 px before), and the TCPing card's average and loss read at 12 px.
-            - Web: flags 20 px wide and OS logos 18 px (24 and 20 px before), 18 and 16 px beside the 12 px text of the 1024–1279 px table — the size of the 16 px icons around them. They keep their colours (Beszel shows a plain glyph for four OS families, on a server's own page only); on the dark theme CentOS's and Fedora's darkest colours now take lighter tints, as Debian's and Apple's already did.
-            - Web: Beszel's page frame: content up to 1568 px (its default 1600 px layout less its 16 px padding; 1500 px before) with 16 px page margins at every width; on phones its 12 px card padding, the title block inset 8 px and 12 px above the list (8 px margins and padding before); the filter full width below 768 px; the view menu a 192 px column of 288 px that scrolls below 768 px, its four parts side by side from there. English meter words on phone rows give way to their icons under 410 px (Chinese under 360 px).
-            - Web: the navigation bar's buttons are Beszel's 40 px squares side by side with 19.2 px icons (21.6 px for "follow the system"), the theme icon turns in as Beszel's does, and the bar is 64 px from 768 px. The navigation buttons and the column headers that sort the table show Beszel's focus ring for keyboard users (the headers had none).
-            - Web: the card layout on phones. The view menu's layout applies at every width: on phones Table keeps Pulse's compact rows and Cards shows Beszel's cards, one a row (two from 640 px). New switch in 自定义设置: 手机端卡片布局 / Card Layout on Phones (off by default) makes cards the default under 768 px for visitors who have not picked a layout.
-            - Web: a reload starts unfiltered: the status filter (全部 / 在线 / 离线) is no longer kept in the browser — a page reloaded on 离线 kept hiding the other services — and the filter field starts empty. The sort, layout and shown fields are still kept.
-            - Server: the public navbar config carries `phone_cards`.
+            - Web: from 768 px the location column shows the flag with the two-letter country code and the OS column the logo with the OS name, as Beszel pairs an icon with its value (its Agent column, its language picker). A code is the same width in every language, so the column lines up and never cuts a name off; the tooltip and the row's details give the country's full name (德国, United States). The phone rows and the card layout keep the flag and the logo alone.
+            - Web: the columns run name, location, CPU, memory, disk, network, uptime, OS — identity, then health in Beszel's order, then the slower facts (Beszel also ends with uptime and the agent); the view menu's sort and field lists follow the same order.
+            - Web: sorting by location follows the codes, and the filter finds a country by its code or by its name in either language.
+            - Web: an opened row's details begin with the location's full name and the OS with the kind of machine (for example Debian · VPS) — from 768 to 1023 px the table has no room for those two columns.
+            - Web: 自定义设置 sets the default layout for each screen size: 电脑端卡片布局 / Card Layout on Desktop (768 px and up) beside 手机端卡片布局 / Card Layout on Phones; a visitor's own choice in the view menu still wins.
+            - Web: the page keeps the scrollbar's room, as Beszel does: on desktops with classic scrollbars (Windows, most Linux setups) the card and the filter moved sideways by the scrollbar's width when the list filled in on load, and again whenever a filter left only a few rows.
+            - Web: picking 离线 or 在线 when no service has that status showed the message for an empty deployment; it now says 没有匹配的服务 / No matching services, as a filter text that matches nothing does.
+            - Server: the public navbar config carries `desktop_cards`.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format changed for agents.
-            - Existing `metrics.db` files remain readable; the new `phone_cards` setting is off until set.
-            - A layout picked in the view menu (kept in the browser) now also applies under 768 px; a status filter kept by an earlier version is dropped on the first load.
+            - Existing `metrics.db` files remain readable; the new `desktop_cards` setting is off until set.
+            - The sort, layout and hidden fields kept in the browser carry over; a table sorted by location now sorts by country code.
 
             ### Verified
 
-            - Against a running Beszel 0.21.1 fed with the same 131 servers: the page frame (navigation bar, card, title, description, filter, view button and list) at 390, 700, 1100 and 1440 px, the phone view menu, the info bar's dividers and spacing, and the theme button's icons and motion.
-            - Chromium, Firefox and WebKit: the table at 153 widths from 768 to 1920 px in both languages and every column sorted from 768 to 1440 px; phone rows and cards every 3 px from 320 to 767 px in both languages (no sideways scroll, no value under its label, flag and OS clear of the name); the layout on phones, the phone-card switch and a visitor's own choice across reloads; the toolbar, the menu and a reload starting unfiltered; sorted tables during a minute of live updates; the chart following a theme switch frame by frame; the TCPing chart's selection, tooltip and live samples; the sticky header; the admin dialogs; the glass dialogs; the connection notice; a theme audit of 60 pages (no new findings; the missing focus rings it listed are gone).
-            - Server tests: `phone_cards` is served to visitors like `sticky_header`, never with the shared secret.
+            - Chromium, Firefox and WebKit: the table at 153 widths from 768 to 1920 px in both languages, with every column header sorted from 768 to 1440 px; phone rows and cards every 3 px from 320 to 767 px in both languages; the new columns (order, headers over their cells, flag with code and logo with name, tooltips and details in both languages and after a language switch, sorting by code, filtering by code or name, the 900 px tier without location and OS); the layout defaults for phones and desktops and a visitor's own choice across reloads; the toolbar, the menu and a status filter that matches nothing; sorted tables during a minute of live updates; the chart following a theme switch frame by frame; the TCPing chart's selection, tooltip and live samples; the sticky header; the admin dialogs and the glass dialogs; the connection notice; a theme audit of 60 pages (no new findings).
+            - Chromium with classic scrollbars: the card and the filter stay put while the list loads, when a filter leaves no rows and when it is cleared (they moved by the scrollbar's width before).
+            - Server tests: `desktop_cards` is served to visitors like `phone_cards`, never with the shared secret.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
