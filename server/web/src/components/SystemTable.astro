@@ -579,14 +579,13 @@ const apiBase = apiBaseProp ?? '';
   // Layout (the table — on phones its compact rows — or Beszel's cards, at
   // every width as in Beszel) and the fields shown, Beszel's other two view
   // settings. The name stays. A visitor's own layout choice wins; without
-  // one, the site's defaults apply (自定义设置 → 电脑端 / 手机端卡片布局:
-  // html.desktop-cards from 768 px, html.phone-cards below, both set in the
-  // page head before the first paint), else the table.
+  // one, the site's default applies at every width (自定义设置 → 卡片布局:
+  // html.card-layout, set in the page head before the first paint), else
+  // the table.
   const HIDEABLE_COLS = ['uptime', 'location', 'cpu', 'memory', 'disk', 'net', 'os'];
   let layoutChoice = ['table', 'grid'].includes(readViewSetting('pulse-layout', null)) ? readViewSetting('pulse-layout', null) : null;
-  const phoneQuery = window.matchMedia('(max-width: 767.98px)');
   const layoutMode = () => layoutChoice
-    || (document.documentElement.classList.contains(phoneQuery.matches ? 'phone-cards' : 'desktop-cards') ? 'grid' : 'table');
+    || (document.documentElement.classList.contains('card-layout') ? 'grid' : 'table');
   let hiddenCols = (() => {
     const saved = readViewSetting('pulse-hidden-cols', []);
     return Array.isArray(saved) ? saved.filter((c) => HIDEABLE_COLS.includes(c)) : [];
@@ -915,8 +914,6 @@ const apiBase = apiBaseProp ?? '';
   ['(min-width: 768px)', '(min-width: 900px)', '(min-width: 1024px)', '(min-width: 1280px)'].forEach((query) => {
     window.matchMedia(query).addEventListener('change', applyViewLayout);
   });
-  // Crossing 768 px can change the layout itself (the site's two defaults).
-  phoneQuery.addEventListener('change', () => updateLayoutUI());
   window.addEventListener('navbarconfigready', () => { if (!layoutChoice) { updateLayoutUI(); applyViewLayout(); } });
 
   function updateLayoutUI() {
@@ -1411,7 +1408,7 @@ const apiBase = apiBaseProp ?? '';
         <div class="cell-disk h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline, cardLabel('disk'))}</div>
         <div class="cell-net text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel('net')}<span class="cell-value">${formatTrafficSpeed((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0))}</span></div>
         <div class="cell-uptime text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center">${cardLabel('uptime')}<span class="cell-value">${escapeHtml(item.time || '-')}</span></div>
-        <div class="cell-os text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center w-full min-w-0" title="${escapeHtmlAttr(item.os || '-')}">${osCellHTML(item)}</div>
+        <div class="cell-os text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center w-full min-w-0" title="${escapeHtmlAttr(osDetailText(item))}">${osCellHTML(item)}</div>
     </div>
       <!-- Expandable details section -->
       <div class="system-details hidden border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60 dark:bg-[#171717] bg-[#f8f8f8] overflow-hidden" data-details-id="${safeId}" style="width: 100%;">
@@ -1420,14 +1417,15 @@ const apiBase = apiBaseProp ?? '';
             <!-- Tags (first row) -->
             ${renderTagStrip(item)}
             <!-- Location and OS with the kind of machine, as Beszel's info bar
-                 carries the OS: the table's columns are not shown from 768 to
-                 1023 px, and the cards show only the flag and the logo. -->
-            <div class="detail-item">
+                 carries the OS, where the row doesn't show them as text (the
+                 styles leave them out where it does): the cards and phone rows
+                 show only the flag and the logo, 768-1023 px has no columns. -->
+            <div class="detail-item detail-location">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></g></svg>
               <div class="detail-label shrink-0" data-translate-detail="locationInfo">Location:</div>
               <div class="detail-value" data-detail="location">${escapeHtml(item.location ? countryName(item.location) : '-')}</div>
             </div>
-            <div class="detail-item">
+            <div class="detail-item detail-os">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="14" height="8" x="5" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 18h2m4 0h6"/></g></svg>
               <div class="detail-label shrink-0" data-translate-detail="osInfo">OS:</div>
               <div class="detail-value" data-detail="os">${escapeHtml(osDetailText(item))}</div>
@@ -2132,10 +2130,13 @@ const apiBase = apiBaseProp ?? '';
       const osCell = cell('os');
       if (osCell) {
         osCell.innerHTML = osCellHTML(item);
-        osCell.title = item.os || '-';
         if (item.os_icon) setTimeout(() => loadOSIcons(), 0);
       }
     }
+    // The OS cell's tooltip adds the kind of machine (Debian · VPS), which
+    // the details leave out where the cell is shown.
+    const osTitleCell = cell('os');
+    if (osTitleCell && osTitleCell.title !== osDetailText(item)) osTitleCell.title = osDetailText(item);
     
     // Update expandable details section if it exists and is visible
     // Always update the data, even if hidden, so it's ready when expanded
@@ -6267,6 +6268,17 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .detail-icon { margin-top: 0; }
     #monitor-root .detail-item + .detail-item::before { content: ''; position: absolute; top: 50%; left: -13px; width: 1px; height: 16px; margin-top: -8px; background: rgba(24, 24, 27, 0.3); }
     html.dark #monitor-root .detail-item + .detail-item::before { background: rgba(244, 245, 245, 0.3); }
+  }
+  /* The location and the OS stay out of the details where the row above
+     already shows them, as Beszel's info bar leaves out an item that would
+     repeat what is on screen: the table from 1024 px, the two columns shown,
+     under a pointer that hovers (the cells' tooltips give the country's full
+     name and the kind of machine). Phones and cards (icons only), 768-1023 px
+     (no columns), touch screens (no tooltips) and a hidden column keep them;
+     the next item's divider falls outside the list's edge. */
+  @media (min-width: 1024px) and (hover: hover) {
+    #monitor-root:not(.layout-grid):not(.hide-col-location) .detail-location,
+    #monitor-root:not(.layout-grid):not(.hide-col-os) .detail-os { display: none; }
   }
   @media (min-width: 1280px) {
     #monitor-root .detail-list { font-size: 14px; }
