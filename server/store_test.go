@@ -336,3 +336,34 @@ func TestOfflineCompactPreservesTCPingHistory(t *testing.T) {
 		t.Fatalf("latency = %#v, want %v", results[0].Latency, latency)
 	}
 }
+
+// A config saved by v1.3.49 / v1.3.50 (a default layout per screen size)
+// reads as one card_layout switch: on when either was on; a saved
+// card_layout wins over leftovers.
+func TestNavbarConfigReadsPerScreenLayoutsAsOneSwitch(t *testing.T) {
+	cases := []struct {
+		stored string
+		want   bool
+	}{
+		{`{"text":"Pulse","shared_secret":"s","phone_cards":true}`, true},
+		{`{"text":"Pulse","shared_secret":"s","desktop_cards":true,"phone_cards":false}`, true},
+		{`{"text":"Pulse","shared_secret":"s","desktop_cards":false,"phone_cards":false}`, false},
+		{`{"text":"Pulse","shared_secret":"s","card_layout":false,"phone_cards":true}`, false},
+		{`{"text":"Pulse","shared_secret":"s","card_layout":true}`, true},
+	}
+	for _, c := range cases {
+		store := newTestStore(t)
+		if err := store.db.Update(func(tx *bolt.Tx) error {
+			return tx.Bucket([]byte(configBucket)).Put([]byte(navbarConfigKey), []byte(c.stored))
+		}); err != nil {
+			t.Fatal(err)
+		}
+		config, err := store.GetNavbarConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if config.CardLayout != c.want {
+			t.Errorf("%s: card_layout = %v, want %v", c.stored, config.CardLayout, c.want)
+		}
+	}
+}

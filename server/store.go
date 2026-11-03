@@ -1566,8 +1566,7 @@ type NavbarConfig struct {
 	ShowTraffic  bool   `json:"show_traffic"`  // Show real-time and total traffic in detail dropdown
 	ShowGlass    bool   `json:"show_glass"`    // Enable glassmorphism (frosted glass) visual effect
 	StickyHeader bool   `json:"sticky_header"` // Pulse: keep the table's column header in view while a long list scrolls
-	DesktopCards bool   `json:"desktop_cards"` // Pulse: cards instead of the table from 768 px, unless a visitor picks a layout
-	PhoneCards   bool   `json:"phone_cards"`   // Pulse: cards instead of the compact rows on phones, unless a visitor picks a layout
+	CardLayout   bool   `json:"card_layout"`   // Pulse: cards instead of the table at every width, unless a visitor picks a layout
 	HideTags     bool   `json:"hide_tags"`     // Hotaru-compatible: hide tag row on homepage
 	HideCards    bool   `json:"hide_cards"`    // Hotaru-compatible: hide homepage card grid
 }
@@ -1593,7 +1592,20 @@ func (s *Store) GetNavbarConfig() (*NavbarConfig, error) {
 			return nil
 		}
 
-		return json.Unmarshal(data, &config)
+		if err := json.Unmarshal(data, &config); err != nil {
+			return err
+		}
+		// v1.3.49 and v1.3.50 kept the default layout per screen size
+		// (phone_cards, desktop_cards); either one on reads as cards.
+		var legacy struct {
+			CardLayout   *bool `json:"card_layout"`
+			DesktopCards bool  `json:"desktop_cards"`
+			PhoneCards   bool  `json:"phone_cards"`
+		}
+		if json.Unmarshal(data, &legacy) == nil && legacy.CardLayout == nil && (legacy.DesktopCards || legacy.PhoneCards) {
+			config.CardLayout = true
+		}
+		return nil
 	})
 
 	if err != nil {

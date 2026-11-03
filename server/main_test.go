@@ -182,11 +182,11 @@ func TestTCPingCacheSkipsOversizedResponseWithoutPartialEntry(t *testing.T) {
 }
 
 // The public navbar config carries the display switches the home page reads
-// before it renders (sticky_header, desktop_cards and phone_cards for Pulse's
-// table), never the secret.
+// before it renders (sticky_header and card_layout for Pulse's table), never
+// the secret.
 func TestPublicNavbarConfigCarriesDisplaySwitches(t *testing.T) {
 	store := newTestStore(t)
-	if err := store.SaveNavbarConfig(&NavbarConfig{Text: "Pulse", SharedSecret: "fleet-secret", StickyHeader: true, ShowGlass: true, DesktopCards: true, PhoneCards: true}); err != nil {
+	if err := store.SaveNavbarConfig(&NavbarConfig{Text: "Pulse", SharedSecret: "fleet-secret", StickyHeader: true, ShowGlass: true, CardLayout: true}); err != nil {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
@@ -195,7 +195,7 @@ func TestPublicNavbarConfigCarriesDisplaySwitches(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v (%s)", err, rr.Body.String())
 	}
-	if got["sticky_header"] != true || got["show_glass"] != true || got["desktop_cards"] != true || got["phone_cards"] != true {
+	if got["sticky_header"] != true || got["show_glass"] != true || got["card_layout"] != true {
 		t.Fatalf("display switches missing: %s", rr.Body.String())
 	}
 	if s, _ := got["shared_secret"].(string); s != "" {

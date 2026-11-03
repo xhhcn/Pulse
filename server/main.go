@@ -4921,8 +4921,7 @@ func handleGetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 			ShowTraffic:  config.ShowTraffic,  // Public: controls traffic display in detail section
 			ShowGlass:    config.ShowGlass,    // Public: controls glassmorphism effect
 			StickyHeader: config.StickyHeader, // Public: Pulse's sticky table header
-			DesktopCards: config.DesktopCards, // Public: Pulse's default layout from 768 px
-			PhoneCards:   config.PhoneCards,   // Public: Pulse's default layout on phones
+			CardLayout:   config.CardLayout,   // Public: Pulse's default layout (cards or the table)
 			HideTags:     config.HideTags,     // Public: Hotaru-compatible display flag
 			HideCards:    config.HideCards,    // Public: Hotaru-compatible display flag
 			// SharedSecret is intentionally omitted for security
