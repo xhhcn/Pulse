@@ -35,11 +35,11 @@ const customCodePlaceholder = [
 ].join('\n');
 ---
 
-<div class="mx-auto max-w-[1500px]">
+<div class="mx-auto max-w-[1568px]">
   <!-- System List -->
-  <div class="glass-card mb-4 sm:mb-6 rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-3 sm:p-4 md:p-6">
+  <div class="glass-card mb-4 sm:mb-6 rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white px-3 py-5 sm:p-6">
     <div class="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-      <div>
+      <div class="px-2 sm:px-1">
         <h2 id="system-list-title" class="text-[1.4rem] sm:text-2xl font-semibold tracking-tight leading-none sm:leading-none text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="systemList">Service List</h2>
         <p class="mt-1.5 text-sm text-[#595959] dark:text-[#ababab]" data-translate="systemListDesc">Drag to reorder; the dashboard shows the services in this order.</p>
       </div>
@@ -493,6 +493,18 @@ const customCodePlaceholder = [
           </div>
           <label class="relative inline-flex items-center cursor-pointer ml-3">
             <input type="checkbox" id="sticky-header-toggle" name="sticky_header" class="sr-only peer">
+            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+          </label>
+        </div>
+
+        <!-- Card layout on phones (off by default: phones get the compact rows) -->
+        <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
+          <div class="flex-1">
+            <label for="phone-cards-toggle" class="block text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] mb-1" data-translate="phoneCardsLabel">Card Layout on Phones</label>
+            <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="phoneCardsDesc">Show each server as a card on screens narrower than 768 px; visitors can still switch in the view menu</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer ml-3">
+            <input type="checkbox" id="phone-cards-toggle" name="phone_cards" class="sr-only peer">
             <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#a3a3a3]/60 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
           </label>
         </div>
@@ -3799,6 +3811,10 @@ const customCodePlaceholder = [
         if (stickyHeaderToggle) {
           stickyHeaderToggle.checked = config.sticky_header === true;
         }
+        const phoneCardsToggle = document.getElementById('phone-cards-toggle');
+        if (phoneCardsToggle) {
+          phoneCardsToggle.checked = config.phone_cards === true;
+        }
         return true;
       }
     } catch (err) {
@@ -4397,6 +4413,7 @@ const customCodePlaceholder = [
     const showTrafficToggle = document.getElementById('show-traffic-toggle');
     const showGlassToggle = document.getElementById('show-glass-toggle');
     const stickyHeaderToggle = document.getElementById('sticky-header-toggle');
+    const phoneCardsToggle = document.getElementById('phone-cards-toggle');
     const data = {
       text: formData.get('text')?.trim() || 'Pulse',
       logo: formData.get('logo')?.trim() || '',
@@ -4406,6 +4423,7 @@ const customCodePlaceholder = [
       show_traffic: showTrafficToggle?.checked || false,
       show_glass: showGlassToggle?.checked || false,
       sticky_header: stickyHeaderToggle?.checked || false,
+      phone_cards: phoneCardsToggle?.checked || false,
     };
 
     // Set button to saving state
@@ -4953,6 +4971,8 @@ const customCodePlaceholder = [
     'showGlassDesc': { en: 'Enable frosted glass visual effect on navbar and cards', zh: '为导航栏和卡片启用毛玻璃视觉效果' },
     'stickyHeaderLabel': { en: 'Sticky Table Header', zh: '表头吸顶' },
     'stickyHeaderDesc': { en: 'Keep the column names at the top of the window while a long list scrolls', zh: '滚动长列表时，列名固定在页面顶部' },
+    'phoneCardsLabel': { en: 'Card Layout on Phones', zh: '手机端卡片布局' },
+    'phoneCardsDesc': { en: 'Show each server as a card on screens narrower than 768 px; visitors can still switch in the view menu', zh: '屏幕窄于 768px 时用卡片显示每台服务器，访客仍可在视图菜单中切换' },
   };
 
   // The visitor's stored choice, else the language the page head picked for

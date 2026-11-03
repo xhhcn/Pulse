@@ -289,13 +289,13 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
   </head>
   <body class="min-h-screen overflow-x-hidden bg-[#fafafa] dark:bg-[#171717] text-[#151515] dark:text-[#f5f5f5]">
     <div id="auth-check" class="hidden min-h-screen flex flex-col">
-      <div class="px-2 sm:px-4 md:px-6 animate-navbar">
+      <div class="px-4 animate-navbar">
         <NavBar isAdmin={true} />
       </div>
-      <main class="flex-1 px-2 sm:px-4 md:px-6 pt-4 pb-2 sm:pb-4 animate-content">
+      <main class="flex-1 px-4 pt-4 pb-2 sm:pb-4 animate-content">
         <AdminDashboard apiBase={apiBase} />
       </main>
-      <div class="px-2 sm:px-4 md:px-6">
+      <div class="px-4">
         <Footer />
       </div>
     </div>

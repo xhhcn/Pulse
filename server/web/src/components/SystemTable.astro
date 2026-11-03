@@ -11,7 +11,7 @@ const apiBase = apiBaseProp ?? '';
 <div 
   id="monitor-root"
   data-api-base={apiBase}
-  class="glass-card mx-auto max-w-[1500px] rounded-[12.8px] border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white shadow-[0_1px_2px_0_rgba(0,0,0,0.05)] px-2 py-5 sm:p-4 md:p-6"
+  class="glass-card mx-auto max-w-[1568px] rounded-[12.8px] border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white shadow-[0_1px_2px_0_rgba(0,0,0,0.05)] px-3 py-5 sm:p-6"
   style="--first-col-width: 160px;"
 >
   <SystemTableHeader />
@@ -517,9 +517,11 @@ const apiBase = apiBaseProp ?? '';
   // signal, so we run it exactly once per page session.
   let staggerAnimationPlayed = false;
 
-  // Sort and status filter, kept in this browser as in Beszel. field null
-  // is the order the admin set. Measures sort the largest first, names
-  // from A.
+  // Sort, kept in this browser as in Beszel; field null is the order the
+  // admin set. Measures sort the largest first, names from A. The filters
+  // start afresh on every load: a reload shows every service again, with
+  // the status back on 全部 and an empty filter field (the status used to
+  // be kept as well, so a page reloaded on 离线 kept hiding the rest).
   const SORT_FIELDS = ['name', 'time', 'location', 'cpu', 'memory', 'disk', 'net', 'os'];
   const SORT_DESC_FIRST = ['time', 'cpu', 'memory', 'disk', 'net'];
   const readViewSetting = (key, fallback) => {
@@ -532,11 +534,19 @@ const apiBase = apiBaseProp ?? '';
       ? { field: saved.field, direction: saved.direction }
       : { field: null, direction: 'asc' };
   })();
-  let statusFilter = ['all', 'online', 'offline'].includes(readViewSetting('pulse-status-filter', 'all')) ? readViewSetting('pulse-status-filter', 'all') : 'all';
-  // Layout (the table, or cards from 768 px; phones always get cards) and
-  // the fields shown, Beszel's other two view settings. The name stays.
+  let statusFilter = 'all';
+  try { localStorage.removeItem('pulse-status-filter'); } catch (_) {}
+  // Layout (the table — on phones its compact rows — or Beszel's cards, at
+  // every width as in Beszel) and the fields shown, Beszel's other two view
+  // settings. The name stays. A visitor's own layout choice wins; without
+  // one, phones follow the site's 自定义设置 → 手机端卡片布局 (html.phone-cards,
+  // set in the page head before the first paint) and wider screens get the
+  // table.
   const HIDEABLE_COLS = ['uptime', 'location', 'cpu', 'memory', 'disk', 'net', 'os'];
-  let layoutMode = readViewSetting('pulse-layout', 'table') === 'grid' ? 'grid' : 'table';
+  let layoutChoice = ['table', 'grid'].includes(readViewSetting('pulse-layout', null)) ? readViewSetting('pulse-layout', null) : null;
+  const phoneQuery = window.matchMedia('(max-width: 767.98px)');
+  const layoutMode = () => layoutChoice
+    || (phoneQuery.matches && document.documentElement.classList.contains('phone-cards') ? 'grid' : 'table');
   let hiddenCols = (() => {
     const saved = readViewSetting('pulse-hidden-cols', []);
     return Array.isArray(saved) ? saved.filter((c) => HIDEABLE_COLS.includes(c)) : [];
@@ -802,7 +812,6 @@ const apiBase = apiBaseProp ?? '';
   document.querySelectorAll('.status-option').forEach((btn) => {
     btn.addEventListener('click', () => {
       statusFilter = btn.dataset.status || 'all';
-      saveViewSetting('pulse-status-filter', statusFilter);
       updateStatusUI();
       rerenderForView();
     });
@@ -841,7 +850,7 @@ const apiBase = apiBaseProp ?? '';
     const root = document.getElementById('monitor-root');
     if (!root) return;
     HIDEABLE_COLS.forEach((c) => root.classList.toggle(`hide-col-${c}`, hiddenCols.includes(c)));
-    root.classList.toggle('layout-grid', layoutMode === 'grid');
+    root.classList.toggle('layout-grid', layoutMode() === 'grid');
     root.classList.toggle('cols-custom', hiddenCols.length > 0);
     if (!hiddenCols.length) return;
     const tier = COLUMN_TIERS.find((t) => window.innerWidth >= t.min);
@@ -857,10 +866,13 @@ const apiBase = apiBaseProp ?? '';
   ['(min-width: 768px)', '(min-width: 900px)', '(min-width: 1024px)', '(min-width: 1280px)'].forEach((query) => {
     window.matchMedia(query).addEventListener('change', applyViewLayout);
   });
+  // Crossing 768 px can change the layout itself (the site's phone default).
+  phoneQuery.addEventListener('change', () => updateLayoutUI());
+  window.addEventListener('navbarconfigready', () => { if (!layoutChoice) { updateLayoutUI(); applyViewLayout(); } });
 
   function updateLayoutUI() {
     document.querySelectorAll('.layout-option').forEach((btn) => {
-      const active = btn.dataset.layout === layoutMode;
+      const active = btn.dataset.layout === layoutMode();
       btn.setAttribute('aria-checked', active ? 'true' : 'false');
       const mark = btn.querySelector('.layout-indicator');
       if (mark) mark.innerHTML = active ? DOT : '';
@@ -874,8 +886,8 @@ const apiBase = apiBaseProp ?? '';
   }
   document.querySelectorAll('.layout-option').forEach((btn) => {
     btn.addEventListener('click', () => {
-      layoutMode = btn.dataset.layout === 'grid' ? 'grid' : 'table';
-      saveViewSetting('pulse-layout', layoutMode);
+      layoutChoice = btn.dataset.layout === 'grid' ? 'grid' : 'table';
+      saveViewSetting('pulse-layout', layoutChoice);
       updateLayoutUI();
       applyViewLayout();
     });
@@ -1332,7 +1344,7 @@ const apiBase = apiBaseProp ?? '';
           ${item.location ? (() => {
             const flagIcon = countryToFlag(item.location);
             if (flagIcon) {
-              return `<span class="flag-icon block leading-none w-6 h-6" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
+              return `<span class="flag-icon block leading-none w-5 h-5" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
             }
             // SECURITY: Escape location to prevent XSS
             const safeLocation = escapeHtml(item.location);
@@ -1344,54 +1356,53 @@ const apiBase = apiBaseProp ?? '';
         <div class="cell-disk h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline, cardLabel(5))}</div>
         <div class="cell-net text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel(6)}<span class="cell-value">${formatTrafficSpeed((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0))}</span></div>
         <div class="cell-os h-5 flex items-center w-full" title="${escapeHtmlAttr(item.os || '-')}">
-          ${item.os_icon ? `<span class="os-icon block leading-none w-5 h-5" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>` : `<span class="text-[10px] sm:text-xs text-[#595959] dark:text-[#ababab]">${escapeHtml(item.os || '-')}</span>`}
+          ${item.os_icon ? `<span class="os-icon block leading-none w-[18px] h-[18px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>` : `<span class="text-[10px] sm:text-xs text-[#595959] dark:text-[#ababab]">${escapeHtml(item.os || '-')}</span>`}
     </div>
     </div>
       <!-- Expandable details section -->
       <div class="system-details hidden border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60 dark:bg-[#171717] bg-[#f8f8f8] overflow-hidden" data-details-id="${safeId}" style="width: 100%;">
         <div class="details-content px-3 sm:px-4 md:px-6 py-3 sm:py-4">
-          <div class="detail-list flex flex-col gap-1.5 sm:gap-2 items-start">
+          <div class="detail-list">
             <!-- Tags (first row) -->
             ${renderTagStrip(item)}
             <!-- CPU Info -->
-            <div class="detail-item flex flex-wrap items-baseline gap-1.5 sm:gap-2" style="min-height: 16px; line-height: 16px;">
+            <div class="detail-item">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 20v2m0-20v2m5 16v2m0-20v2M2 12h2m-2 5h2M2 7h2m16 5h2m-2 5h2M20 7h2M7 20v2M7 2v2"/><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="8" height="8" x="8" y="8" rx="1"/></g></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="cpuInformation">CPU:</div>
-              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] leading-normal" data-detail="cpu_model">${escapeHtml(item.cpu_model || '-')}</div>
+              <div class="detail-label shrink-0" data-translate-detail="cpuInformation">CPU:</div>
+              <div class="detail-value" data-detail="cpu_model">${escapeHtml(item.cpu_model || '-')}</div>
             </div>
             <!-- Memory Info -->
-            <div class="detail-item flex flex-wrap items-baseline gap-1.5 sm:gap-2">
+            <div class="detail-item">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 12v-2m0 8v-2m4-4v-2m0 8v-2M2 11h1.5M20 18v-2m.5-5H22M4 18v-2m4-4v-2m0 8v-2"/><rect width="20" height="10" x="2" y="6" rx="2"/></g></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="memoryInfo">Memory:</div>
-              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] leading-normal" data-detail="memory_info">${escapeHtml(item.memory_info || '-')}</div>
+              <div class="detail-label shrink-0" data-translate-detail="memoryInfo">Memory:</div>
+              <div class="detail-value" data-detail="memory_info">${escapeHtml(item.memory_info || '-')}</div>
             </div>
             <!-- Swap Info -->
-            <div class="detail-item flex flex-wrap items-baseline gap-1.5 sm:gap-2">
+            <div class="detail-item">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3L4 7l4 4M4 7h16m-4 14l4-4l-4-4m4 4H4"/></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="swapPartition">Swap:</div>
-              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] leading-normal" data-detail="swap_info">${escapeHtml(item.swap_info || '-')}</div>
+              <div class="detail-label shrink-0" data-translate-detail="swapPartition">Swap:</div>
+              <div class="detail-value" data-detail="swap_info">${escapeHtml(item.swap_info || '-')}</div>
             </div>
             <!-- Disk Info -->
-            <div class="detail-item flex flex-wrap items-baseline gap-1.5 sm:gap-2">
+            <div class="detail-item">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 12H2m3.45-6.89L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11M6 16h.01M10 16h.01"/></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="diskInformation">Disk:</div>
-              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] leading-normal" data-detail="disk_info">${escapeHtml(item.disk_info || '-')}</div>
+              <div class="detail-label shrink-0" data-translate-detail="diskInformation">Disk:</div>
+              <div class="detail-value" data-detail="disk_info">${escapeHtml(item.disk_info || '-')}</div>
             </div>
             ${showTrafficInfo ? `
             <!-- Real-time Traffic -->
-            <div class="detail-item flex items-center gap-1.5 sm:gap-2" data-traffic-row="speed">
+            <div class="detail-item" data-traffic-row="speed">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="realtimeTraffic">Traffic:</div>
+              <div class="detail-label shrink-0" data-translate-detail="realtimeTraffic">Traffic:</div>
               ${(!item.cpu_model && !item.memory_info && !item.disk_info) ? `
-              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-placeholder="speed">-</div>
+              <div class="detail-value" data-traffic-placeholder="speed">-</div>
               ` : `
-              <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-values="speed">
-                <span class="flex items-center gap-0.5" data-detail-speed="in">
+              <div class="detail-value detail-pair flex items-center gap-2.5" data-traffic-values="speed">
+                <span class="flex items-center gap-[3px]" data-detail-speed="in">
                   <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12l7 7 7-7"/></svg>
                   <span>${formatTrafficSpeed(item.net_in_mb_s || 0)}</span>
                 </span>
-                <span class="text-[#595959] dark:text-[#ababab] mx-1">|</span>
-                <span class="flex items-center gap-0.5" data-detail-speed="out">
+                <span class="flex items-center gap-[3px]" data-detail-speed="out">
                   <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-blue-600 dark:text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
                   <span>${formatTrafficSpeed(item.net_out_mb_s || 0)}</span>
                 </span>
@@ -1399,19 +1410,18 @@ const apiBase = apiBaseProp ?? '';
               `}
             </div>
             <!-- Total Traffic -->
-            <div class="detail-item flex items-center gap-1.5 sm:gap-2" data-traffic-row="total">
+            <div class="detail-item" data-traffic-row="total">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/></svg>
-              <div class="text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab] shrink-0" data-translate-detail="totalTraffic">Total:</div>
+              <div class="detail-label shrink-0" data-translate-detail="totalTraffic">Total:</div>
               ${(!item.cpu_model && !item.memory_info && !item.disk_info) ? `
-              <div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-placeholder="total">-</div>
+              <div class="detail-value" data-traffic-placeholder="total">-</div>
               ` : `
-              <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-values="total">
-                <span class="flex items-center gap-0.5" data-detail-total="in">
+              <div class="detail-value detail-pair flex items-center gap-2.5" data-traffic-values="total">
+                <span class="flex items-center gap-[3px]" data-detail-total="in">
                   <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12l7 7 7-7"/></svg>
                   <span>${formatTotalTraffic(item.total_net_in_bytes || 0)}</span>
                 </span>
-                <span class="text-[#595959] dark:text-[#ababab] mx-1">|</span>
-                <span class="flex items-center gap-0.5" data-detail-total="out">
+                <span class="flex items-center gap-[3px]" data-detail-total="out">
                   <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-blue-600 dark:text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
                   <span>${formatTotalTraffic(item.total_net_out_bytes || 0)}</span>
                 </span>
@@ -1940,7 +1950,7 @@ const apiBase = apiBaseProp ?? '';
         if (item.location) {
           const flagIcon = countryToFlag(item.location);
           if (flagIcon) {
-            locationCell.innerHTML = `<span class="flag-icon block leading-none w-6 h-6" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
+            locationCell.innerHTML = `<span class="flag-icon block leading-none w-5 h-5" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
             locationCell.title = item.location; // Set title for tooltip
             setTimeout(() => loadFlagIcons(), 0);
           } else {
@@ -2053,7 +2063,7 @@ const apiBase = apiBaseProp ?? '';
       const osCell = cells[7];
       if (osCell) {
         if (item.os_icon) {
-          osCell.innerHTML = `<span class="os-icon block leading-none w-5 h-5" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>`;
+          osCell.innerHTML = `<span class="os-icon block leading-none w-[18px] h-[18px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>`;
           setTimeout(() => loadOSIcons(), 0);
         } else {
           // SECURITY: Escape HTML to prevent XSS (same helper as renderRow)
@@ -2123,13 +2133,12 @@ const apiBase = apiBaseProp ?? '';
             if (hasData && speedPlaceholder) {
               // Transition from placeholder to values
               const valuesHtml = `
-                <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-values="speed">
-                  <span class="flex items-center gap-0.5" data-detail-speed="in">
+                <div class="detail-value detail-pair flex items-center gap-2.5" data-traffic-values="speed">
+                  <span class="flex items-center gap-[3px]" data-detail-speed="in">
                     <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12l7 7 7-7"/></svg>
                     <span>${formatTrafficSpeed(item.net_in_mb_s || 0)}</span>
                   </span>
-                  <span class="text-[#595959] dark:text-[#ababab] mx-1">|</span>
-                  <span class="flex items-center gap-0.5" data-detail-speed="out">
+                  <span class="flex items-center gap-[3px]" data-detail-speed="out">
                     <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-blue-600 dark:text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
                     <span>${formatTrafficSpeed(item.net_out_mb_s || 0)}</span>
                   </span>
@@ -2139,7 +2148,7 @@ const apiBase = apiBaseProp ?? '';
             } else if (!hasData && speedValues) {
               // Transition from values to placeholder
               speedValues.remove();
-              speedRow.insertAdjacentHTML('beforeend', '<div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-placeholder="speed">-</div>');
+              speedRow.insertAdjacentHTML('beforeend', '<div class="detail-value" data-traffic-placeholder="speed">-</div>');
             } else if (hasData && speedValues) {
               // Update existing values
               const speedInEl = speedValues.querySelector('[data-detail-speed="in"] span:last-child');
@@ -2164,13 +2173,12 @@ const apiBase = apiBaseProp ?? '';
             if (hasData && totalPlaceholder) {
               // Transition from placeholder to values
               const valuesHtml = `
-                <div class="flex items-center text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-values="total">
-                  <span class="flex items-center gap-0.5" data-detail-total="in">
+                <div class="detail-value detail-pair flex items-center gap-2.5" data-traffic-values="total">
+                  <span class="flex items-center gap-[3px]" data-detail-total="in">
                     <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12l7 7 7-7"/></svg>
                     <span>${formatTotalTraffic(item.total_net_in_bytes || 0)}</span>
                   </span>
-                  <span class="text-[#595959] dark:text-[#ababab] mx-1">|</span>
-                  <span class="flex items-center gap-0.5" data-detail-total="out">
+                  <span class="flex items-center gap-[3px]" data-detail-total="out">
                     <svg class="w-[10px] h-[10px] sm:w-3 sm:h-3 text-blue-600 dark:text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
                     <span>${formatTotalTraffic(item.total_net_out_bytes || 0)}</span>
                   </span>
@@ -2180,7 +2188,7 @@ const apiBase = apiBaseProp ?? '';
             } else if (!hasData && totalValues) {
               // Transition from values to placeholder
               totalValues.remove();
-              totalRow.insertAdjacentHTML('beforeend', '<div class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-traffic-placeholder="total">-</div>');
+              totalRow.insertAdjacentHTML('beforeend', '<div class="detail-value" data-traffic-placeholder="total">-</div>');
             } else if (hasData && totalValues) {
               // Update existing values
               const totalInEl = totalValues.querySelector('[data-detail-total="in"] span:last-child');
@@ -5563,6 +5571,11 @@ const apiBase = apiBaseProp ?? '';
 
     const clearBtn = document.getElementById('system-filter-clear');
     const syncClear = () => clearBtn?.classList.toggle('hidden', !filterInput.value);
+    // A reload starts unfiltered even where a browser puts back what the
+    // field held (form restoration), so the field never shows text the
+    // list does not apply.
+    filterInput.value = '';
+    syncClear();
     const inputHandler = (e) => {
       currentFilter = e.target.value;
       syncClear();
@@ -5762,11 +5775,12 @@ const apiBase = apiBaseProp ?? '';
      memory and disk bars; network and uptime), each metric with its
      header's icon and label (cardLabel), since the header row is hidden.
      The expanded details and the TCPing chart then fit the screen. 768 px
-     and up keep the table (see the tiers below). */
+     and up keep the table (see the tiers below). The card layout
+     (.layout-grid) replaces these rows with Beszel's cards at any width. */
   @media (max-width: 767.98px) {
-    #monitor-root .table-scroll-content { min-width: 0 !important; }
-    #monitor-root #system-table-header-row { display: none !important; }
-    #monitor-root .system-row > [data-system-id] {
+    #monitor-root:not(.layout-grid) .table-scroll-content { min-width: 0 !important; }
+    #monitor-root:not(.layout-grid) #system-table-header-row { display: none !important; }
+    #monitor-root:not(.layout-grid) .system-row > [data-system-id] {
       grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
       grid-template-areas:
         "name name name name loc os"
@@ -5776,10 +5790,10 @@ const apiBase = apiBaseProp ?? '';
       row-gap: 7px;
       padding: 11px 14px;
     }
-    #monitor-root .system-row > [data-system-id] > div { height: auto; min-height: 0; }
-    #monitor-root .cell-name { grid-area: name; min-width: 0; align-items: flex-start; }
-    #monitor-root .cell-name > .rounded-full { margin-top: 0.42em; }
-    #monitor-root .row-name {
+    #monitor-root:not(.layout-grid) .system-row > [data-system-id] > div { height: auto; min-height: 0; }
+    #monitor-root:not(.layout-grid) .cell-name { grid-area: name; min-width: 0; align-items: flex-start; }
+    #monitor-root:not(.layout-grid) .cell-name > .rounded-full { margin-top: 0.42em; }
+    #monitor-root:not(.layout-grid) .row-name {
       white-space: normal;
       overflow-wrap: anywhere;
       display: -webkit-box;
@@ -5792,43 +5806,47 @@ const apiBase = apiBaseProp ?? '';
       font-size: 13px;
       line-height: 1.3;
     }
-    #monitor-root .cell-location { grid-area: loc; justify-self: end; }
-    #monitor-root .cell-os { grid-area: os; justify-self: end; width: auto; }
+    #monitor-root:not(.layout-grid) .cell-location { grid-area: loc; justify-self: end; }
+    #monitor-root:not(.layout-grid) .cell-os { grid-area: os; justify-self: end; width: auto; }
     /* The flag beside the OS logo (8 px apart), not a column away. */
-    #monitor-root:not(.hide-col-os) .cell-location { grid-area: os; margin-right: 28px; }
-    #monitor-root .cell-cpu { grid-area: cpu; }
-    #monitor-root .cell-memory { grid-area: mem; }
-    #monitor-root .cell-disk { grid-area: disk; }
-    #monitor-root .cell-cpu,
-    #monitor-root .cell-memory,
-    #monitor-root .cell-disk { display: block; padding-right: 0; }
-    #monitor-root .cell-cpu > div,
-    #monitor-root .cell-memory > div,
-    #monitor-root .cell-disk > div { flex-wrap: wrap; row-gap: 4px; padding-right: 0; }
-    #monitor-root .cell-cpu > div > span.font-medium,
-    #monitor-root .cell-memory > div > span.font-medium,
-    #monitor-root .cell-disk > div > span.font-medium {
+    #monitor-root:not(.layout-grid):not(.hide-col-os) .cell-location { grid-area: os; margin-right: 26px; }
+    #monitor-root:not(.layout-grid) .cell-cpu { grid-area: cpu; }
+    #monitor-root:not(.layout-grid) .cell-memory { grid-area: mem; }
+    #monitor-root:not(.layout-grid) .cell-disk { grid-area: disk; }
+    #monitor-root:not(.layout-grid) .cell-cpu,
+    #monitor-root:not(.layout-grid) .cell-memory,
+    #monitor-root:not(.layout-grid) .cell-disk { display: block; padding-right: 0; }
+    #monitor-root:not(.layout-grid) .cell-cpu > div,
+    #monitor-root:not(.layout-grid) .cell-memory > div,
+    #monitor-root:not(.layout-grid) .cell-disk > div { flex-wrap: wrap; row-gap: 4px; padding-right: 0; }
+    #monitor-root:not(.layout-grid) .cell-cpu > div > span.font-medium,
+    #monitor-root:not(.layout-grid) .cell-memory > div > span.font-medium,
+    #monitor-root:not(.layout-grid) .cell-disk > div > span.font-medium {
       order: 1;
       flex: 1 1 auto;
       width: auto;
       text-align: right;
       font-size: 12px;
     }
-    #monitor-root .cell-cpu .progress-track,
-    #monitor-root .cell-memory .progress-track,
-    #monitor-root .cell-disk .progress-track { order: 2; flex: 0 0 100%; min-width: 0; height: 10px; }
-    #monitor-root .cell-net { grid-area: net; gap: 4px; font-size: 12px; }
-    #monitor-root .cell-uptime { grid-area: up; justify-self: end; gap: 4px; font-size: 12px; }
-    #monitor-root .cell-label { display: inline-flex; font-size: 11px; font-weight: 400; }
-    #monitor-root .cell-label svg { width: 12px; height: 12px; }
-    #monitor-root .system-details .details-content { padding-left: 14px; padding-right: 14px; }
+    #monitor-root:not(.layout-grid) .cell-cpu .progress-track,
+    #monitor-root:not(.layout-grid) .cell-memory .progress-track,
+    #monitor-root:not(.layout-grid) .cell-disk .progress-track { order: 2; flex: 0 0 100%; min-width: 0; height: 10px; }
+    #monitor-root:not(.layout-grid) .cell-net { grid-area: net; gap: 4px; font-size: 12px; }
+    #monitor-root:not(.layout-grid) .cell-uptime { grid-area: up; justify-self: end; gap: 4px; font-size: 12px; }
+    #monitor-root:not(.layout-grid) .cell-label { display: inline-flex; font-size: 11px; font-weight: 400; }
+    #monitor-root:not(.layout-grid) .cell-label svg { width: 12px; height: 12px; }
+    #monitor-root:not(.layout-grid) .system-details .details-content { padding-left: 14px; padding-right: 14px; }
   }
-  /* Under 390 px "Memory 36.5%" no longer fits its third of a card and the
-     value dropped below the label, out of line with CPU and disk: there
-     the three meters keep their icons and give up the words (Chinese
-     labels fit). */
-  @media (max-width: 389.98px) {
-    html:lang(en) #monitor-root .system-row :is(.cell-cpu, .cell-memory, .cell-disk) .cell-label > span { display: none; }
+  /* Under 410 px (Beszel's 16 px page margin and 12 px card padding)
+     "Memory 36.5%" no longer fits its third of a row and the value dropped
+     below the label, out of line with CPU and disk: there the three meters
+     keep their icons and give up the words; the Chinese ones fit down to
+     360 px. */
+  @media (max-width: 409.98px) {
+    html:lang(en) #monitor-root:not(.layout-grid) .system-row :is(.cell-cpu, .cell-memory, .cell-disk) .cell-label > span { display: none; }
+  }
+  @media (max-width: 359.98px) {
+    #monitor-root:not(.layout-grid) .system-row :is(.cell-cpu, .cell-memory, .cell-disk) .cell-label > span { display: none; }
   }
 
   /* Optional sticky column header (自定义设置 → 表头吸顶, off by default):
@@ -5891,6 +5909,10 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root #system-table-header-row {
       grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(72px,1fr) minmax(72px,1fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr) !important;
     }
+    /* 12 px text and 14 px header icons here: the flag and the OS logo
+       step down with them (18 / 16 px, 20 / 18 px elsewhere). */
+    #monitor-root:not(.layout-grid) .flag-icon { width: 18px; height: 18px; }
+    #monitor-root:not(.layout-grid) .os-icon { width: 16px; height: 16px; }
   }
   @media (min-width: 768px) and (max-width: 1023.98px) {
     #monitor-root .cell-location,
@@ -5993,121 +6015,125 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root.cols-custom:not(.layout-grid) .table-scroll-content { min-width: var(--cols-min) !important; }
   }
   @media (max-width: 767.98px) {
-    #monitor-root.cols-custom .system-row > [data-system-id] { grid-template-areas: var(--card-areas) !important; }
+    #monitor-root.cols-custom:not(.layout-grid) .system-row > [data-system-id] { grid-template-areas: var(--card-areas) !important; }
   }
 
-  /* The card layout from 768 px (view menu → 布局 → 卡片), Beszel's grid
-     view (SystemCard): two columns, three from 1024 px, 16 px apart. A card
-     is a bordered box with a shaded header band (status dot, name, flag and
-     OS) over rows of icon, label and value that share one grid, so the
-     labels and bars line up from row to row. The row's own cells are laid
-     out with display: contents and order (CPU, memory, disk, net, uptime),
-     so switching layouts re-renders nothing and hidden fields leave no gap.
+  /* The card layout (view menu → 布局 → 卡片 at every width as in Beszel;
+     on phones also 自定义设置 → 手机端卡片布局), Beszel's grid view
+     (SystemCard): one column, two from 640 px and three from 1024 px, 16 px
+     apart (grid-cols-1 sm:grid-cols-2 lg:grid-cols-3). A card is a
+     bordered box with a shaded header band (status dot, name, flag and OS)
+     over rows of icon, label and value that share one grid, so the labels
+     and bars line up from row to row. The row's own cells are laid out
+     with display: contents and order (CPU, memory, disk, net, uptime), so
+     switching layouts re-renders nothing and hidden fields leave no gap.
      An opened card stays where it is: the row wrapper is display: contents,
      so the details become a grid item of their own that spans the grid
      under the card's row, and dense placement lets the cards after it fill
      that row first (in their order). Two ids in each selector outrank the
-     table tiers. Phones keep their own cards (the block above). */
-  @media (min-width: 768px) {
-    #monitor-root.layout-grid .glass-inner { border-color: transparent; background-color: transparent; overflow: visible; }
-    #monitor-root.layout-grid .table-scroll-content { min-width: 0 !important; }
-    #monitor-root.layout-grid #system-table-header-row { display: none !important; }
-    #monitor-root.layout-grid #systems-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: row dense; gap: 16px; align-items: start; }
-    #monitor-root.layout-grid #systems-body > .system-row { display: contents; }
-    #monitor-root.layout-grid #systems-body .system-row > [data-system-id] {
-      grid-template-columns: 16px minmax(80px, max-content) max-content minmax(0, 1fr) !important;
-      grid-template-areas: none !important;
-      column-gap: 10px;
-      row-gap: 10px;
-      align-items: center;
-      align-self: stretch;
-      padding: 0 20px 16px;
-      font-size: 14px;
-      line-height: 20px;
-      border: 1px solid rgba(221, 218, 215, 0.6);
-      border-radius: 12.8px;
-      overflow: hidden;
-      background-color: transparent;
-      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-      transition: box-shadow 0.2s ease, border-color 0.2s ease;
-    }
-    #monitor-root.layout-grid #systems-body .system-row > [data-system-id]:hover { background: transparent; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
-    #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #c9c9c9; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
-    html.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id] { border-color: #2c2c2c; }
-    html.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #474747; }
-    /* The opened card's details: a panel across the grid, under its row */
-    #monitor-root.layout-grid #systems-body .system-details {
-      grid-column: 1 / -1;
-      border: 1px solid rgba(221, 218, 215, 0.6);
-      border-radius: 12.8px;
-    }
-    html.dark #monitor-root.layout-grid #systems-body .system-details { border-color: #2c2c2c; }
-    /* Header band */
-    #monitor-root.layout-grid #systems-body .system-row .cell-name {
-      grid-column: 1 / -1;
-      grid-row: 1;
-      align-self: stretch;
-      min-width: 0;
-      height: auto;
-      margin: 0 -20px 4px;
-      padding: 12px var(--card-head-reserve, 16px) 12px 16px;
-      gap: 10px;
-      background-color: rgba(240, 240, 240, 0.3);
-      border-bottom: 1px solid rgba(221, 218, 215, 0.6);
-    }
-    #monitor-root.layout-grid:not(.hide-col-location) #systems-body .system-row .cell-name { --card-head-reserve: 52px; }
-    #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-name { --card-head-reserve: 48px; }
-    #monitor-root.layout-grid:not(.hide-col-location):not(.hide-col-os) #systems-body .system-row .cell-name { --card-head-reserve: 80px; }
-    html.dark #monitor-root.layout-grid #systems-body .system-row .cell-name { background-color: rgba(41, 41, 41, 0.3); border-bottom-color: rgba(42, 43, 45, 0.6); }
-    #monitor-root.layout-grid #systems-body .system-row .cell-name > .rounded-full:first-child { width: 8px; height: 8px; }
-    #monitor-root.layout-grid #systems-body .system-row .row-name {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 15.2px;
-      line-height: 24px;
-      font-weight: 600;
-    }
-    #monitor-root.layout-grid:not(.hide-col-location) #systems-body .system-row .cell-location,
-    #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-os {
-      display: flex !important;
-      grid-column: 1 / -1;
-      grid-row: 1;
-      justify-self: end;
-      align-self: center;
-      width: auto;
-      height: auto;
-      margin-bottom: 4px;
-      position: relative;
-    }
-    #monitor-root.layout-grid #systems-body .system-row .cell-os { margin-right: -4px; }
-    #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-location { margin-right: 24px; }
-    #monitor-root.layout-grid.hide-col-os #systems-body .system-row .cell-location { margin-right: -4px; }
-    #monitor-root.layout-grid #systems-body .system-row .flag-icon { width: 22px; height: 22px; }
-    #monitor-root.layout-grid #systems-body .system-row .os-icon { width: 18px; height: 18px; }
-    /* Rows: icon, label, value and (for the meters) the bar */
-    #monitor-root.layout-grid:not(.hide-col-cpu) #systems-body .system-row :is(.cell-cpu, .cell-cpu > div),
-    #monitor-root.layout-grid:not(.hide-col-memory) #systems-body .system-row :is(.cell-memory, .cell-memory > div),
-    #monitor-root.layout-grid:not(.hide-col-disk) #systems-body .system-row :is(.cell-disk, .cell-disk > div),
-    #monitor-root.layout-grid:not(.hide-col-net) #systems-body .system-row .cell-net,
-    #monitor-root.layout-grid:not(.hide-col-uptime) #systems-body .system-row .cell-uptime,
-    #monitor-root.layout-grid #systems-body .system-row .cell-label { display: contents !important; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-label { color: #595959; }
-    html.dark #monitor-root.layout-grid #systems-body .system-row .cell-label { color: #ababab; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-label svg { width: 16px; height: 16px; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-label > span { font-size: 14px; font-weight: 400; white-space: nowrap; padding-right: 12px; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-label > span::after { content: ':'; }
-    #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) span.font-medium { width: auto; min-width: 32px; font-size: 14px; line-height: 20px; font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; }
-    #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) .progress-track { min-width: 0; height: 14px; }
-    #monitor-root.layout-grid #systems-body .system-row :is(.cell-net, .cell-uptime) { font-size: 14px; font-weight: 400; font-variant-numeric: tabular-nums; }
-    #monitor-root.layout-grid #systems-body .system-row :is(.cell-net, .cell-uptime) .cell-value { grid-column: 3 / -1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-cpu * { order: 1; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-memory * { order: 2; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-disk * { order: 3; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-net * { order: 4; }
-    #monitor-root.layout-grid #systems-body .system-row .cell-uptime * { order: 5; }
-    #monitor-root.layout-grid #systems-body .system-details .details-content { padding-left: 20px; padding-right: 20px; }
+     table tiers; the phones' compact rows (the block above) skip
+     .layout-grid. */
+  #monitor-root.layout-grid .glass-inner { border-color: transparent; background-color: transparent; overflow: visible; }
+  #monitor-root.layout-grid .table-scroll-content { min-width: 0 !important; }
+  #monitor-root.layout-grid #system-table-header-row { display: none !important; }
+  #monitor-root.layout-grid #systems-body { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-flow: row dense; gap: 16px; align-items: start; }
+  #monitor-root.layout-grid #systems-body > .system-row { display: contents; }
+  #monitor-root.layout-grid #systems-body .system-row > [data-system-id] {
+    grid-template-columns: 16px minmax(80px, max-content) max-content minmax(0, 1fr) !important;
+    grid-template-areas: none !important;
+    column-gap: 10px;
+    row-gap: 10px;
+    align-items: center;
+    align-self: stretch;
+    padding: 0 20px 16px;
+    font-size: 14px;
+    line-height: 20px;
+    border: 1px solid rgba(221, 218, 215, 0.6);
+    border-radius: 12.8px;
+    overflow: hidden;
+    background-color: transparent;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  #monitor-root.layout-grid #systems-body .system-row > [data-system-id]:hover { background: transparent; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
+  #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #c9c9c9; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
+  html.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id] { border-color: #2c2c2c; }
+  html.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #474747; }
+  /* The opened card's details: a panel across the grid, under its row */
+  #monitor-root.layout-grid #systems-body .system-details {
+    grid-column: 1 / -1;
+    border: 1px solid rgba(221, 218, 215, 0.6);
+    border-radius: 12.8px;
+  }
+  html.dark #monitor-root.layout-grid #systems-body .system-details { border-color: #2c2c2c; }
+  /* Header band */
+  #monitor-root.layout-grid #systems-body .system-row .cell-name {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    align-self: stretch;
+    min-width: 0;
+    height: auto;
+    margin: 0 -20px 4px;
+    padding: 12px var(--card-head-reserve, 16px) 12px 16px;
+    gap: 10px;
+    background-color: rgba(240, 240, 240, 0.3);
+    border-bottom: 1px solid rgba(221, 218, 215, 0.6);
+  }
+  #monitor-root.layout-grid:not(.hide-col-location) #systems-body .system-row .cell-name { --card-head-reserve: 52px; }
+  #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-name { --card-head-reserve: 48px; }
+  #monitor-root.layout-grid:not(.hide-col-location):not(.hide-col-os) #systems-body .system-row .cell-name { --card-head-reserve: 80px; }
+  html.dark #monitor-root.layout-grid #systems-body .system-row .cell-name { background-color: rgba(41, 41, 41, 0.3); border-bottom-color: rgba(42, 43, 45, 0.6); }
+  #monitor-root.layout-grid #systems-body .system-row .cell-name > .rounded-full:first-child { width: 8px; height: 8px; }
+  #monitor-root.layout-grid #systems-body .system-row .row-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15.2px;
+    line-height: 24px;
+    font-weight: 600;
+  }
+  #monitor-root.layout-grid:not(.hide-col-location) #systems-body .system-row .cell-location,
+  #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-os {
+    display: flex !important;
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: end;
+    align-self: center;
+    width: auto;
+    height: auto;
+    margin-bottom: 4px;
+    position: relative;
+  }
+  #monitor-root.layout-grid #systems-body .system-row .cell-os { margin-right: -4px; }
+  #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-location { margin-right: 24px; }
+  #monitor-root.layout-grid.hide-col-os #systems-body .system-row .cell-location { margin-right: -4px; }
+  #monitor-root.layout-grid #systems-body .system-row .flag-icon { width: 20px; height: 20px; }
+  #monitor-root.layout-grid #systems-body .system-row .os-icon { width: 18px; height: 18px; }
+  /* Rows: icon, label, value and (for the meters) the bar */
+  #monitor-root.layout-grid:not(.hide-col-cpu) #systems-body .system-row :is(.cell-cpu, .cell-cpu > div),
+  #monitor-root.layout-grid:not(.hide-col-memory) #systems-body .system-row :is(.cell-memory, .cell-memory > div),
+  #monitor-root.layout-grid:not(.hide-col-disk) #systems-body .system-row :is(.cell-disk, .cell-disk > div),
+  #monitor-root.layout-grid:not(.hide-col-net) #systems-body .system-row .cell-net,
+  #monitor-root.layout-grid:not(.hide-col-uptime) #systems-body .system-row .cell-uptime,
+  #monitor-root.layout-grid #systems-body .system-row .cell-label { display: contents !important; }
+  #monitor-root.layout-grid #systems-body .system-row .cell-label { color: #595959; }
+  html.dark #monitor-root.layout-grid #systems-body .system-row .cell-label { color: #ababab; }
+  #monitor-root.layout-grid #systems-body .system-row .cell-label svg { width: 16px; height: 16px; }
+  #monitor-root.layout-grid #systems-body .system-row .cell-label > span { font-size: 14px; font-weight: 400; white-space: nowrap; padding-right: 12px; }
+  #monitor-root.layout-grid #systems-body .system-row .cell-label > span::after { content: ':'; }
+  #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) span.font-medium { width: auto; min-width: 32px; font-size: 14px; line-height: 20px; font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; }
+  #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) .progress-track { min-width: 0; height: 14px; }
+  #monitor-root.layout-grid #systems-body .system-row :is(.cell-net, .cell-uptime) { font-size: 14px; font-weight: 400; font-variant-numeric: tabular-nums; }
+  #monitor-root.layout-grid #systems-body .system-row :is(.cell-net, .cell-uptime) .cell-value { grid-column: 3 / -1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #monitor-root.layout-grid #systems-body .system-row .cell-cpu * { order: 1; }
+  #monitor-root.layout-grid #systems-body .system-row .cell-memory * { order: 2; }
+  #monitor-root.layout-grid #systems-body .system-row .cell-disk * { order: 3; }
+  #monitor-root.layout-grid #systems-body .system-row .cell-net * { order: 4; }
+  #monitor-root.layout-grid #systems-body .system-row .cell-uptime * { order: 5; }
+  #monitor-root.layout-grid #systems-body .system-details .details-content { padding-left: 20px; padding-right: 20px; }
+  @media (min-width: 640px) {
+    #monitor-root.layout-grid #systems-body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (min-width: 1024px) {
     #monitor-root.layout-grid #systems-body { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -6118,22 +6144,38 @@ const apiBase = apiBaseProp ?? '';
   html.glass-enabled.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id],
   html.glass-enabled.dark #monitor-root.layout-grid #systems-body .system-details { background: rgba(255, 255, 255, 0.03) !important; border-color: rgba(255, 255, 255, 0.07) !important; }
 
-  /* An opened row's details, after Beszel's info bar: each item an icon,
-     its muted label and the value; from 768 px they run on in a wrapping
-     line with hairline dividers, on phones one under another. From 1280 px
-     the text is 13 px and the TCPing card's title steps up to 14 px. */
-  #monitor-root .detail-item { align-items: center; }
-  #monitor-root .detail-icon { width: 14px; height: 14px; flex: none; color: #595959; }
+  /* An opened row's details, after Beszel's info bar (InfoBar): an icon,
+     the muted label and the value for each item. On phones they line up in
+     three columns (icon, label, value), the values in one column like a
+     card's rows, a wrapped value's label on its first line. From 768 px they run on in a wrapping line, 12 px either
+     side of a 16 px hairline (the foreground at 30 %, Beszel's vertical
+     Separator). A divider belongs to the item after it and sits in the gap;
+     the list clips its left edge, so an item that starts a new line drops
+     its divider instead of leading with one. A traffic pair is one value:
+     down and up 10 px apart, no rule between them. Text 12 px on phones,
+     13 px to 1279 px, then Beszel's 14 px with 16 px icons. */
+  #monitor-root .detail-list { display: grid; grid-template-columns: 14px max-content minmax(0, 1fr); align-items: start; column-gap: 8px; row-gap: 8px; font-size: 12px; line-height: 18px; }
+  #monitor-root .detail-list > [data-tag-strip] { grid-column: 1 / -1; }
+  #monitor-root .detail-item { display: contents; }
+  #monitor-root .detail-icon { width: 14px; height: 14px; margin-top: 2px; flex: none; color: #595959; }
   html.dark #monitor-root .detail-icon { color: #ababab; }
+  #monitor-root .detail-label { color: #595959; white-space: nowrap; }
+  html.dark #monitor-root .detail-label { color: #ababab; }
+  #monitor-root .detail-value { min-width: 0; color: #1d1d20; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  html.dark #monitor-root .detail-value { color: #f5f5f5; }
+  #monitor-root .detail-pair > span { white-space: nowrap; }
+  #monitor-root [data-tcping-stats] { font-size: 12px; }
   @media (min-width: 768px) {
-    #monitor-root .detail-list { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 0; row-gap: 8px; }
+    #monitor-root .detail-list { display: flex; flex-wrap: wrap; column-gap: 25px; row-gap: 10px; font-size: 13px; line-height: 20px; overflow: hidden; }
     #monitor-root .detail-list > [data-tag-strip] { flex-basis: 100%; }
-    #monitor-root .detail-item + .detail-item::before { content: ''; flex: none; width: 1px; height: 14px; margin: 0 6px 0 14px; background: rgba(0, 0, 0, 0.14); }
-    html.dark #monitor-root .detail-item + .detail-item::before { background: rgba(255, 255, 255, 0.14); }
+    #monitor-root .detail-item { display: flex; align-items: center; gap: 6px; position: relative; min-width: 0; }
+    #monitor-root .detail-icon { margin-top: 0; }
+    #monitor-root .detail-item + .detail-item::before { content: ''; position: absolute; top: 50%; left: -13px; width: 1px; height: 16px; margin-top: -8px; background: rgba(24, 24, 27, 0.3); }
+    html.dark #monitor-root .detail-item + .detail-item::before { background: rgba(244, 245, 245, 0.3); }
   }
   @media (min-width: 1280px) {
-    #monitor-root .detail-list :is([data-translate-detail], [data-detail], [data-traffic-values], [data-traffic-placeholder]) { font-size: 13px; }
-    #monitor-root .detail-icon { width: 15px; height: 15px; }
+    #monitor-root .detail-list { font-size: 14px; }
+    #monitor-root .detail-icon { width: 16px; height: 16px; }
     #monitor-root [data-tcping-stats] { font-size: 13px; }
   }
 

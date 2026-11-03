@@ -84,6 +84,18 @@ html.dark .toolbar-control::placeholder { color: #ababab; }
 html.dark .toolbar-control:focus-visible {
   box-shadow: 0 0 0 2px #171717, 0 0 0 4px #cacbce;
 }
+/* The same ring on Beszel's other buttons (ring-2 ring-ring
+   ring-offset-2): the navigation bar's and the column headers that sort the
+   table, which had only a faint outline or none. */
+#navbar-icons-container :is(a, button):focus-visible,
+#system-table-header-row .sort-header:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #fafafa, 0 0 0 4px #837e79;
+}
+html.dark #navbar-icons-container :is(a, button):focus-visible,
+html.dark #system-table-header-row .sort-header:focus-visible {
+  box-shadow: 0 0 0 2px #171717, 0 0 0 4px #cacbce;
+}
 .toolbar-icon-btn:hover,
 .toolbar-icon-btn[aria-expanded="true"] { background-color: rgba(243, 239, 236, 0.7); }
 html.dark .toolbar-icon-btn:hover,
@@ -134,10 +146,12 @@ html.dark .pulse-tooltip {
   .pulse-tooltip { transition: none; transform: none; }
 }
 
+/* Beszel's ModeToggle: the new icon fades in and turns from -30 degrees
+   (tw-animate-css fade-in spin-in-[-30deg] duration-200, timing ease). */
 @keyframes theme-icon-in {
-  from { opacity: 0; transform: rotate(-30deg) scale(0.9); }
+  from { opacity: 0; transform: rotate(-30deg); }
 }
-#theme-btn .theme-icon-in { animation: theme-icon-in 200ms ease-out; }
+#theme-btn .theme-icon-in { animation: theme-icon-in 200ms ease; }
 @media (prefers-reduced-motion: reduce) {
   #theme-btn .theme-icon-in { animation: none; }
 }
@@ -1109,6 +1123,12 @@ html.dark .cpu-brand-icon[data-icon="logos:intel"] svg {
 html.dark .os-icon[data-icon="devicon:debian"] svg path {
   fill: #d70a53;
 }
+/* devicon:centos's navy and plum quarters (1.3:1 and 2.3:1 there) take
+   lighter tints of the same hues, and devicon:fedora's dark blue ring
+   (1.7:1) Fedora's light blue, as on its logo for dark grounds. */
+html.dark .os-icon[data-icon="devicon:centos"] svg [fill="#262577"] { fill: #6d6cd4; }
+html.dark .os-icon[data-icon="devicon:centos"] svg [fill="#932279"] { fill: #c95aab; }
+html.dark .os-icon[data-icon="devicon:fedora"] svg [fill="#294172"] { fill: #51a2da; }
 
 /* Phones: 100vh is the viewport with the browser's bars hidden, so a page
    with min-h-screen scrolled by the bars' height although everything fit,

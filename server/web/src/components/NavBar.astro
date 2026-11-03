@@ -8,7 +8,7 @@ interface Props {
 const { isAdmin = false } = Astro.props;
 ---
 
-<nav class="glass-nav mx-auto mt-4 max-w-[1500px] flex items-center justify-between rounded-[10.8px] border border-[#404040]/50 bg-[#1c1c1c] dark:border-[#2c2c2c]/60 dark:bg-[#1a1a1a] border-[#d4d4d4]/50 bg-white px-3 sm:px-4 md:px-6 py-0 h-14 sm:h-16">
+<nav class="glass-nav mx-auto mt-4 max-w-[1568px] flex items-center justify-between rounded-[10.8px] border border-[#404040]/50 bg-[#1c1c1c] dark:border-[#2c2c2c]/60 dark:bg-[#1a1a1a] border-[#d4d4d4]/50 bg-white ps-4 pe-3 sm:px-6 py-0 h-14 md:h-16">
   <!-- Logo -->
   <a href="/" class="flex items-center gap-1.5 sm:gap-2">
     <!-- Logo Container -->
@@ -26,58 +26,58 @@ const { isAdmin = false } = Astro.props;
   </a>
 
   <!-- Right Side Icons -->
-  <div id="navbar-icons-container" class="flex items-center gap-0.5 sm:gap-1" style="opacity: 0;">
+  <div id="navbar-icons-container" class="flex items-center" style="opacity: 0;">
     <button
       id="language-btn"
-      class="rounded-[10.8px] p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
+      class="inline-flex h-10 w-10 items-center justify-center rounded-[10.8px] text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
       aria-label="Toggle language"
       title="Toggle language"
     >
-      <Icon name="languages" size={16} class="w-5 h-5 transition-transform duration-200" />
+      <Icon name="languages" size={16} class="w-[1.2rem] h-[1.2rem] transition-transform duration-200" />
     </button>
     <button
       id="theme-btn"
-      class="rounded-[10.8px] p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
+      class="inline-flex h-10 w-10 items-center justify-center rounded-[10.8px] text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
       aria-label="Toggle theme"
       title="Toggle theme"
     >
       <Icon
         name="moon-star"
         size={16}
-        class="theme-icon theme-icon-moon w-5 h-5 transition-all duration-300"
+        class="theme-icon theme-icon-moon w-[1.2rem] h-[1.2rem]"
       />
       <Icon
         name="sun"
         size={16}
-        class="theme-icon theme-icon-sun w-5 h-5 transition-all duration-300"
+        class="theme-icon theme-icon-sun w-[1.2rem] h-[1.2rem]"
       />
       <Icon
         name="sun-moon"
         size={16}
-        class="theme-icon theme-icon-system w-5 h-5 transition-all duration-300"
+        class="theme-icon theme-icon-system w-[1.35rem] h-[1.35rem]"
       />
     </button>
     {isAdmin ? (
       <a
         id="navbar-home-link"
         href="/"
-        class="rounded-[10.8px] p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
+        class="inline-flex h-10 w-10 items-center justify-center rounded-[10.8px] text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
         aria-label="Home"
         title="Home"
         data-nav-link="home"
       >
-        <Icon name="home" size={16} class="w-5 h-5 transition-transform duration-200" />
+        <Icon name="home" size={16} class="w-[1.2rem] h-[1.2rem] transition-transform duration-200" />
       </a>
     ) : (
       <a
         id="navbar-admin-link"
         href="/admin"
-        class="rounded-[10.8px] p-2.5 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
+        class="inline-flex h-10 w-10 items-center justify-center rounded-[10.8px] text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
         aria-label="Admin"
         title="Admin"
         data-nav-link="admin"
       >
-        <Icon name="user" size={16} class="w-5 h-5 transition-transform duration-200" />
+        <Icon name="user" size={16} class="w-[1.2rem] h-[1.2rem] transition-transform duration-200" />
       </a>
     )}
     </div>
