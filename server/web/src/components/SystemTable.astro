@@ -25,7 +25,7 @@ const apiBase = apiBaseProp ?? '';
       /* CSS variable --first-col-width is now defined inline on #monitor-root element
          This avoids timing issues between <style> rules and inline style modifications */
       /* A row's grid needs the name column plus the other columns'
-         minimums, the gaps and the left padding: 705 + 42 + 24 px. The name
+         minimums, the gaps and the left padding: 715 + 42 + 24 px. The name
          column is as wide as the longest name (--first-col-width) when there
          is room, and gives way down to 160 px, with an ellipsis, before the
          last columns would be pushed past the card's edge; below that the
@@ -33,7 +33,7 @@ const apiBase = apiBaseProp ?? '';
          columns past the rows' borders, backgrounds and detail panels on
          screens narrower than the table. */
       #monitor-root .table-scroll-content {
-        min-width: max(1000px, calc(min(var(--first-col-width), 160px) + 771px));
+        min-width: max(1000px, calc(min(var(--first-col-width), 160px) + 781px));
       }
     </style>
     <div class="min-w-[1000px] table-scroll-content">
@@ -215,6 +215,44 @@ const apiBase = apiBaseProp ?? '';
         return false;
       }
     }
+  };
+
+  // Country names for the location's tooltip, the details and the filter
+  // (the cells show the code): the browser's own region names in the page
+  // language, in full (United States, not the US the cell already shows),
+  // and the territories named as the rest of Pulse names them. Anything
+  // that is not a two-letter code (an admin's own text) stays as written.
+  const REGION_ALIASES = { UK: 'GB', EL: 'GR' };
+  const REGION_NAMES = {
+    zh: { HK: '香港', MO: '澳门', TW: '台湾', AE: '阿联酋' },
+    en: { HK: 'Hong Kong', MO: 'Macao', TW: 'Taiwan' },
+  };
+  const regionNamers = {};
+  function countryName(location, lang = getCurrentLanguage()) {
+    const raw = String(location || '').trim();
+    if (!/^[A-Za-z]{2}$/.test(raw)) return raw;
+    const code = REGION_ALIASES[raw.toUpperCase()] || raw.toUpperCase();
+    const named = REGION_NAMES[lang] && REGION_NAMES[lang][code];
+    if (named) return named;
+    try {
+      regionNamers[lang] = regionNamers[lang] || new Intl.DisplayNames([lang === 'zh' ? 'zh-CN' : 'en'], { type: 'region' });
+      return regionNamers[lang].of(code) || code;
+    } catch (_) {
+      return code;
+    }
+  }
+  const regionCollators = {};
+  const regionCollator = (lang = getCurrentLanguage()) =>
+    (regionCollators[lang] = regionCollators[lang] || new Intl.Collator(lang === 'zh' ? 'zh-CN' : 'en', { sensitivity: 'base' }));
+  const locationCode = (location) => {
+    const raw = String(location || '').trim();
+    return /^[A-Za-z]{2}$/.test(raw) ? (REGION_ALIASES[raw.toUpperCase()] || raw.toUpperCase()) : raw;
+  };
+  const locationTitle = (location) => {
+    const raw = String(location || '').trim();
+    const code = locationCode(raw);
+    const name = countryName(raw);
+    return !raw ? '-' : name !== code ? `${name} (${code})` : code;
   };
 
   // Country → Emoji One (v1) flag icon. Location is an ISO 3166-1 alpha-2
@@ -413,6 +451,8 @@ const apiBase = apiBaseProp ?? '';
   // text it stands for — the OS name or the location — instead of leaving
   // an empty box in the cell.
   const showIconText = (el) => {
+    const own = el.parentElement && el.parentElement.querySelector(':scope > .loc-text, :scope > .os-text');
+    if (own) { own.classList.add('cell-text-only'); el.remove(); return; }
     const text = document.createElement('span');
     text.className = 'text-[10px] sm:text-xs text-[#595959] dark:text-[#ababab] whitespace-nowrap';
     text.textContent = el.dataset.fallback || '-';
@@ -539,14 +579,14 @@ const apiBase = apiBaseProp ?? '';
   // Layout (the table — on phones its compact rows — or Beszel's cards, at
   // every width as in Beszel) and the fields shown, Beszel's other two view
   // settings. The name stays. A visitor's own layout choice wins; without
-  // one, phones follow the site's 自定义设置 → 手机端卡片布局 (html.phone-cards,
-  // set in the page head before the first paint) and wider screens get the
-  // table.
+  // one, the site's defaults apply (自定义设置 → 电脑端 / 手机端卡片布局:
+  // html.desktop-cards from 768 px, html.phone-cards below, both set in the
+  // page head before the first paint), else the table.
   const HIDEABLE_COLS = ['uptime', 'location', 'cpu', 'memory', 'disk', 'net', 'os'];
   let layoutChoice = ['table', 'grid'].includes(readViewSetting('pulse-layout', null)) ? readViewSetting('pulse-layout', null) : null;
   const phoneQuery = window.matchMedia('(max-width: 767.98px)');
   const layoutMode = () => layoutChoice
-    || (phoneQuery.matches && document.documentElement.classList.contains('phone-cards') ? 'grid' : 'table');
+    || (document.documentElement.classList.contains(phoneQuery.matches ? 'phone-cards' : 'desktop-cards') ? 'grid' : 'table');
   let hiddenCols = (() => {
     const saved = readViewSetting('pulse-hidden-cols', []);
     return Array.isArray(saved) ? saved.filter((c) => HIDEABLE_COLS.includes(c)) : [];
@@ -570,9 +610,11 @@ const apiBase = apiBaseProp ?? '';
       const name = (system.name || '').toLowerCase();
       if (name.includes(filterLower)) return true;
 
-      // Search in location
+      // Search in location: the code (as stored and as shown) and the
+      // country's name in either language
       const location = (system.location || '').toLowerCase();
-      if (location.includes(filterLower)) return true;
+      if (location.includes(filterLower) || locationCode(location).toLowerCase().includes(filterLower)) return true;
+      if (system.location && ['zh', 'en'].some((l) => countryName(system.location, l).toLowerCase().includes(filterLower))) return true;
 
       // Search in OS
       const os = (system.os || '').toLowerCase();
@@ -635,12 +677,19 @@ const apiBase = apiBaseProp ?? '';
           aIsEmpty = !aVal;
           bIsEmpty = !bVal;
           break;
-        case 'location':
-          aVal = (a.location || '').trim().toLowerCase();
-          bVal = (b.location || '').trim().toLowerCase();
+        case 'location': {
+          // By what the column shows: the country code (an admin's own text as written).
+          aVal = locationCode(a.location);
+          bVal = locationCode(b.location);
           aIsEmpty = !aVal;
           bIsEmpty = !bVal;
+          if (!aIsEmpty && !bIsEmpty) {
+            const order = regionCollator().compare(aVal, bVal);
+            if (order) return currentSort.direction === 'asc' ? order : -order;
+            return 0;
+          }
           break;
+        }
         case 'cpu':
         case 'memory':
         case 'disk':
@@ -826,9 +875,9 @@ const apiBase = apiBaseProp ?? '';
   // 6 px gap each and the 24 px left padding; 1000 px at least from 1280).
   const NAME_TRACK = 'minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px))';
   const COLUMN_TIERS = [
-    { min: 1280, floor: 1000, cols: [['uptime', 85, '1fr'], ['location', 90, '1fr'], ['cpu', 130, '1.8fr'], ['memory', 130, '1.8fr'], ['disk', 130, '1.8fr'], ['net', 70, '0.9fr'], ['os', 70, '0.9fr']] },
-    { min: 1024, cols: [['uptime', 72, '1fr'], ['location', 72, '1fr'], ['cpu', 116, '1.8fr'], ['memory', 116, '1.8fr'], ['disk', 116, '1.8fr'], ['net', 70, '0.9fr'], ['os', 70, '0.9fr']] },
-    { min: 900, cols: [['uptime', 85, '1fr'], ['cpu', 116, '1.8fr'], ['memory', 116, '1.8fr'], ['disk', 116, '1.8fr'], ['net', 70, '0.9fr']] },
+    { min: 1280, floor: 1000, cols: [['location', 90, '1fr'], ['cpu', 130, '1.8fr'], ['memory', 130, '1.8fr'], ['disk', 130, '1.8fr'], ['net', 70, '0.9fr'], ['uptime', 85, '1fr'], ['os', 80, '1fr']] },
+    { min: 1024, cols: [['location', 76, '0.9fr'], ['cpu', 116, '1.8fr'], ['memory', 116, '1.8fr'], ['disk', 116, '1.8fr'], ['net', 70, '0.9fr'], ['uptime', 68, '0.9fr'], ['os', 76, '1fr']] },
+    { min: 900, cols: [['cpu', 116, '1.8fr'], ['memory', 116, '1.8fr'], ['disk', 116, '1.8fr'], ['net', 70, '0.9fr'], ['uptime', 85, '1fr']] },
     { min: 768, cols: [['cpu', 108, '1.8fr'], ['memory', 108, '1.8fr'], ['disk', 108, '1.8fr'], ['net', 70, '0.9fr']] },
   ];
   // Cards (phones, and the card layout): a hidden field's slot goes to its
@@ -866,7 +915,7 @@ const apiBase = apiBaseProp ?? '';
   ['(min-width: 768px)', '(min-width: 900px)', '(min-width: 1024px)', '(min-width: 1280px)'].forEach((query) => {
     window.matchMedia(query).addEventListener('change', applyViewLayout);
   });
-  // Crossing 768 px can change the layout itself (the site's phone default).
+  // Crossing 768 px can change the layout itself (the site's two defaults).
   phoneQuery.addEventListener('change', () => updateLayoutUI());
   window.addEventListener('navbarconfigready', () => { if (!layoutChoice) { updateLayoutUI(); applyViewLayout(); } });
 
@@ -1186,8 +1235,8 @@ const apiBase = apiBaseProp ?? '';
   // header row at render time: the same icons, and a [data-translate] span
   // that the header's script retranslates on a language change. Hidden on
   // wider screens, where the header row is visible.
-  const cardLabel = (headerIndex) => {
-    const cell = document.getElementById('system-table-header-row')?.children[headerIndex];
+  const cardLabel = (col) => {
+    const cell = document.querySelector(`#system-table-header-row > [data-col="${col}"]`);
     if (!cell) return '';
     const icon = cell.querySelector('svg');
     const text = cell.querySelector('span[data-translate]');
@@ -1321,6 +1370,23 @@ const apiBase = apiBaseProp ?? '';
 `;
   }
 
+  // Location and OS cells. From 768 px the table shows the flag with the
+  // country's two-letter code (the same width in every language, so the
+  // column lines up and never cuts a name; the tooltip and the details give
+  // the name) and the OS logo with its name. Phone rows and cards show the
+  // flag and the logo alone, and the text where there is no icon
+  // (.cell-text-only).
+  const locationCellHTML = (item) => {
+    const flagIcon = item.location ? countryToFlag(item.location) : null;
+    const flag = flagIcon ? `<span class="flag-icon block leading-none w-5 h-5" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>` : '';
+    return `${flag}<span class="loc-text${flagIcon ? '' : ' cell-text-only'}${item.location ? '' : ' cell-empty'}">${escapeHtml(item.location ? locationCode(item.location) : '-')}</span>`;
+  };
+  const osCellHTML = (item) => {
+    const logo = item.os_icon ? `<span class="os-icon block leading-none w-[18px] h-[18px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>` : '';
+    return `${logo}<span class="os-text${item.os_icon ? '' : ' cell-text-only'}${item.os ? '' : ' cell-empty'}">${escapeHtml(item.os || '-')}</span>`;
+  };
+  const osDetailText = (item) => [item.os, item.virtualization_type].map((v) => String(v || '').trim()).filter(Boolean).join(' · ') || '-';
+
   const renderRow = (item, showTCPing = true) => {
     // Determine if system is offline/paused (alert = true means offline/paused)
     const isOffline = item.alert || false;
@@ -1330,7 +1396,7 @@ const apiBase = apiBaseProp ?? '';
     const safeNameAttr = escapeHtmlAttr(item.name || 'unknown');
     return `
     <div class="system-row${isOffline ? ' is-offline' : ''}" data-system-id="${safeId}">
-      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(85px,1fr) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr);">
+      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer transition-colors" data-system-id="${safeId}" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-[#fb2c36]' : 'bg-[#3db866]'} shrink-0"></span>
           <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>${isOffline ? offlineChip() : ''}
@@ -1339,25 +1405,13 @@ const apiBase = apiBaseProp ?? '';
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
     </div>
-        <div class="cell-uptime text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center">${cardLabel(1)}<span class="cell-value">${escapeHtml(item.time || '-')}</span></div>
-        <div class="cell-location h-5 flex items-center" title="${escapeHtmlAttr(item.location || '-')}">
-          ${item.location ? (() => {
-            const flagIcon = countryToFlag(item.location);
-            if (flagIcon) {
-              return `<span class="flag-icon block leading-none w-5 h-5" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
-            }
-            // SECURITY: Escape location to prevent XSS
-            const safeLocation = escapeHtml(item.location);
-            return `<span class="text-[10px] sm:text-xs text-[#595959] dark:text-[#ababab]">${safeLocation}</span>`;
-          })() : '<span class="text-[10px] sm:text-xs text-[#595959] dark:text-[#ababab]">-</span>'}
-    </div>
-        <div class="cell-cpu h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.cpu || 0, false, isOffline, cardLabel(3))}</div>
-        <div class="cell-memory h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.memory || 0, false, isOffline, cardLabel(4))}</div>
-        <div class="cell-disk h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline, cardLabel(5))}</div>
-        <div class="cell-net text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel(6)}<span class="cell-value">${formatTrafficSpeed((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0))}</span></div>
-        <div class="cell-os h-5 flex items-center w-full" title="${escapeHtmlAttr(item.os || '-')}">
-          ${item.os_icon ? `<span class="os-icon block leading-none w-[18px] h-[18px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>` : `<span class="text-[10px] sm:text-xs text-[#595959] dark:text-[#ababab]">${escapeHtml(item.os || '-')}</span>`}
-    </div>
+        <div class="cell-location text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center min-w-0" title="${escapeHtmlAttr(locationTitle(item.location))}">${locationCellHTML(item)}</div>
+        <div class="cell-cpu h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.cpu || 0, false, isOffline, cardLabel('cpu'))}</div>
+        <div class="cell-memory h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.memory || 0, false, isOffline, cardLabel('memory'))}</div>
+        <div class="cell-disk h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline, cardLabel('disk'))}</div>
+        <div class="cell-net text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel('net')}<span class="cell-value">${formatTrafficSpeed((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0))}</span></div>
+        <div class="cell-uptime text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center">${cardLabel('uptime')}<span class="cell-value">${escapeHtml(item.time || '-')}</span></div>
+        <div class="cell-os text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center w-full min-w-0" title="${escapeHtmlAttr(item.os || '-')}">${osCellHTML(item)}</div>
     </div>
       <!-- Expandable details section -->
       <div class="system-details hidden border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60 dark:bg-[#171717] bg-[#f8f8f8] overflow-hidden" data-details-id="${safeId}" style="width: 100%;">
@@ -1365,6 +1419,19 @@ const apiBase = apiBaseProp ?? '';
           <div class="detail-list">
             <!-- Tags (first row) -->
             ${renderTagStrip(item)}
+            <!-- Location and OS with the kind of machine, as Beszel's info bar
+                 carries the OS: the table's columns are not shown from 768 to
+                 1023 px, and the cards show only the flag and the logo. -->
+            <div class="detail-item">
+              <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></g></svg>
+              <div class="detail-label shrink-0" data-translate-detail="locationInfo">Location:</div>
+              <div class="detail-value" data-detail="location">${escapeHtml(item.location ? countryName(item.location) : '-')}</div>
+            </div>
+            <div class="detail-item">
+              <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="14" height="8" x="5" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 18h2m4 0h6"/></g></svg>
+              <div class="detail-label shrink-0" data-translate-detail="osInfo">OS:</div>
+              <div class="detail-value" data-detail="os">${escapeHtml(osDetailText(item))}</div>
+            </div>
             <!-- CPU Info -->
             <div class="detail-item">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 20v2m0-20v2m5 16v2m0-20v2M2 12h2m-2 5h2M2 7h2m16 5h2m-2 5h2M20 7h2M7 20v2M7 2v2"/><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="8" height="8" x="8" y="8" rx="1"/></g></svg>
@@ -1504,6 +1571,8 @@ const apiBase = apiBaseProp ?? '';
     // Empty state of a filter that matches nothing (the services exist).
     'noMatchingServices': { en: 'No matching services', zh: '没有匹配的服务' },
     'tryAnotherFilter': { en: 'Try a different filter', zh: '换个关键词试试' },
+    'locationInfo': { en: 'Location:', zh: '位置:' },
+    'osInfo': { en: 'OS:', zh: '系统:' },
     'cpuInformation': { en: 'CPU:', zh: 'CPU:' },
     'memoryInfo': { en: 'Memory:', zh: '内存:' },
     'swapPartition': { en: 'Swap:', zh: '交换:' },
@@ -1578,6 +1647,18 @@ const apiBase = apiBaseProp ?? '';
           el.textContent = translatedText;
         }
       }
+    });
+
+    // Country names follow the language (the location cells' tooltips and
+    // the details; the cells show the code); OS names are names.
+    document.querySelectorAll('#systems-body .system-row').forEach((row) => {
+      const id = row.getAttribute('data-system-id');
+      const item = currentData.get(id) || currentData.get(Number(id));
+      if (!item || !item.location) return;
+      const name = countryName(item.location, lang);
+      row.querySelectorAll('[data-detail="location"]').forEach((el) => { el.textContent = name; });
+      const cell = row.querySelector('.cell-location');
+      if (cell) cell.title = locationTitle(item.location);
     });
 
     // Tooltips (currently: the "unreachable target" hint on a muted tcping
@@ -1812,9 +1893,9 @@ const apiBase = apiBaseProp ?? '';
     // Normalize new item for comparison
     const newItemNormalized = normalizeItem(item);
     
-    // Get all cells (children of the grid row)
-    const cells = Array.from(rowElement.children);
-    if (cells.length < 8) return; // Safety check
+    // The row's cells by what they hold (their order is a matter of layout)
+    const cell = (name) => rowElement.querySelector(`:scope > .cell-${name}`);
+    if (rowElement.children.length < 8) return; // Safety check
     
     // If no old data, update all fields (treat as new item)
     const shouldUpdateAll = !previousItem && !currentData.get(item.id);
@@ -1892,7 +1973,7 @@ const apiBase = apiBaseProp ?? '';
     }
     
     // Cell 0: System name (with status dot and copy button)
-    const systemCell = cells[0];
+    const systemCell = cell('name');
     if (systemCell) {
       if (shouldUpdateAll || oldItemNormalized.alert !== newItemNormalized.alert) {
         // Use rounded-full to match the status dot (which has h-1.5 w-1.5 sm:h-2 sm:w-2)
@@ -1936,7 +2017,7 @@ const apiBase = apiBaseProp ?? '';
     
     // Cell 1: Time - only update if changed
     if (shouldUpdateAll || oldItemNormalized.time !== newItemNormalized.time) {
-      const timeCell = cells[1];
+      const timeCell = cell('uptime');
       if (timeCell) {
         // The value span, not the cell: the cell also holds the card label.
         (timeCell.querySelector('.cell-value') || timeCell).textContent = item.time || '-';
@@ -1945,24 +2026,11 @@ const apiBase = apiBaseProp ?? '';
     
     // Cell 2: Location - only update if changed
     if (shouldUpdateAll || oldItemNormalized.location !== newItemNormalized.location) {
-      const locationCell = cells[2];
+      const locationCell = cell('location');
       if (locationCell) {
-        if (item.location) {
-          const flagIcon = countryToFlag(item.location);
-          if (flagIcon) {
-            locationCell.innerHTML = `<span class="flag-icon block leading-none w-5 h-5" data-icon="${escapeHtmlAttr(flagIcon)}" data-fallback="${escapeHtmlAttr(item.location)}"></span>`;
-            locationCell.title = item.location; // Set title for tooltip
-            setTimeout(() => loadFlagIcons(), 0);
-          } else {
-            // SECURITY: Escape HTML to prevent XSS (same helper as renderRow)
-            const escapedLocation = escapeHtml(item.location || '');
-            locationCell.innerHTML = `<span class="text-xs text-[#595959] dark:text-[#ababab]">${escapedLocation}</span>`;
-            locationCell.title = item.location || '';
-          }
-        } else {
-          locationCell.innerHTML = '<span class="text-xs text-[#595959] dark:text-[#ababab]">-</span>';
-          locationCell.title = '-';
-        }
+        locationCell.innerHTML = locationCellHTML(item);
+        locationCell.title = locationTitle(item.location);
+        if (locationCell.querySelector('.flag-icon')) setTimeout(() => loadFlagIcons(), 0);
       }
     }
     
@@ -1980,7 +2048,7 @@ const apiBase = apiBaseProp ?? '';
     
     const cpuStatusChanged = oldItemNormalized.alert !== newItemNormalized.alert;
     if (shouldUpdateAll || cpuChanged || cpuStatusChanged) {
-      const cpuCell = cells[3];
+      const cpuCell = cell('cpu');
       if (cpuCell) {
         // Update progress bar and text directly
         // Use more flexible selector to match span with font-medium class (which has text-[10px] sm:text-xs)
@@ -2004,7 +2072,7 @@ const apiBase = apiBaseProp ?? '';
     const memoryChanged = shownChanged(oldItemNormalized.memory, newItemNormalized.memory);
     const memoryStatusChanged = oldItemNormalized.alert !== newItemNormalized.alert;
     if (shouldUpdateAll || memoryChanged || memoryStatusChanged) {
-      const memoryCell = cells[4];
+      const memoryCell = cell('memory');
       if (memoryCell) {
         // Use more flexible selector to match span with font-medium class (which has text-[10px] sm:text-xs)
         const textSpan = memoryCell.querySelector('span.font-medium');
@@ -2027,7 +2095,7 @@ const apiBase = apiBaseProp ?? '';
     const diskChanged = shownChanged(oldItemNormalized.disk, newItemNormalized.disk);
     const diskStatusChanged = oldItemNormalized.alert !== newItemNormalized.alert;
     if (shouldUpdateAll || diskChanged || diskStatusChanged) {
-      const diskCell = cells[5];
+      const diskCell = cell('disk');
       if (diskCell) {
         // Use more flexible selector to match span with font-medium class (which has text-[10px] sm:text-xs)
         const textSpan = diskCell.querySelector('span.font-medium');
@@ -2052,7 +2120,7 @@ const apiBase = apiBaseProp ?? '';
     const oldNetText = formatTrafficSpeed(oldItemNormalized.net_in_mb_s + oldItemNormalized.net_out_mb_s);
     const newNetText = formatTrafficSpeed(newItemNormalized.net_in_mb_s + newItemNormalized.net_out_mb_s);
     if (shouldUpdateAll || oldNetText !== newNetText) {
-      const netCell = cells[6];
+      const netCell = cell('net');
       if (netCell) {
         (netCell.querySelector('.cell-value') || netCell).textContent = newNetText;
       }
@@ -2060,16 +2128,11 @@ const apiBase = apiBaseProp ?? '';
     
     // Cell 7: OS - only update if changed
     if (oldItemNormalized.os !== newItemNormalized.os || oldItemNormalized.os_icon !== newItemNormalized.os_icon) {
-      const osCell = cells[7];
+      const osCell = cell('os');
       if (osCell) {
-        if (item.os_icon) {
-          osCell.innerHTML = `<span class="os-icon block leading-none w-[18px] h-[18px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>`;
-          setTimeout(() => loadOSIcons(), 0);
-        } else {
-          // SECURITY: Escape HTML to prevent XSS (same helper as renderRow)
-          const escapedOS = escapeHtml(item.os || '-');
-          osCell.innerHTML = `<span class="text-xs text-[#595959] dark:text-[#ababab]">${escapedOS}</span>`;
-        }
+        osCell.innerHTML = osCellHTML(item);
+        osCell.title = item.os || '-';
+        if (item.os_icon) setTimeout(() => loadOSIcons(), 0);
       }
     }
     
@@ -2080,6 +2143,12 @@ const apiBase = apiBaseProp ?? '';
       const detailsSection = systemRow.querySelector('.system-details');
       if (detailsSection) {
         // Update details content - check if values changed
+        const locationEl = detailsSection.querySelector('[data-detail="location"]');
+        const newLocation = item.location ? countryName(item.location) : '-';
+        if (locationEl && locationEl.textContent !== newLocation) locationEl.textContent = newLocation;
+        const osEl = detailsSection.querySelector('[data-detail="os"]');
+        const newOs = osDetailText(item);
+        if (osEl && osEl.textContent !== newOs) osEl.textContent = newOs;
         const cpuModelEl = detailsSection.querySelector('[data-detail="cpu_model"]');
         const memoryInfoEl = detailsSection.querySelector('[data-detail="memory_info"]');
         const swapInfoEl = detailsSection.querySelector('[data-detail="swap_info"]');
@@ -5808,8 +5877,13 @@ const apiBase = apiBaseProp ?? '';
     }
     #monitor-root:not(.layout-grid) .cell-location { grid-area: loc; justify-self: end; }
     #monitor-root:not(.layout-grid) .cell-os { grid-area: os; justify-self: end; width: auto; }
-    /* The flag beside the OS logo (8 px apart), not a column away. */
+    /* The flag beside the OS logo (8 px apart), not a column away; the
+       cells' text only where there is no icon. */
     #monitor-root:not(.layout-grid):not(.hide-col-os) .cell-location { grid-area: os; margin-right: 26px; }
+    #monitor-root:not(.layout-grid) :is(.loc-text, .os-text):not(.cell-text-only),
+    #monitor-root:not(.layout-grid) .cell-empty { display: none; }
+    #monitor-root:not(.layout-grid) .cell-text-only { font-size: 12px; font-weight: 400; color: #595959; }
+    html.dark #monitor-root:not(.layout-grid) .cell-text-only { color: #ababab; }
     #monitor-root:not(.layout-grid) .cell-cpu { grid-area: cpu; }
     #monitor-root:not(.layout-grid) .cell-memory { grid-area: mem; }
     #monitor-root:not(.layout-grid) .cell-disk { grid-area: disk; }
@@ -5837,6 +5911,26 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root:not(.layout-grid) .cell-label svg { width: 12px; height: 12px; }
     #monitor-root:not(.layout-grid) .system-details .details-content { padding-left: 14px; padding-right: 14px; }
   }
+  /* Location and OS (locationCellHTML, osCellHTML) in the table: the flag
+     and the country code, the OS logo and its name, as Beszel pairs an icon
+     with its value (the language picker's flag and name, the info bar's OS
+     icon and name); 18 / 16 px icons beside the 14 px text from 1280 px,
+     16 / 14 px beside the 12 px text below. A name longer than its column
+     ends in an ellipsis, a dash is muted. */
+  #monitor-root :is(.loc-text, .os-text) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #monitor-root .cell-empty { color: #595959; }
+  html.dark #monitor-root .cell-empty { color: #ababab; }
+  @media (min-width: 768px) {
+    #monitor-root:not(.layout-grid) :is(.flag-icon, .os-icon) { flex: none; margin-right: 6px; }
+    #monitor-root:not(.layout-grid) .flag-icon { width: 16px; height: 16px; }
+    #monitor-root:not(.layout-grid) .os-icon { width: 14px; height: 14px; }
+  }
+  @media (min-width: 1280px) {
+    #monitor-root:not(.layout-grid) :is(.flag-icon, .os-icon) { margin-right: 8px; }
+    #monitor-root:not(.layout-grid) .flag-icon { width: 18px; height: 18px; }
+    #monitor-root:not(.layout-grid) .os-icon { width: 16px; height: 16px; }
+  }
+
   /* Under 410 px (Beszel's 16 px page margin and 12 px card padding)
      "Memory 36.5%" no longer fits its third of a row and the value dropped
      below the label, out of line with CPU and disk: there the three meters
@@ -5887,12 +5981,13 @@ const apiBase = apiBaseProp ?? '';
   /* Tablets and small laptops (768-1279 px): the table fits the card
      instead of scrolling sideways behind a hidden scrollbar. The scroller
      reserves the name column (at most 160 px of it, see above) plus the
-     other columns' minimums, 6 px gaps and the 24 px left padding: 771 px
+     other columns' minimums, 6 px gaps and the 24 px left padding: 781 px
      from 1280 px (bars at 130 px). Here the three bar columns go down to
      116 px — the 40 px percentage, a 6 px gap, the bar's 56 px minimum and
      the cell's 12 px padding, without the bar's own 12 px right padding —
-     and to 108 px below 900 px (a 48 px bar); uptime and location need no
-     more than 72 px for "447d" or a flag. Below 1024 px the least
+     and to 108 px below 900 px (a 48 px bar); location, uptime and OS take
+     76, 68 and 76 px, their English headers' width ("Location" with its
+     icon) and the OS logo with "Windows". Below 1024 px the least
      important columns go: location and OS, then the uptime as well below
      900 px. A long name, or the 离线/Offline chip, no longer pushes the
      last column past the card at 768 or 1024 px. The rows' and the
@@ -5904,27 +5999,22 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .system-row .progress-track { min-width: 56px; }
   }
   @media (min-width: 1024px) and (max-width: 1279.98px) {
-    #monitor-root .table-scroll-content { min-width: calc(min(var(--first-col-width), 160px) + 698px) !important; }
+    #monitor-root .table-scroll-content { min-width: calc(min(var(--first-col-width), 160px) + 704px) !important; }
     #monitor-root .system-row > [data-system-id],
     #monitor-root #system-table-header-row {
-      grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(72px,1fr) minmax(72px,1fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) minmax(70px,0.9fr) !important;
+      grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(76px,0.9fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) minmax(68px,0.9fr) minmax(76px,1fr) !important;
     }
-    /* 12 px text and 14 px header icons here: the flag and the OS logo
-       step down with them (18 / 16 px, 20 / 18 px elsewhere). */
-    #monitor-root:not(.layout-grid) .flag-icon { width: 18px; height: 18px; }
-    #monitor-root:not(.layout-grid) .os-icon { width: 16px; height: 16px; }
   }
   @media (min-width: 768px) and (max-width: 1023.98px) {
     #monitor-root .cell-location,
     #monitor-root .cell-os,
-    #monitor-root #system-table-header-row > :nth-child(3),
-    #monitor-root #system-table-header-row > :nth-child(8) { display: none !important; }
+    #monitor-root #system-table-header-row > :is([data-col="location"], [data-col="os"]) { display: none !important; }
   }
   @media (min-width: 900px) and (max-width: 1023.98px) {
     #monitor-root .table-scroll-content { min-width: calc(min(var(--first-col-width), 160px) + 557px) !important; }
     #monitor-root .system-row > [data-system-id],
     #monitor-root #system-table-header-row {
-      grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(85px,1fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) !important;
+      grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) minmax(85px,1fr) !important;
     }
   }
   @media (min-width: 768px) and (max-width: 899.98px) {
@@ -5935,7 +6025,7 @@ const apiBase = apiBaseProp ?? '';
     }
     #monitor-root .system-row .progress-track { min-width: 48px; }
     #monitor-root .cell-uptime,
-    #monitor-root #system-table-header-row > :nth-child(2) { display: none !important; }
+    #monitor-root #system-table-header-row > [data-col="uptime"] { display: none !important; }
   }
 
   /* From 1280 px the table reads like Beszel's: 14 px text and 16 px header
@@ -5949,7 +6039,7 @@ const apiBase = apiBaseProp ?? '';
      names at the same sizes. */
   @media (min-width: 1280px) {
     #monitor-root .system-row > [data-system-id] { padding-top: 18px; padding-bottom: 18px; }
-    #monitor-root .system-row :is(.cell-uptime, .cell-net, .cell-cpu span.font-medium, .cell-memory span.font-medium, .cell-disk span.font-medium) { font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; }
+    #monitor-root .system-row :is(.cell-uptime, .cell-net, .cell-location, .cell-os, .cell-cpu span.font-medium, .cell-memory span.font-medium, .cell-disk span.font-medium) { font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; }
     #monitor-root .system-row :is(.row-name, .cell-uptime, .cell-net, .cell-location > span:not(.flag-icon), .cell-os > span:not(.os-icon)),
     #monitor-root .system-row :is(.cell-cpu, .cell-memory, .cell-disk) span.font-medium { font-size: 14px; line-height: 20px; }
     #monitor-root .system-row .cell-name { gap: 8px; }
@@ -6018,8 +6108,8 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root.cols-custom:not(.layout-grid) .system-row > [data-system-id] { grid-template-areas: var(--card-areas) !important; }
   }
 
-  /* The card layout (view menu → 布局 → 卡片 at every width as in Beszel;
-     on phones also 自定义设置 → 手机端卡片布局), Beszel's grid view
+  /* The card layout (view menu → 布局 → 卡片 at every width as in Beszel,
+     or the site's default from 自定义设置), Beszel's grid view
      (SystemCard): one column, two from 640 px and three from 1024 px, 16 px
      apart (grid-cols-1 sm:grid-cols-2 lg:grid-cols-3). A card is a
      bordered box with a shaded header band (status dot, name, flag and OS)
@@ -6109,6 +6199,10 @@ const apiBase = apiBaseProp ?? '';
   #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-location { margin-right: 24px; }
   #monitor-root.layout-grid.hide-col-os #systems-body .system-row .cell-location { margin-right: -4px; }
   #monitor-root.layout-grid #systems-body .system-row .flag-icon { width: 20px; height: 20px; }
+  #monitor-root.layout-grid #systems-body .system-row :is(.loc-text, .os-text):not(.cell-text-only),
+  #monitor-root.layout-grid #systems-body .system-row .cell-empty { display: none; }
+  #monitor-root.layout-grid #systems-body .system-row .cell-text-only { font-size: 12px; font-weight: 400; color: #595959; }
+  html.dark #monitor-root.layout-grid #systems-body .system-row .cell-text-only { color: #ababab; }
   #monitor-root.layout-grid #systems-body .system-row .os-icon { width: 18px; height: 18px; }
   /* Rows: icon, label, value and (for the meters) the bar */
   #monitor-root.layout-grid:not(.hide-col-cpu) #systems-body .system-row :is(.cell-cpu, .cell-cpu > div),

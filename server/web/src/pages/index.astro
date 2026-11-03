@@ -218,7 +218,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
               }
               // Optional sticky table header (自定义设置 → 表头吸顶)
               if (config.sticky_header === true) document.documentElement.classList.add('sticky-table-header');
-              // Cards on phones unless the visitor chose a layout (自定义设置 → 手机端卡片布局)
+              // Default layouts unless the visitor chose one (自定义设置 → 电脑端 / 手机端卡片布局)
+              if (config.desktop_cards === true) document.documentElement.classList.add('desktop-cards');
               if (config.phone_cards === true) document.documentElement.classList.add('phone-cards');
               // Dispatch event when config is ready
               window.dispatchEvent(new CustomEvent('navbarconfigready', { detail: config }));
@@ -249,7 +250,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
             }
             // Optional sticky table header (自定义设置 → 表头吸顶)
             if (config.sticky_header === true) document.documentElement.classList.add('sticky-table-header');
-            // Cards on phones unless the visitor chose a layout (自定义设置 → 手机端卡片布局)
+            // Default layouts unless the visitor chose one (自定义设置 → 电脑端 / 手机端卡片布局)
+            if (config.desktop_cards === true) document.documentElement.classList.add('desktop-cards');
             if (config.phone_cards === true) document.documentElement.classList.add('phone-cards');
             
             // Inject CSS if exists
