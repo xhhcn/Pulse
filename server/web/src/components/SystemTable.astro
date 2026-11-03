@@ -1570,7 +1570,7 @@ const apiBase = apiBaseProp ?? '';
     'copied': { en: 'Copied!', zh: '已复制！' },
     // Empty state of a filter that matches nothing (the services exist).
     'noMatchingServices': { en: 'No matching services', zh: '没有匹配的服务' },
-    'tryAnotherFilter': { en: 'Try a different filter', zh: '换个关键词试试' },
+    'tryAnotherFilter': { en: 'Try a different filter', zh: '换个筛选条件试试' },
     'locationInfo': { en: 'Location:', zh: '位置:' },
     'osInfo': { en: 'OS:', zh: '系统:' },
     'cpuInformation': { en: 'CPU:', zh: 'CPU:' },
@@ -1798,8 +1798,9 @@ const apiBase = apiBaseProp ?? '';
     
     if (body) {
       const lang = getCurrentLanguage();
-      // A filter that matches nothing is not an empty deployment.
-      const [titleKey, hintKey] = emptyMessageKeys[currentFilter.trim() ? 1 : 0];
+      // A filter (the text or the status) that matches nothing is not an
+      // empty deployment.
+      const [titleKey, hintKey] = emptyMessageKeys[currentFilter.trim() || statusFilter !== 'all' ? 1 : 0];
       body.innerHTML = `
         <div class="flex flex-col items-center justify-center py-12 text-center">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-[#595959] dark:text-[#ababab] mb-3">

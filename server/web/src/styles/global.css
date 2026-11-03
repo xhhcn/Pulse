@@ -4,6 +4,11 @@
 
 :root {
   color-scheme: dark light;
+  /* As Beszel: the scrollbar's room is kept when the page is too short to
+     scroll, so the page doesn't move sideways when the list fills in on
+     load or a filter leaves a few rows (desktops with classic scrollbars;
+     overlay scrollbars take no room). */
+  scrollbar-gutter: stable;
 }
 
 /* Inter, as in Beszel: Latin letters and figures look the same on every
