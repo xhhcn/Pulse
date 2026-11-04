@@ -2,6 +2,7 @@
 import '../styles/global.css';
 import interFontUrl from '../assets/fonts/InterVariable.woff2?url';
 import LoginForm from '../components/LoginForm.astro';
+import NavBar from '../components/NavBar.astro';
 
 const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
 ---
@@ -176,7 +177,10 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
           .then(config => {
             if (config) {
               // Page title: page name in the page's language · navbar text
-              document.title = `${document.documentElement.lang === 'zh' ? '登录' : 'Login'} · ${config.text || 'Pulse Monitor'}`;
+              // (again after the language button switches it)
+              const setTitle = () => { document.title = `${document.documentElement.lang === 'zh' ? '登录' : 'Login'} · ${config.text || 'Pulse Monitor'}`; };
+              setTitle();
+              window.addEventListener('languagechange', () => setTimeout(setTitle, 0));
               // Update favicon with custom logo
               if (config.logo && /^(https?:\/\/|\/|data:)/i.test(String(config.logo).trim())) {
                 const favicon = document.querySelector('link[rel=\"icon\"]');
@@ -279,6 +283,7 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     </script>
   </head>
   <body class="min-h-screen bg-[#fafafa] dark:bg-[#171717] text-[#151515] dark:text-[#f5f5f5]">
+    <NavBar bare />
     <LoginForm />
   </body>
 </html>

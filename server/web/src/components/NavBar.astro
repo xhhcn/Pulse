@@ -3,14 +3,18 @@ import Icon from './Icon.astro';
 
 interface Props {
   isAdmin?: boolean;
+  // Only the language and theme buttons, in the top right corner (the
+  // login page, as Beszel's sign-in page has its theme button there). The
+  // logo stays in the page, hidden: the script below fills it in.
+  bare?: boolean;
 }
 
-const { isAdmin = false } = Astro.props;
+const { isAdmin = false, bare = false } = Astro.props;
 ---
 
-<nav class="glass-nav mx-auto mt-4 max-w-[1568px] flex items-center justify-between rounded-[10.8px] border border-[#404040]/50 bg-[#1c1c1c] dark:border-[#2c2c2c]/60 dark:bg-[#1a1a1a] border-[#d4d4d4]/50 bg-white ps-4 pe-3 sm:px-6 py-0 h-14 md:h-16">
+<nav class={bare ? 'fixed right-3 top-3 z-20' : 'glass-nav mx-auto mt-4 max-w-[1568px] flex items-center justify-between rounded-[10.8px] border border-[#404040]/50 bg-[#1c1c1c] dark:border-[#2c2c2c]/60 dark:bg-[#1a1a1a] border-[#d4d4d4]/50 bg-white ps-4 pe-3 sm:px-6 py-0 h-14 md:h-16'}>
   <!-- Logo -->
-  <a href="/" class="flex items-center gap-1.5 sm:gap-2">
+  <a href="/" class={bare ? 'hidden' : 'flex items-center gap-1.5 sm:gap-2'}>
     <!-- Logo Container -->
     <span id="navbar-logo-container" class="shrink-0" style="opacity: 0;">
       <svg width="20" height="20" class="sm:w-6 sm:h-6 monitor-icon default-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="--monitor-stroke: #24292f;">
@@ -57,7 +61,7 @@ const { isAdmin = false } = Astro.props;
         class="theme-icon theme-icon-system w-[1.35rem] h-[1.35rem]"
       />
     </button>
-    {isAdmin ? (
+    {bare ? null : isAdmin ? (
       <a
         id="navbar-home-link"
         href="/"

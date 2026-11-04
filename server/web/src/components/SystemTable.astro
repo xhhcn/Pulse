@@ -1089,7 +1089,7 @@ const apiBase = apiBaseProp ?? '';
   // yellow-500, orange-500 and red-500. The status dots use the same green
   // and red.
   const OFFLINE_BAR = 'bg-[#a3a3a3] dark:bg-[#525252]';
-  const offlineChip = () => `<span class="offline-chip shrink-0 rounded-full px-1.5 text-[10px] font-semibold leading-4 bg-red-500/10 text-red-700 dark:bg-red-400/15 dark:text-red-300" data-translate-detail="offlineChip">${translations.offlineChip[getCurrentLanguage()]}</span>`;
+  const offlineChip = () => `<span class="offline-chip shrink-0 rounded-full px-1.5 text-[11px] font-semibold leading-4 bg-red-500/10 text-red-700 dark:bg-red-400/15 dark:text-red-300" data-translate-detail="offlineChip">${translations.offlineChip[getCurrentLanguage()]}</span>`;
   const getProgressColor = (value, isOffline = false) => {
     if (isOffline) return OFFLINE_BAR;
     if (value >= 90) return 'bg-[#fb2c36]';
@@ -1399,7 +1399,7 @@ const apiBase = apiBaseProp ?? '';
       <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer" data-system-id="${safeId}" role="button" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-[#fb2c36]' : 'bg-[#3db866]'} shrink-0"></span>
-          <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap">${safeName}</span>${isOffline ? offlineChip() : ''}
+          <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap" title="${safeNameAttr}">${safeName}</span>${isOffline ? offlineChip() : ''}
           <button class="copy-btn text-[#595959] dark:text-[#ababab] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" tabindex="-1" aria-hidden="true" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
@@ -1504,8 +1504,8 @@ const apiBase = apiBaseProp ?? '';
         <div class="rounded-[12.8px] border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#151515] dark:bg-[#1a1a1a] bg-white p-3 sm:p-4">
           <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 sm:gap-4 mb-3">
             <div class="min-w-0">
-              <div class="text-sm sm:text-base font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate-detail="tcpingLatency">TCPing Latency (24h)</div>
-              <div class="mt-1 text-xs sm:text-[13px] text-[#595959] dark:text-[#ababab]" data-translate-detail="tcpingChartDesc">TCP handshake time of every probe</div>
+              <h2 class="text-sm sm:text-base font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate-detail="tcpingLatency">TCPing Latency (24h)</h2>
+              <div class="mt-1 text-xs sm:text-[13px] text-[#595959] dark:text-[#ababab]"><span data-translate-detail="tcpingChartDesc">TCP handshake time of every probe</span><span data-tcping-last="${safeId}" hidden></span></div>
             </div>
             <!-- Statistics display -->
             <div class="flex gap-3 sm:gap-4 text-[10px] sm:text-xs" data-tcping-stats="${safeId}">
@@ -1581,8 +1581,12 @@ const apiBase = apiBaseProp ?? '';
     'realtimeTraffic': { en: 'Traffic:', zh: '流量:' },
     'totalTraffic': { en: 'Total:', zh: '总量:' },
     'tcpingLatency': { en: 'TCPing Latency (24h)', zh: 'TCPing 延迟 (24 小时)' },
+    'loadFailed': { en: "Couldn't load the server list", zh: '无法加载服务列表' },
+    'loadRetrying': { en: 'Retrying automatically…', zh: '正在自动重试…' },
     'tcpingChartDesc': { en: 'TCP handshake time of every probe', zh: '每次探测的 TCP 握手时间' },
     'avgLatency': { en: 'Avg:', zh: '平均:' },
+    'avgLatencyAll': { en: 'Avg (all):', zh: '全部平均:' },
+    'tcpingLastProbe': { en: 'Last probe {time}', zh: '最后探测 {time}' },
     'packetLoss': { en: 'Loss:', zh: '丢包:' },
     'loading': { en: 'Loading...', zh: '加载中...' },
     'noData': { en: 'No data', zh: '暂无数据' },
@@ -1639,6 +1643,11 @@ const apiBase = apiBaseProp ?? '';
       }
     }
     
+    // The charts' last-probe notes in the new language
+    document.querySelectorAll('[data-tcping-last][data-time]').forEach((el) => {
+      el.textContent = tcpingLastProbeText(Number(el.dataset.time), lang);
+    });
+
     // Update expandable details - search in entire document to include hidden elements
     document.querySelectorAll('[data-translate-detail]').forEach(el => {
       const key = el.getAttribute('data-translate-detail');
@@ -1790,9 +1799,13 @@ const apiBase = apiBaseProp ?? '';
     // CRITICAL: Force reset column width to default (bypass "only increase" logic)
     // When showing empty state, we need to actually reset the width, not just try to set a smaller value
     // The applyServerNameColumnWidth function uses Math.max which prevents decreasing
-    // So we directly set the CSS variable here to force a reset
+    // So we directly set the CSS variable here to force a reset — only when
+    // there are no services at all: a filter (the text or the status) that
+    // matches nothing keeps the width, or the header's columns jumped left
+    // and back with every keystroke that found nothing.
+    const filtered = !!currentFilter.trim() || statusFilter !== 'all';
     const root = document.getElementById('monitor-root');
-    if (root) {
+    if (root && !filtered) {
       root.style.setProperty('--first-col-width', '160px');
       void root.offsetHeight; // Force reflow to apply the reset immediately
     }
@@ -2005,6 +2018,7 @@ const apiBase = apiBaseProp ?? '';
           // The name span doesn't have rounded-full class, status dot does
           if (!span.classList.contains('rounded-full')) {
             span.textContent = item.name || 'unknown';
+            if (span.classList.contains('row-name')) span.title = item.name || 'unknown';
             break; // Found the name span, no need to continue
           }
         }
@@ -3001,7 +3015,11 @@ const apiBase = apiBaseProp ?? '';
       dot.setAttribute('data-tcping-dot', '');
       dot.setAttribute('aria-hidden', 'true');
       dot.className = 'inline-block w-2 h-2 shrink-0 rounded-[2px]';
-      tab.append(dot, document.createTextNode(target.name || target.address));
+      // The target's own 24 h average after its name (updateTCPingTabAverages).
+      const average = document.createElement('span');
+      average.setAttribute('data-tcping-tab-avg', '');
+      average.className = 'tabular-nums text-[#595959] dark:text-[#ababab] empty:hidden';
+      tab.append(dot, document.createTextNode(target.name || target.address), average);
       tab.dataset.target = target.address;
       tab.dataset.targetName = target.name || target.address;
 
@@ -3083,6 +3101,8 @@ const apiBase = apiBaseProp ?? '';
     // Create tabs immediately (no loading delay for tabs)
     // This will restore the previously selected target if any
     createTCPingTabs(systemId, config, tabsContainer);
+    updateTCPingTabAverages(systemId);
+    updateTCPingLastProbe(systemId);
   }
 
   // Initialize tcping chart for a system
@@ -3573,6 +3593,8 @@ const apiBase = apiBaseProp ?? '';
             }
             
             chart.update('none');
+            updateTCPingTabAverages(systemId);
+            updateTCPingLastProbe(systemId);
             
             // Update statistics after incremental update
             // Use pre-calculated stats if available and no target is selected
@@ -4017,7 +4039,9 @@ const apiBase = apiBaseProp ?? '';
         scales: {
           x: {
             type: 'time', // Use time scale for proper time-based X-axis
-            // Set min/max based on all datasets to handle different start times correctly
+            // The span of the data: a blank stretch would read like lost
+            // probes, which the chart draws as gaps (stale data is named in
+            // the subtitle instead, updateTCPingLastProbe).
             min: minTime !== null ? minTime : undefined,
             max: maxTime !== null ? maxTime : undefined,
             time: {
@@ -4118,6 +4142,8 @@ const apiBase = apiBaseProp ?? '';
 
     tcpingCharts.set(chartKey, { chart, target: 'all' });
     if (sigAtFetch !== null) tcpingDataSignatures.set(systemId, sigAtFetch);
+    updateTCPingTabAverages(systemId);
+    updateTCPingLastProbe(systemId);
 
     // The summary for a selected target is computed from the chart's
     // datasets, which did not exist yet when the stats were calculated
@@ -4162,6 +4188,17 @@ const apiBase = apiBaseProp ?? '';
   function updateTCPingStats(systemId, avgLatency, packetLossRate) {
     const statsContainer = document.querySelector(`[data-tcping-stats="${cssEscape(String(systemId))}"]`);
     if (!statsContainer) return;
+
+    // Whose average: every target's together until one is selected.
+    const avgLabel = statsContainer.querySelector('[data-translate-detail="avgLatency"], [data-translate-detail="avgLatencyAll"]');
+    if (avgLabel) {
+      const active = tcpingActiveTargets.get(systemId);
+      const key = active && active.target ? 'avgLatency' : 'avgLatencyAll';
+      if (avgLabel.getAttribute('data-translate-detail') !== key) {
+        avgLabel.setAttribute('data-translate-detail', key);
+        avgLabel.textContent = translations[key][getCurrentLanguage()];
+      }
+    }
     
     const avgElement = statsContainer.querySelector(`[data-tcping-avg="${cssEscape(String(systemId))}"]`);
     const lossElement = statsContainer.querySelector(`[data-tcping-loss="${cssEscape(String(systemId))}"]`);
@@ -4342,6 +4379,61 @@ const apiBase = apiBaseProp ?? '';
   }
 
   // Calculate and update statistics for selected target or all targets
+  // Each target's average beside its name in the tabs (the chart's legend),
+  // so the targets compare at a glance: the summary above is one figure for
+  // all of them unless one is selected. Same rule as the summary: probes up
+  // to 1000 ms count, a timeout does not.
+  function updateTCPingTabAverages(systemId) {
+    const entry = tcpingCharts.get(`${systemId}_all`);
+    const strip = document.querySelector(`[data-tcping-tabs="${cssEscape(String(systemId))}"]`);
+    if (!entry || !entry.chart || !strip) return;
+    entry.chart.data.datasets.forEach((dataset) => {
+      let sum = 0, n = 0;
+      dataset.data.forEach((point) => {
+        if (point && point.y !== null && point.y !== undefined && point.y <= 1000) { sum += point.y; n++; }
+      });
+      const cell = strip.querySelector(`button[data-target="${cssEscape(String(dataset.targetAddress))}"] [data-tcping-tab-avg]`);
+      if (!cell) return;
+      const text = n ? `${Math.round(sum / n)} ms` : '';
+      if (cell.textContent !== text) cell.textContent = text;
+    });
+  }
+
+  // When the probes have stopped (an offline server, or probing that ended)
+  // the subtitle says when the last one ran: the lines end there, and a
+  // blank stretch after them would read like lost probes (the chart draws
+  // timeouts as gaps). Stopped = the newest probe is older than three
+  // intervals, and at least 5 minutes old.
+  function tcpingLastProbeText(time, lang = getCurrentLanguage()) {
+    const at = new Date(time);
+    const hm = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+    const sameDay = at.toDateString() === new Date().toDateString();
+    const when = sameDay ? hm : `${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')} ${hm}`;
+    return ` · ${translations.tcpingLastProbe[lang].replace('{time}', when)}`;
+  }
+  function updateTCPingLastProbe(systemId) {
+    const entry = tcpingCharts.get(`${systemId}_all`);
+    const note = document.querySelector(`[data-tcping-last="${cssEscape(String(systemId))}"]`);
+    if (!entry || !entry.chart || !note) return;
+    let newest = 0;
+    entry.chart.data.datasets.forEach((dataset) => {
+      const last = dataset.data[dataset.data.length - 1];
+      if (last && last.x > newest) newest = last.x;
+    });
+    const config = tcpingConfigs.get(systemId);
+    const interval = (config && Number(config.interval_secs)) || 60;
+    const stale = newest > 0 && Date.now() - newest > Math.max(5 * 60e3, 3 * interval * 1000);
+    if (stale) {
+      note.dataset.time = String(newest);
+      note.textContent = tcpingLastProbeText(newest);
+      note.hidden = false;
+    } else if (!note.hidden) {
+      note.hidden = true;
+      note.textContent = '';
+      delete note.dataset.time;
+    }
+  }
+
   function calculateAndUpdateStats(systemId, selectedTarget) {
     const chartKey = `${systemId}_all`;
     const chartData = tcpingCharts.get(chartKey);
@@ -5321,10 +5413,17 @@ const apiBase = apiBaseProp ?? '';
       window.dispatchEvent(new Event('pulse:data'));
     } catch (err) {
       if (loadingIndicator) {
+        // The empty state's form (icon, title, hint) in the page language:
+        // what happened and that the page keeps trying (the live stream
+        // reconnects, and its first answer replaces this). Red only on the
+        // icon; the reason (HTTP 502, …) in brackets.
+        const lang = getCurrentLanguage();
+        const reason = err && err.message ? ` <span data-load-error-reason>(${escapeHtml(err.message)})</span>` : '';
         loadingIndicator.innerHTML = `
-          <div class="text-center">
-            <p class="text-sm text-red-500 dark:text-red-400">Failed to connect to backend</p>
-            <p class="text-xs text-[#595959] dark:text-[#ababab] mt-1">${escapeHtml(err.message)}</p>
+          <div class="flex flex-col items-center justify-center py-12 text-center">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mb-3 text-[#dc2626] dark:text-[#f87171]" aria-hidden="true"><path d="m2 2 20 20"/><path d="M5.782 5.782A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.307-.193"/><path d="M21.532 16.5A4.5 4.5 0 0 0 17 10h-1.79A7.008 7.008 0 0 0 10 5.07"/></svg>
+            <p class="text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate-detail="loadFailed">${translations.loadFailed[lang]}</p>
+            <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]"><span data-translate-detail="loadRetrying">${translations.loadRetrying[lang]}</span>${reason}</p>
           </div>
         `;
       }
@@ -5879,6 +5978,11 @@ const apiBase = apiBaseProp ?? '';
       font-size: 13px;
       line-height: 1.3;
     }
+    /* An opened row shows its whole name (two lines at most at rest). */
+    #monitor-root:not(.layout-grid) .system-row > [data-system-id][aria-expanded="true"] .row-name {
+      -webkit-line-clamp: unset;
+      display: block;
+    }
     #monitor-root:not(.layout-grid) .cell-location { grid-area: loc; justify-self: end; }
     #monitor-root:not(.layout-grid) .cell-os { grid-area: os; justify-self: end; width: auto; }
     /* The flag beside the OS logo (8 px apart), not a column away; the
@@ -6042,7 +6146,7 @@ const apiBase = apiBaseProp ?? '';
      for (the tiers above); calculateServerNameColumnWidth measures the
      names at the same sizes. */
   @media (min-width: 1280px) {
-    #monitor-root .system-row > [data-system-id] { padding-top: 18px; padding-bottom: 18px; }
+    #monitor-root .system-row > [data-system-id] { padding-top: 17.5px; padding-bottom: 17.5px; }
     #monitor-root .system-row :is(.cell-uptime, .cell-net, .cell-location, .cell-os, .cell-cpu span.font-medium, .cell-memory span.font-medium, .cell-disk span.font-medium) { font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; }
     #monitor-root .system-row :is(.row-name, .cell-uptime, .cell-net, .cell-location > span:not(.flag-icon), .cell-os > span:not(.os-icon)),
     #monitor-root .system-row :is(.cell-cpu, .cell-memory, .cell-disk) span.font-medium { font-size: 14px; line-height: 20px; }
@@ -6133,7 +6237,7 @@ const apiBase = apiBaseProp ?? '';
   #monitor-root.layout-grid #systems-body { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-flow: row dense; gap: 16px; align-items: start; }
   #monitor-root.layout-grid #systems-body > .system-row { display: contents; }
   #monitor-root.layout-grid #systems-body .system-row > [data-system-id] {
-    grid-template-columns: 24px minmax(80px, max-content) max-content minmax(0, 1fr) !important;
+    grid-template-columns: 24px minmax(80px, max-content) 48px minmax(0, 1fr) !important;
     grid-template-areas: none !important;
     column-gap: 10px;
     row-gap: 10px;
@@ -6186,6 +6290,12 @@ const apiBase = apiBaseProp ?? '';
     font-size: 15.2px;
     line-height: 24px;
     font-weight: 600;
+  }
+  /* An opened card shows its whole name (cut with "…" at rest). */
+  #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] .row-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
   }
   #monitor-root.layout-grid:not(.hide-col-location) #systems-body .system-row .cell-location,
   #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-os {
