@@ -4923,6 +4923,7 @@ func handleGetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 			StickyHeader: config.StickyHeader, // Public: Pulse's sticky table header
 			CardLayout:   config.CardLayout,   // Public: Pulse's default layout (cards or the table)
 			PageSize:     config.PageSize,     // Public: Pulse's servers per page (0: one list)
+			LossTimeline: config.LossTimeline, // Public: Pulse's loss band under the TCPing chart
 			HideTags:     config.HideTags,     // Public: Hotaru-compatible display flag
 			HideCards:    config.HideCards,    // Public: Hotaru-compatible display flag
 			// SharedSecret is intentionally omitted for security

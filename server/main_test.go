@@ -186,7 +186,7 @@ func TestTCPingCacheSkipsOversizedResponseWithoutPartialEntry(t *testing.T) {
 // the secret.
 func TestPublicNavbarConfigCarriesDisplaySwitches(t *testing.T) {
 	store := newTestStore(t)
-	if err := store.SaveNavbarConfig(&NavbarConfig{Text: "Pulse", SharedSecret: "fleet-secret", StickyHeader: true, ShowGlass: true, CardLayout: true, PageSize: 30}); err != nil {
+	if err := store.SaveNavbarConfig(&NavbarConfig{Text: "Pulse", SharedSecret: "fleet-secret", StickyHeader: true, ShowGlass: true, CardLayout: true, PageSize: 30, LossTimeline: true}); err != nil {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
@@ -195,11 +195,25 @@ func TestPublicNavbarConfigCarriesDisplaySwitches(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v (%s)", err, rr.Body.String())
 	}
-	if got["sticky_header"] != true || got["show_glass"] != true || got["card_layout"] != true || got["page_size"] != float64(30) {
+	if got["sticky_header"] != true || got["show_glass"] != true || got["card_layout"] != true || got["page_size"] != float64(30) || got["loss_timeline"] != true {
 		t.Fatalf("display switches missing: %s", rr.Body.String())
 	}
 	if s, _ := got["shared_secret"].(string); s != "" {
 		t.Fatal("the public config must not carry the shared secret")
+	}
+}
+
+// The TCPing loss band is off until the admin turns it on.
+func TestPublicNavbarConfigLossTimelineDefaultsOff(t *testing.T) {
+	store := newTestStore(t)
+	rr := httptest.NewRecorder()
+	handleGetNavbarConfig(store, rr, httptest.NewRequest(http.MethodGet, "/api/navbar/config", nil))
+	var got map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v (%s)", err, rr.Body.String())
+	}
+	if v, ok := got["loss_timeline"]; !ok || v != false {
+		t.Fatalf("loss_timeline should be present and false by default: %s", rr.Body.String())
 	}
 }
 
