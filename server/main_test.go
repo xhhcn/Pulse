@@ -186,7 +186,7 @@ func TestTCPingCacheSkipsOversizedResponseWithoutPartialEntry(t *testing.T) {
 // the secret.
 func TestPublicNavbarConfigCarriesDisplaySwitches(t *testing.T) {
 	store := newTestStore(t)
-	if err := store.SaveNavbarConfig(&NavbarConfig{Text: "Pulse", SharedSecret: "fleet-secret", StickyHeader: true, ShowGlass: true, CardLayout: true}); err != nil {
+	if err := store.SaveNavbarConfig(&NavbarConfig{Text: "Pulse", SharedSecret: "fleet-secret", StickyHeader: true, ShowGlass: true, CardLayout: true, PageSize: 30}); err != nil {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
@@ -195,10 +195,37 @@ func TestPublicNavbarConfigCarriesDisplaySwitches(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v (%s)", err, rr.Body.String())
 	}
-	if got["sticky_header"] != true || got["show_glass"] != true || got["card_layout"] != true {
+	if got["sticky_header"] != true || got["show_glass"] != true || got["card_layout"] != true || got["page_size"] != float64(30) {
 		t.Fatalf("display switches missing: %s", rr.Body.String())
 	}
 	if s, _ := got["shared_secret"].(string); s != "" {
 		t.Fatal("the public config must not carry the shared secret")
+	}
+}
+
+// The dashboard's page size is kept between 0 (one list) and 200.
+func TestNavbarConfigPageSizeIsBounded(t *testing.T) {
+	store := newTestStore(t)
+	authTokensMu.Lock()
+	authTokens["test-admin-token"] = time.Now().Add(time.Hour)
+	authTokensMu.Unlock()
+	t.Cleanup(func() {
+		authTokensMu.Lock()
+		delete(authTokens, "test-admin-token")
+		authTokensMu.Unlock()
+	})
+	for _, c := range []struct{ in, want int }{{-5, 0}, {0, 0}, {50, 50}, {500, 200}} {
+		rr := httptest.NewRecorder()
+		handleSetNavbarConfig(store, rr, adminRequest(t, http.MethodPost, "/api/navbar/config", map[string]interface{}{"text": "Pulse", "page_size": c.in}))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("page_size %d: %d %s", c.in, rr.Code, rr.Body.String())
+		}
+		got, err := store.GetNavbarConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.PageSize != c.want {
+			t.Fatalf("page_size %d saved as %d, want %d", c.in, got.PageSize, c.want)
+		}
 	}
 }

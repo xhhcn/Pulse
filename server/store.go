@@ -1567,6 +1567,7 @@ type NavbarConfig struct {
 	ShowGlass    bool   `json:"show_glass"`    // Enable glassmorphism (frosted glass) visual effect
 	StickyHeader bool   `json:"sticky_header"` // Pulse: keep the table's column header in view while a long list scrolls
 	CardLayout   bool   `json:"card_layout"`   // Pulse: cards instead of the table at every width, unless a visitor picks a layout
+	PageSize     int    `json:"page_size"`     // Pulse: servers per page on the dashboard; 0 shows them all in one list
 	HideTags     bool   `json:"hide_tags"`     // Hotaru-compatible: hide tag row on homepage
 	HideCards    bool   `json:"hide_cards"`    // Hotaru-compatible: hide homepage card grid
 }

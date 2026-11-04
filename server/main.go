@@ -4922,6 +4922,7 @@ func handleGetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 			ShowGlass:    config.ShowGlass,    // Public: controls glassmorphism effect
 			StickyHeader: config.StickyHeader, // Public: Pulse's sticky table header
 			CardLayout:   config.CardLayout,   // Public: Pulse's default layout (cards or the table)
+			PageSize:     config.PageSize,     // Public: Pulse's servers per page (0: one list)
 			HideTags:     config.HideTags,     // Public: Hotaru-compatible display flag
 			HideCards:    config.HideCards,    // Public: Hotaru-compatible display flag
 			// SharedSecret is intentionally omitted for security
@@ -4933,6 +4934,9 @@ func handleGetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 	// Authenticated admin users can see the full config including SharedSecret
 	writeJSON(w, http.StatusOK, config)
 }
+
+// maxDashboardPageSize bounds NavbarConfig.PageSize (Beszel's largest page).
+const maxDashboardPageSize = 200
 
 func handleSetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request) {
 	if !isAuthenticated(r) {
@@ -4955,6 +4959,12 @@ func handleSetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 	// Validate config
 	if config.Text == "" {
 		config.Text = "Pulse" // Default to "Pulse" if empty
+	}
+	// Servers per page on the dashboard: 0 (one list) up to Beszel's largest page.
+	if config.PageSize < 0 {
+		config.PageSize = 0
+	} else if config.PageSize > maxDashboardPageSize {
+		config.PageSize = maxDashboardPageSize
 	}
 
 	// Get current config to check if SharedSecret has changed
