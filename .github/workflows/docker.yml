@@ -146,25 +146,29 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} adds optional pages to the dashboard, turns the offline count into a filter, ties an opened card to its details, shows each server's location and client version on the admin page, walks a newly added server through installing its client, and settles the wording on 服务器, 网速 and 流量. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} polishes v1.3.55 after a look at it in use and a further comparison with Beszel: offline servers say when they were last seen, turning a page brings the list back, server links, the filter's shortcut shown, an optional loss band under the TCPing chart, and TCPing charts that show lost probes as gaps instead of straight lines. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: optional pages (自定义设置 → 分页显示): the dashboard a page at a time, with Beszel's footer under the list — the servers shown, a page size visitors can change for their visit, and first / previous / next / last. Off by default; filters and sorting start again from the first page, live updates keep it.
-            - Web: the red 「N 离线」 count is a button that shows only the offline servers, and all of them again; it follows the view menu.
-            - Web: an opened card has a darker edge and its details point at it with a notch; the glass wallpaper now meets the space kept for a scrollbar without a hard edge (desktops whose scrollbars take room).
-            - Admin: each server shows its location (flag and code), OS and client version; a client older than the newest one you run is marked 需更新, and the delete dialog names the location and the address.
-            - Admin: after a server is added, the dialog shows its install command with buttons to copy the Linux or the Windows one (as Beszel's Add System dialog), and 完成 brings the new row into view.
-            - Web: a server whose client has never reported shows 等待接入 in grey instead of a red 离线, with a count of its own (Beszel's pending systems).
-            - Wording: 网速 for the transfer rate and 流量 for the amount since boot; 服务器 (Server) throughout.
+            - Web: an offline server says when it last reported (最后在线 14:00（2 小时前）) in its 离线 chip's tooltip and first in its details; a server waiting for its client has none.
+            - Web: turning a page at the footer brings the list's top back into view (on a phone the next page started some 1400 px up).
+            - Web: a link button beside the copy button copies a link to the server (?server=id, keeping a share link's token); opening it goes to that server's page and opens it, after the login on a private dashboard.
+            - Web: the filter shows its shortcut (Ctrl K, ⌘K on a Mac) on desktops while it is empty.
+            - Admin: 自定义设置 → 丢包时间线 (off by default) adds a band under the TCPing chart, red where probes were lost, so a gap reads as lost probes or as no data.
+            - Web: in the TCPing chart two or more lost probes in a row are a gap, as a stretch without samples is (every run of lost probes was drawn as a straight line), and a lost probe at the edge of a stretch without samples no longer draws a line across it.
+            - Web: the TCPing latency axis leaves room above the lines (lines up to 87 ms: 20–120 ms, was 20–100 ms), never goes below 0 ms (a target under a millisecond beside a slow one showed −50 ms) and has round labels.
+            - Admin: the install step's copy buttons read Copy for Linux / Copy for Windows (复制 Linux 命令 / 复制 Windows 命令) and fit in English and Chinese; 分页显示 takes the page size as a number (1–200).
+            - Web: the pages footer shows where you are and the page buttons only (the page size is the site's), and only with more than one page; no notch under an opened card.
+            - Web: on phones an offline server's 离线 chip sits on its name's line again (it was 5 px low).
 
             ### Compatibility
 
-            - Existing clients continue to work; the server's display settings gain page_size (0, one list, unless set).
+            - Server: the display settings gain loss_timeline (public, false by default). Pulse-Hotaru's backend carries it too; its theme does not use it.
+            - Existing clients continue to work; no wire format change.
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: pages (off by default; first / previous / next / last, the page size keeping the first server shown, a filter, the offline button and a sort going back to page 1, live updates keeping the page, cards, phones, English, the admin switch); the offline button by mouse and keyboard and with the view menu; the card notch at 1440 and 390 px, after a resize and in glass; the glass edge with space-taking scrollbars; the admin lines on desktop and phone (flags, versions, 需更新, 等待接入), the delete dialog, adding a server through the install step and its copy buttons; a server waiting for its client on the home page (dot, chip, counts, filter); 24 px touch targets for the summary's chips; the new wording in both languages; with every earlier suite and a theme audit of 60 pages (no new findings).
+            - Chromium, Firefox and WebKit: last seen (tooltip, details, English, not for a pending server); page turns on a phone (smooth and with reduced motion, none when the list top is in view); the shortcut hint; the link button (copied link, share token, row not opened, tooltip label) and opening ?server= on page 4 of 7 and an unknown id; the loss band off and on (light, dark, a picked target) and runs of lost probes as gaps; the latency axis on 16 latency patterns and on live charts; alignment scans of the dashboard (4 widths, table and cards, en/zh) and the admin list; overflow scans of the admin dialogs and the footer; with every earlier suite and a theme audit of 60 pages.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
