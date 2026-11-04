@@ -146,26 +146,23 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} redesigns the admin page after Beszel — labelled buttons and a settings menu, one scrolling list, reordering by a handle that also works by touch and keyboard — and brings Beszel's focus ring to every control. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} polishes the public pages after a second design review: a clear message when the first load fails, readable names, aligned cards, per-target TCPing averages and a last-probe note on charts whose probes stopped, proper headings, and language and theme buttons on the login page. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: the admin toolbar shows refresh, 设置 / Settings and 添加服务 / Add Service as labelled buttons; the settings dialogs, the backup, the password change and the sign-out are a menu of labelled items (keyboard ↑ ↓ Home End Esc). Eight look-alike icons before.
-            - Web: the services are one list with hairline dividers that scrolls with the page, instead of cards in a 600 px box with a hidden scrollbar; edit sits with the other actions on the right.
-            - Web: rows are reordered by a handle — drag it with a mouse, a finger or a pen, or focus it and press ↑ / ↓; Escape cancels and the new place is announced to screen readers. Reordering used to need a mouse.
-            - Web: 自定义设置 / Customization Settings has four parts (brand, display, client authentication, custom code) with the display switches in one list, as does the edit dialog; the TCPing targets get column labels and room for the whole address (it was cut off); inputs and buttons are 40 px and every dialog 512 px wide, as on the rest of the site.
-            - Web: keyboard focus shows Beszel's ring on every control (a faint 1 px line before, invisible on the dark buttons). Dashboard rows are buttons with their expanded state for screen readers, and Tab moves row to row.
-            - Web: an offline server shows - for its network speed and live traffic and sorts last by network, as in Beszel — its last speed read as current. Traffic totals say KiB … TiB like memory and disk beside them; server names use proportional figures; one word for the agent (客户端 / client); cards take Beszel's 24 px icon column and plain tags the summary chips' grey.
-            - Web: a home-screen icon and a web manifest, so a status page pinned to a phone shows the Pulse icon (iOS ignores the SVG one).
+            - Web: when the server list can't load, the page says so in the visitor's language and that it keeps retrying (无法加载服务列表 / 正在自动重试…), instead of an English error in red.
+            - Web: the TCPing chart's legend gives each target's 24-hour average, and the summary reads 全部平均 / Avg (all) until a target is selected. When probes have stopped — an offline server, or probing that ended — the subtitle names the last probe (最后探测 04:30); the lines still fill the chart, as a blank stretch would look like lost probes.
+            - Web: a cut-off server name can be read in full (its tooltip; an opened card or phone row shows all of it); card bars start at the same place in every card; a filter that matches nothing no longer shifts the table's columns.
+            - Web: the language and theme buttons on the login page, as on Beszel's sign-in page.
+            - Web: proper headings for screen readers (the page's h1, the charts' h2), the footer tagline at full contrast, the offline chip at 11 px, and table rows at Beszel's 56 px from 1280 px.
 
             ### Compatibility
 
             - Existing clients continue to work; no wire format or server change.
-            - Custom CSS or scripts that clicked the admin page's icon buttons find them, with the same ids, inside the settings menu.
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: the admin toolbar and menu by mouse and keyboard, focus back on the menu after a dialog, the list scrolling with the page, reordering by mouse drag, a touch drag, ↑ / ↓ and Escape (each move one save, the server's order untouched in tests), the settings dialog's parts, 40 px controls and 512 px dialogs, the TCPing rows, Beszel's focus ring, dashboard rows as buttons with one tab stop, the icon and manifest; with the earlier suites — motion, the card layout switch, the details, the columns, sorting and filtering, the table at 153 widths and phones every 3 px, live updates, the charts, the sticky header, the admin and glass dialogs, the connection notice and a theme audit of 60 pages (no layout shift on load).
+            - Chromium, Firefox and WebKit: the first-load error and a language switch over it, names in full, card bars aligned, columns kept on an empty filter, headings, footer contrast, 56 px rows, the chart's span, the last-probe note (stopped probes in both languages; none while probes are live), the legend's averages and the summary's label, the 11 px chip, the login page's buttons; with every earlier suite — the admin page and reordering, motion, layouts, details, columns, the table at 153 widths and phones every 3 px, live updates, the charts, the sticky header, the dialogs, glass, the connection notice and a theme audit of 60 pages (no new findings).
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
