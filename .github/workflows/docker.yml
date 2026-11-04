@@ -146,15 +146,17 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} polishes the public pages after a second design review: a clear message when the first load fails, readable names, aligned cards, per-target TCPing averages and a last-probe note on charts whose probes stopped, proper headings, and language and theme buttons on the login page. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} fixes reordering on the admin page, makes the admin's card layout show for every visitor, stops the details from repeating what the row already shows, and makes share links work the moment they are generated. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: when the server list can't load, the page says so in the visitor's language and that it keeps retrying (无法加载服务列表 / 正在自动重试…), instead of an English error in red.
-            - Web: the TCPing chart's legend gives each target's 24-hour average, and the summary reads 全部平均 / Avg (all) until a target is selected. When probes have stopped — an offline server, or probing that ended — the subtitle names the last probe (最后探测 04:30); the lines still fill the chart, as a blank stretch would look like lost probes.
-            - Web: a cut-off server name can be read in full (its tooltip; an opened card or phone row shows all of it); card bars start at the same place in every card; a filter that matches nothing no longer shifts the table's columns.
-            - Web: the language and theme buttons on the login page, as on Beszel's sign-in page.
-            - Web: proper headings for screen readers (the page's h1, the charts' h2), the footer tagline at full contrast, the offline chip at 11 px, and table rows at Beszel's 56 px from 1280 px.
+            - Admin: dragging a server carries it any number of places up or down (it stopped after one place up). Keyboard ↑/↓ keeps the focus on the moved row.
+            - Web: the view menu's layout, fields and sort last for the visit, and every load starts from the site's settings, so 自定义设置 → 卡片布局 shows for every visitor. Choices kept by earlier versions are cleared.
+            - Web: the details no longer repeat the location and OS that the flag and logo (phones, cards) or the table's columns already show; they still appear where the table has no such columns.
+            - Admin: 生成分享链接 saves the link at once, so a copied link works even if the dialog is closed with 取消; 立即停止分享链接 appears only when there is a link.
+            - Privacy mode: visitors who reach the login page are told the dashboard is private, and an ended share link says so; the site logo keeps a share link's token. The privacy dialog's description is corrected.
+            - Login: after five wrong passwords the form says the login is locked for 15 minutes; the heading follows a language switch on every form.
+            - Web: the filter also searches tags; in glass mode only the picked legend entry is highlighted; live updates do less layout work with many servers; leaving the admin page no longer throws an error.
 
             ### Compatibility
 
@@ -162,7 +164,7 @@ jobs:
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: the first-load error and a language switch over it, names in full, card bars aligned, columns kept on an empty filter, headings, footer contrast, 56 px rows, the chart's span, the last-probe note (stopped probes in both languages; none while probes are live), the legend's averages and the summary's label, the 11 px chip, the login page's buttons; with every earlier suite — the admin page and reordering, motion, layouts, details, columns, the table at 153 widths and phones every 3 px, live updates, the charts, the sticky header, the dialogs, glass, the connection notice and a theme audit of 60 pages (no new findings).
+            - Chromium, Firefox and WebKit: reordering by mouse (several places, with turns on the way) and keyboard, and by touch in Chromium; the view settings across reloads with the card layout on and off and over choices an older version kept; the details at phone, card, 800, 900 and 1440 px and with a hidden field; generating, cancelling, reopening and stopping a share link; the login headings in both languages and on the first-run form; the lockout message; the privacy redirects; tag search; the glass legend; name-column widths identical to v1.3.53; with every earlier suite.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
