@@ -151,17 +151,17 @@ const customCodePlaceholder = [
         <p id="add-install-desc" class="text-sm text-[#595959] dark:text-[#ababab] [text-wrap:pretty]"></p>
         <pre id="add-install-command" class="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-[#f5f5f5] dark:bg-[#282828] p-3 font-mono text-xs leading-5 text-[#1d1d20] dark:text-[#d4d4d4]"></pre>
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <button type="button" id="copy-install-linux-btn" class="toolbar-control toolbar-btn" data-kind="linux">
+          <button type="button" id="copy-install-linux-btn" class="toolbar-control toolbar-btn min-w-0" data-kind="linux">
             <svg class="shrink-0" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
                 <g fill="none" fill-rule="evenodd"><path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"/><path fill="currentColor" d="M8.264 15.29a1 1 0 0 1 .822.522l1.892 3.493a1.809 1.809 0 0 1-1.856 2.65l-3.93-.582a1 1 0 0 1-.672-1.563l.623-.89l-.174-.984a1 1 0 0 1 .811-1.159l.985-.173l.623-.89a1 1 0 0 1 .876-.425Zm6.347-.024a1 1 0 0 1 .858-.043l.116.057l.94.543l.966-.259a1 1 0 0 1 1.188.596l.037.111l.259.966l.94.543a1 1 0 0 1 .154 1.623l-.103.078l-3.315 2.188a1.809 1.809 0 0 1-2.805-1.46l.003-.158l.238-3.965a1 1 0 0 1 .524-.82M12 2a4 4 0 0 1 4 4v1c0 1.214.502 2.267 1.166 3.354l.736 1.165c.1.16.195.315.28.457c.32.541.628 1.14.788 1.781a7 7 0 0 1 .194 1.358a2 2 0 0 0-1.932-.516l-.565.151l-.582-.336a2 2 0 0 0-2.996 1.613l-.238 3.965c-.021.345.022.684.121 1.003l-.269.005h-.406q-.114 0-.226-.004c.22-.71.152-1.492-.214-2.167l-1.891-3.493a2 2 0 0 0-3.397-.195l-.385.55l-.33.058a5.4 5.4 0 0 1 .024-1.16c.037-.285.086-.567.152-.832c.198-.792.535-1.459.857-2.02l.437-.74C7.74 10.28 8 9.722 8 9V6a4 4 0 0 1 4-4m-1.438 5.778l-.822.41c.224.597.572 1.156.897 1.6l.204.269l.184.225l.081.094l.25-.141l.329-.197c.176-.109.368-.232.566-.367c.604-.412 1.225-.91 1.662-1.427l-2.316-.58a1.5 1.5 0 0 0-1.035.114"/></g>
               </svg>
-            <span data-copy-label data-translate="copyLinuxCommand">Copy Linux install command</span>
+            <span class="min-w-0 truncate" data-copy-label data-translate="installCopyLinux">Copy for Linux</span>
           </button>
-          <button type="button" id="copy-install-windows-btn" class="toolbar-control toolbar-btn" data-kind="windows">
+          <button type="button" id="copy-install-windows-btn" class="toolbar-control toolbar-btn min-w-0" data-kind="windows">
             <svg class="shrink-0" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
                 <g fill="none"><path d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"/><path fill="currentColor" d="M21 13v7.434a1.5 1.5 0 0 1-1.553 1.499l-.133-.011L12 21.008V13zm-11 0v7.758l-5.248-.656A2 2 0 0 1 3 18.117V13zm9.314-10.922a1.5 1.5 0 0 1 1.68 1.355l.006.133V11h-9V2.992zM10 3.242V11H3V5.883a2 2 0 0 1 1.752-1.985z"/></g>
               </svg>
-            <span data-copy-label data-translate="copyWindowsCommand">Copy Windows install command</span>
+            <span class="min-w-0 truncate" data-copy-label data-translate="installCopyWindows">Copy for Windows</span>
           </button>
         </div>
         <div class="flex justify-end">
@@ -545,7 +545,7 @@ const customCodePlaceholder = [
             <div class="flex items-center justify-between gap-3">
               <div class="flex-1">
                 <label for="page-size-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="pagesLabel">Pages</label>
-                <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="pagesDesc">Show the servers a page at a time, with a footer to turn the pages (as Beszel); visitors can pick another page size for their visit</p>
+                <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="pagesDesc">Show the servers a page at a time, in the table and the cards alike, with a footer to turn the pages (as Beszel)</p>
               </div>
               <label class="relative inline-flex shrink-0 items-center cursor-pointer">
                 <input type="checkbox" id="page-size-toggle" class="sr-only peer">
@@ -553,17 +553,19 @@ const customCodePlaceholder = [
               </label>
             </div>
             <div id="page-size-row" class="mt-3 hidden items-center gap-3">
-              <label for="page-size-select" class="text-sm text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="pageSizeLabel">Servers per page</label>
-              <select id="page-size-select" class="toolbar-control w-24 px-2 text-sm text-[#1d1d20] dark:text-[#f5f5f5]">
-                <option value="10">10</option>
-                <option value="15">15</option>
-                <option value="20" selected>20</option>
-                <option value="30">30</option>
-                <option value="40">40</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-                <option value="200">200</option>
-              </select>
+              <label for="page-size-input" class="text-sm text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="pageSizeLabel">Servers per page</label>
+              <input
+                type="number"
+                id="page-size-input"
+                min="1"
+                max="200"
+                step="1"
+                inputmode="numeric"
+                required
+                disabled
+                class="w-20 toolbar-control px-3 text-sm text-[#1d1d20] dark:text-[#f5f5f5] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <span class="text-xs text-[#595959] dark:text-[#ababab]">1–200</span>
             </div>
           </div>
           </div>
@@ -4284,23 +4286,25 @@ const customCodePlaceholder = [
     }
   });
 
-  // Pages (分页显示): the switch, and with it on, the page size. A size saved
-  // that is not offered (another client wrote it) is offered as it is.
+  // Pages (分页显示): the switch, and with it on, the page size, typed
+  // (1–200). Off, the field is disabled as well as hidden: the browser checks
+  // only enabled fields, and a hidden one it cannot point at would block Save.
   function syncPageSizeRow() {
     const on = !!document.getElementById('page-size-toggle')?.checked;
     const row = document.getElementById('page-size-row');
+    const input = document.getElementById('page-size-input');
     row?.classList.toggle('hidden', !on);
     row?.classList.toggle('flex', on);
+    if (input) {
+      input.disabled = !on;
+      if (on && !input.value) input.value = '20';
+    }
   }
   function showPageSize(size) {
     const toggle = document.getElementById('page-size-toggle');
-    const select = document.getElementById('page-size-select');
+    const input = document.getElementById('page-size-input');
     if (toggle) toggle.checked = size > 0;
-    if (select) {
-      const value = String(size > 0 ? size : 20);
-      if (![...select.options].some((o) => o.value === value)) select.add(new Option(value, value));
-      select.value = value;
-    }
+    if (input) input.value = String(size > 0 ? size : 20);
     syncPageSizeRow();
   }
   document.getElementById('page-size-toggle')?.addEventListener('change', syncPageSizeRow);
@@ -4377,7 +4381,7 @@ const customCodePlaceholder = [
     const stickyHeaderToggle = document.getElementById('sticky-header-toggle');
     const cardLayoutToggle = document.getElementById('card-layout-toggle');
     const pageSizeToggle = document.getElementById('page-size-toggle');
-    const pageSizeSelect = document.getElementById('page-size-select');
+    const pageSizeInput = document.getElementById('page-size-input');
     const data = {
       text: formData.get('text')?.trim() || 'Pulse',
       logo: formData.get('logo')?.trim() || '',
@@ -4388,7 +4392,7 @@ const customCodePlaceholder = [
       show_glass: showGlassToggle?.checked || false,
       sticky_header: stickyHeaderToggle?.checked || false,
       card_layout: cardLayoutToggle?.checked || false,
-      page_size: pageSizeToggle?.checked ? (parseInt(pageSizeSelect?.value || '', 10) || 20) : 0,
+      page_size: pageSizeToggle?.checked ? Math.min(200, Math.max(1, parseInt(pageSizeInput?.value || '', 10) || 20)) : 0,
     };
 
     // Set button to saving state
@@ -4867,6 +4871,9 @@ const customCodePlaceholder = [
     'noSystems': { en: 'No servers found', zh: '未找到服务器' },
     'areYouSureYouWantToDelete': { en: 'Are you sure you want to delete', zh: '您确定要删除' },
     'installClientTitle': { en: 'Install the client', zh: '安装客户端' },
+    // The dialog says what is installed; the buttons only which system.
+    'installCopyLinux': { en: 'Copy for Linux', zh: '复制 Linux 命令' },
+    'installCopyWindows': { en: 'Copy for Windows', zh: '复制 Windows 命令' },
     'installClientDesc': { en: 'Run this as root on “{name}”. The server appears on the dashboard once its client reports.', zh: '在「{name}」上以 root 运行下面的命令，客户端上报后即会显示在首页。' },
     'done': { en: 'Done', zh: '完成' },
     'agentLabel': { en: 'Client', zh: '客户端' },
@@ -4950,7 +4957,7 @@ const customCodePlaceholder = [
     'stickyHeaderDesc': { en: 'Keep the column names at the top of the window while a long list scrolls', zh: '滚动长列表时，列名固定在页面顶部' },
     'cardLayoutLabel': { en: 'Card Layout', zh: '卡片布局' },
     'pagesLabel': { en: 'Pages', zh: '分页显示' },
-    'pagesDesc': { en: 'Show the servers a page at a time, with a footer to turn the pages (as Beszel); visitors can pick another page size for their visit', zh: '服务器按页显示，页脚可翻页（同 Beszel）；访客可在页脚临时调整每页数量' },
+    'pagesDesc': { en: 'Show the servers a page at a time, in the table and the cards alike, with a footer to turn the pages (as Beszel)', zh: '服务器按页显示，表格与卡片布局都适用，页脚可翻页（同 Beszel）' },
     'pageSizeLabel': { en: 'Servers per page', zh: '每页显示' },
     'cardLayoutDesc': { en: 'Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu for their visit', zh: '用卡片代替表格显示每台服务器，电脑和手机都一样；访客仍可在视图菜单中临时切换' },
   };

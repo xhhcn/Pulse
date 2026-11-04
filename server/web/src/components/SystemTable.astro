@@ -46,15 +46,12 @@ const apiBase = apiBaseProp ?? '';
     </div>
   </div>
 
-  <!-- Pages (自定义设置 → 分页) under the list, as Beszel's: which servers
-       this page holds, how many a page, which page, and the way to the
-       others. Hidden while the list is one page (applyPagination). -->
+  <!-- Pages (自定义设置 → 分页) under the list, after Beszel's: which servers
+       this page holds, which page, and the way to the others. The page size
+       is the site's, so there is no picker. Hidden while the list is one
+       page (applyPagination). -->
   <nav id="systems-pagination" class="mt-3.5 hidden items-center gap-4 ps-1 text-sm tabular-nums lg:gap-6" aria-label="Pages">
     <p id="pagination-range" class="hidden flex-1 text-[#595959] dark:text-[#ababab] lg:block"></p>
-    <label class="hidden items-center gap-2 sm:flex">
-      <span class="sr-only font-medium text-[#1d1d20] dark:text-[#f5f5f5] md:not-sr-only" data-translate-detail="rowsPerPage">Rows per page</span>
-      <select id="pagination-size" class="toolbar-control text-sm text-[#1d1d20] dark:text-[#f5f5f5]"></select>
-    </label>
     <p id="pagination-page" class="whitespace-nowrap font-medium text-[#1d1d20] dark:text-[#f5f5f5]"></p>
     <div class="ms-auto flex items-center gap-2 lg:ms-0">
       <button type="button" class="pagination-btn toolbar-control hidden md:inline-flex" data-page="first" title="First page" data-translate-title="firstPage">
@@ -897,19 +894,17 @@ const apiBase = apiBaseProp ?? '';
     if (e.target.closest('#summary-offline-chip')) setStatusFilter(statusFilter === 'offline' ? 'all' : 'offline');
   });
 
-  // Pages (自定义设置 → 分页): the list N servers at a time, with Beszel's
-  // footer under it. The admin sets N (html.dataset.pageSize, from the site
-  // config in the page head; 0 keeps one list); a visitor can pick another
-  // size for the visit, like the other view settings. Filtering, sorting or
-  // a status choice go back to the first page (rerenderForView); a live
-  // update keeps the page, and a list that shrank under it shows its last
-  // page. The other pages' rows stay in the list, hidden: their updates cost
-  // no layout, and the name column keeps one width across the pages.
-  const PAGE_SIZES = [10, 15, 20, 30, 40, 50, 100, 200];
+  // Pages (自定义设置 → 分页): the list N servers at a time, with a footer
+  // under it after Beszel's. The admin sets N (html.dataset.pageSize, from
+  // the site config in the page head; 0 keeps one list). Unlike Beszel, whose
+  // dashboard each signed-in user sets up, visitors get no page-size picker:
+  // the size is the site's. Filtering, sorting or a status choice go back to
+  // the first page (rerenderForView); a live update keeps the page, and a
+  // list that shrank under it shows its last page. The other pages' rows
+  // stay in the list, hidden: their updates cost no layout, and the name
+  // column keeps one width across the pages.
   let pageIndex = 0;
-  let pageSizeChoice = null;
-  const sitePageSize = () => Math.min(200, Math.max(0, parseInt(document.documentElement.dataset.pageSize || '0', 10) || 0));
-  const currentPageSize = () => (sitePageSize() > 0 ? pageSizeChoice || sitePageSize() : 0);
+  const currentPageSize = () => Math.min(200, Math.max(0, parseInt(document.documentElement.dataset.pageSize || '0', 10) || 0));
   const pagedRows = () => [...(document.getElementById('systems-body')?.children || [])].filter((r) => r.classList.contains('system-row'));
   function applyPagination() {
     const nav = document.getElementById('systems-pagination');
@@ -922,8 +917,8 @@ const apiBase = apiBaseProp ?? '';
       const off = !!size && (i < start || i >= start + size);
       if (row.hidden !== off) row.hidden = off;
     });
-    // Nothing to page or to change while the list fits the smallest page.
-    const show = !!size && rows.length > PAGE_SIZES[0];
+    // Shown only while there is more than one page.
+    const show = pages > 1;
     if (nav) {
       nav.classList.toggle('hidden', !show);
       nav.classList.toggle('flex', show);
@@ -934,17 +929,11 @@ const apiBase = apiBaseProp ?? '';
       nav.setAttribute('aria-label', translations.paginationLabel[lang]);
       document.getElementById('pagination-range').textContent = fill('paginationRange', { from: start + 1, to: Math.min(start + size, rows.length), total: rows.length });
       document.getElementById('pagination-page').textContent = fill('paginationPage', { page: pageIndex + 1, pages });
-      const select = document.getElementById('pagination-size');
-      const sizes = [...new Set([...PAGE_SIZES, sitePageSize()])].sort((a, b) => a - b);
-      const options = sizes.map((n) => `<option value="${n}">${n}</option>`).join('');
-      if (select.innerHTML !== options) select.innerHTML = options;
-      select.value = String(size);
       nav.querySelectorAll('.pagination-btn').forEach((btn) => {
         const back = btn.dataset.page === 'first' || btn.dataset.page === 'prev';
         btn.disabled = back ? pageIndex === 0 : pageIndex >= pages - 1;
       });
     }
-    placeCardNotch();
   }
   document.querySelectorAll('#systems-pagination .pagination-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -955,14 +944,6 @@ const apiBase = apiBaseProp ?? '';
       pageIndex = Math.min(Math.max(0, to), last);
       applyPagination();
     });
-  });
-  document.getElementById('pagination-size')?.addEventListener('change', (e) => {
-    // The page that holds the first server shown stays in view.
-    const first = pageIndex * currentPageSize();
-    pageSizeChoice = parseInt(e.target.value, 10) || null;
-    const size = currentPageSize();
-    pageIndex = size ? Math.floor(first / size) : 0;
-    applyPagination();
   });
   window.addEventListener('navbarconfigready', () => applyPagination());
   updateStatusUI();
@@ -995,29 +976,12 @@ const apiBase = apiBaseProp ?? '';
     if (bottom.length) lines.push(spread(bottom));
     return lines.map((l) => `"${l}"`).join(' ');
   }
-  // Cards: an opened card's panel points at the card (the notch over its
-  // middle, see the styles). Placed once the panel has settled open, and
-  // again whenever the grid may have moved the card: a resize, the layout or
-  // the fields changing, a render that reordered the cards.
-  function placeCardNotch() {
-    const root = document.getElementById('monitor-root');
-    if (!root || !root.classList.contains('layout-grid')) return;
-    document.querySelectorAll('#systems-body .system-details.is-settled').forEach((panel) => {
-      const card = panel.parentElement && panel.parentElement.querySelector(':scope > [data-system-id]');
-      if (!card) return;
-      const c = card.getBoundingClientRect();
-      const p = panel.getBoundingClientRect();
-      const x = `${Math.round(c.left + c.width / 2 - p.left)}px`;
-      if (panel.style.getPropertyValue('--card-notch-x') !== x) panel.style.setProperty('--card-notch-x', x);
-    });
-  }
   function applyViewLayout() {
     const root = document.getElementById('monitor-root');
     if (!root) return;
     HIDEABLE_COLS.forEach((c) => root.classList.toggle(`hide-col-${c}`, hiddenCols.includes(c)));
     root.classList.toggle('layout-grid', layoutMode() === 'grid');
     root.classList.toggle('cols-custom', hiddenCols.length > 0);
-    requestAnimationFrame(placeCardNotch);
     if (!hiddenCols.length) return;
     const tier = COLUMN_TIERS.find((t) => window.innerWidth >= t.min);
     if (tier) {
@@ -1763,7 +1727,6 @@ const apiBase = apiBaseProp ?? '';
     'paginationLabel': { en: 'Pages', zh: '分页' },
     'paginationRange': { en: '{from}–{to} of {total}', zh: '第 {from}–{to} 台，共 {total} 台' },
     'paginationPage': { en: 'Page {page} of {pages}', zh: '第 {page} / {pages} 页' },
-    'rowsPerPage': { en: 'Rows per page', zh: '每页' },
     'firstPage': { en: 'First page', zh: '第一页' },
     'prevPage': { en: 'Previous page', zh: '上一页' },
     'nextPage': { en: 'Next page', zh: '下一页' },
@@ -4697,7 +4660,6 @@ const apiBase = apiBaseProp ?? '';
               const otherSystemId = otherRowElement ? otherRowElement.dataset.systemId : null;
               
               // Collapse this section
-              section.classList.remove('is-settled');
               section.style.maxHeight = section.scrollHeight + 'px';
               section.style.opacity = '1';
               section.offsetHeight; // Trigger reflow
@@ -4733,7 +4695,7 @@ const apiBase = apiBaseProp ?? '';
             clearTimeout(detailsSection._closeTimer);
             detailsSection._closeTimer = null;
           }
-          detailsSection.classList.remove('hidden', 'is-settled');
+          detailsSection.classList.remove('hidden');
           detailsSection.style.maxHeight = '0';
           detailsSection.style.opacity = '0';
           
@@ -4769,10 +4731,6 @@ const apiBase = apiBaseProp ?? '';
               setTimeout(() => {
                 detailsSection.style.maxHeight = '';
                 detailsSection.style.transition = '';
-                if (rowElement.getAttribute('aria-expanded') === 'true') {
-                  detailsSection.classList.add('is-settled');
-                  placeCardNotch();
-                }
               }, 300);
             });
           });
@@ -4794,7 +4752,6 @@ const apiBase = apiBaseProp ?? '';
           // after the animation (below), not before it: destroying it at
           // click time blanked the chart while the section was still
           // visibly closing.
-          detailsSection.classList.remove('is-settled');
           detailsSection.style.maxHeight = detailsSection.scrollHeight + 'px';
           detailsSection.style.opacity = '1';
           
@@ -5301,8 +5258,7 @@ const apiBase = apiBaseProp ?? '';
     })) {
       setTimeout(() => recalculateColumnWidthFromCurrentData(), 0);
     }
-    // The pages follow the list (rows came, went or moved), and the cards may
-    // have moved under an opened card's panel.
+    // The pages follow the list (rows came, went or moved).
     applyPagination();
   };
 
@@ -6048,7 +6004,6 @@ const apiBase = apiBaseProp ?? '';
     }
     resizeTimeout = setTimeout(() => {
       recalculateColumnWidthFromCurrentData();
-      placeCardNotch();
       // Rotating the phone / resizing the browser changes the chart's CSS
       // box width (inside horizontally-scrollable table). Chart.js does not
       // always observe that layout shift reliably on mobile Safari — give it
@@ -6452,35 +6407,14 @@ const apiBase = apiBaseProp ?? '';
   #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #837e79; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
   html.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id] { border-color: #2c2c2c; }
   html.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #737373; }
-  /* The opened card's details: a panel across the grid, under its row. It
-     points at its card, which a row of look-alike cards needs: a notch over
-     the card's middle (--card-notch-x, kept by placeCardNotch()). The panel
-     clips its content while it slides open or shut (is-settled marks the
-     time between), so the notch only shows once it is open. */
+  /* The opened card's details: a panel across the grid, under its row; the
+     opened card's darker edge says whose they are. */
   #monitor-root.layout-grid #systems-body .system-details {
-    position: relative;
     grid-column: 1 / -1;
     border: 1px solid rgba(221, 218, 215, 0.6);
     border-radius: 12.8px;
   }
   html.dark #monitor-root.layout-grid #systems-body .system-details { border-color: #2c2c2c; }
-  #monitor-root.layout-grid #systems-body .system-details.is-settled { overflow: visible; }
-  #monitor-root.layout-grid #systems-body .system-details.is-settled::before {
-    content: '';
-    position: absolute;
-    top: -7.5px;
-    left: calc(var(--card-notch-x, 50%) - 6px);
-    width: 12px;
-    height: 12px;
-    transform: rotate(45deg);
-    background: inherit;
-    border-top: 1px solid;
-    border-left: 1px solid;
-    border-color: inherit;
-    /* the upper half, and a sliver over the panel's top edge */
-    clip-path: polygon(0 0, 100% 0, 100% 2px, 2px 100%, 0 100%);
-    pointer-events: none;
-  }
   /* Header band */
   #monitor-root.layout-grid #systems-body .system-row .cell-name {
     grid-column: 1 / -1;
@@ -6696,10 +6630,9 @@ const apiBase = apiBaseProp ?? '';
      grey in getProgressColor and a chip follows the name). */
   /* Pages: the other pages' rows stay in the list, hidden (the cards' rows
      are display: contents, which [hidden] alone would not override). The
-     footer's controls are Beszel's 36 px. */
+     footer's buttons are Beszel's 36 px. */
   #systems-body > .system-row[hidden] { display: none !important; }
   #systems-pagination .toolbar-control { height: 36px; }
-  #systems-pagination select.toolbar-control { width: 4.5rem; padding: 0 8px; }
   #systems-pagination .pagination-btn { width: 36px; padding: 0; align-items: center; justify-content: center; color: inherit; }
   #systems-pagination .pagination-btn:disabled { opacity: 0.5; cursor: default; }
   /* The offline count is a button (it filters): a stronger tint under the
