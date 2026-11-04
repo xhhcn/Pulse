@@ -146,12 +146,16 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows v1.3.56 in use: the copy button beside a server's name now copies a link to that server, and in the card layout every page ends on a full row. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} follows v1.3.57 in use on a site of 129 servers: the TCPing chart gets Beszel's time range picker, the page does much less work, and the filter row fits tablets. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: one button beside a server's name, the copy icon, copies a link to that server (?server=id, keeping a share link's token); opening it goes to that server's page and opens it. Copying the name is gone, and the table is back to one icon's width.
-            - Web: in the card layout a page ends on a full row: the page size is rounded up to whole rows of the columns shown (20 a page in 3 columns is 21; 2 columns and phones keep 20), so only the last page can end short. Resizing or switching between cards and the table keeps your place. The table keeps the set page size.
+            - Web: the TCPing chart has Beszel's time range picker (1 / 6 / 12 / 24 hours) at the top right of its card. Phones open on 1 hour, wider screens on 24 hours; a pick holds for the visit. Every probe of the day stays on the chart and the axis narrows to the newest probe's last hours, so switching needs no new request; the legend's averages, the loss band and the latency axis follow the span.
+            - Web: no summary over the chart: the legend gives each target's average and the loss band the losses. Where the loss band is off, a target that lost probes shows its loss in the legend.
+            - Web: a server's details are built the first time it is opened: half the page's elements (25,900 → 11,700 with 129 servers), a first-load task about 30 % shorter on a phone-speed CPU, faster opening.
+            - Web: live updates no longer search the whole page for every server's details; on a phone-speed CPU their work fell from about 22 % to under 10 % of the main thread.
+            - Web: from 768 to 899 px (tablets in portrait) the filter and the view button take a full row under the title, as on phones.
+            - Web: an admin's tag change reaches open dashboards again.
 
             ### Compatibility
 
@@ -159,7 +163,7 @@ jobs:
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: the copy button (one icon, the copied link with a share token, the row not opened, its tooltip); card pages of 21 at 3 columns, 20 at 2 and 1, 6 for a size of 5, whole rows on every page but the last, the place kept through 3 → 2 → 1 → 3 columns and a switch to the table, a link to a later card page; no name cut at 1024 px; with every earlier suite and a theme audit of 60 pages.
+            - Chromium, Firefox and WebKit: the time range picker (24 hours on desktops and 1 hour on phones, 1 / 6 / 12 / 24 by mouse and keyboard, Escape, the span kept for the visit, English), a live probe sliding the hour along, no summary over the chart and the legend's loss where the band is off, the filter row from 768 to 1024 px, details built on first open (the same info bar as before, last seen, tags changed by the admin on open dashboards), and the suites for public pages, last seen and links, phones and cards, layout, motion, the latency axis, the chart's theme and palette, sorting under live updates, alignment and the chart's features.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
