@@ -224,18 +224,14 @@ const apiBase = apiBaseProp ?? '';
   }
   const setupCopyButtons = (container) => {
     if (!container || container.dataset.copySetup) return;
+    // The copy button beside a name copies the server's link (copying the
+    // name was little use; Beszel keeps Copy name / Copy host in a row menu
+    // and makes the name itself the link).
     container.addEventListener('click', async (e) => {
-      const linkBtn = e.target.closest('.link-btn');
-      if (linkBtn) {
-        e.stopPropagation();
-        if (linkBtn.dataset.linkId && await copyToClipboard(serverLink(linkBtn.dataset.linkId))) confirmCopied(linkBtn, 'linkCopied');
-        return;
-      }
       const copyBtn = e.target.closest('.copy-btn');
       if (!copyBtn) return;
       e.stopPropagation();
-      const systemName = copyBtn.dataset.systemName;
-      if (systemName && await copyToClipboard(systemName)) confirmCopied(copyBtn, 'copied');
+      if (copyBtn.dataset.linkId && await copyToClipboard(serverLink(copyBtn.dataset.linkId))) confirmCopied(copyBtn, 'linkCopied');
     });
     container.dataset.copySetup = 'true';
   };
@@ -924,13 +920,35 @@ const apiBase = apiBaseProp ?? '';
   // stay in the list, hidden: their updates cost no layout, and the name
   // column keeps one width across the pages.
   let pageIndex = 0;
-  let nameRoomFrame = 0; // scheduleNameRoom (below)
   const currentPageSize = () => Math.min(200, Math.max(0, parseInt(document.documentElement.dataset.pageSize || '0', 10) || 0));
+  // Cards: a page ends on a full row. The size is rounded up to whole rows
+  // of the columns the cards have now (1, 2 or 3: the grid's breakpoints at
+  // 640 and 1024 px in the styles below, keep the two in step), so a page
+  // other than the last never ends with a hole (20 a page in 3 columns: 21).
+  // The table keeps the admin's size. Beszel's card view pages by the same
+  // count as its table, holes and all.
+  const cardColumnQueries = [window.matchMedia('(min-width: 1024px)'), window.matchMedia('(min-width: 640px)')];
+  const cardColumns = () => (cardColumnQueries[0].matches ? 3 : cardColumnQueries[1].matches ? 2 : 1);
+  const effectivePageSize = () => {
+    const size = currentPageSize();
+    if (!size || !document.getElementById('monitor-root')?.classList.contains('layout-grid')) return size;
+    const cols = cardColumns();
+    return Math.ceil(size / cols) * cols;
+  };
+  let lastPageSize = 0;
+  // The first server of the page the visitor turned to (or a link opened):
+  // when the cards take another number of columns, the page that holds it,
+  // so going back and forth between widths comes back to the same cards.
+  let pageAnchor = 0;
   const pagedRows = () => [...(document.getElementById('systems-body')?.children || [])].filter((r) => r.classList.contains('system-row'));
   function applyPagination() {
     const nav = document.getElementById('systems-pagination');
     const rows = pagedRows();
-    const size = currentPageSize();
+    const size = effectivePageSize();
+    // A new size (the cards took another number of columns, or the layout
+    // changed): the page that holds the anchor, so the view keeps its place.
+    if (size && lastPageSize && size !== lastPageSize) pageIndex = Math.floor(pageAnchor / size);
+    lastPageSize = size;
     const pages = size ? Math.max(1, Math.ceil(rows.length / size)) : 1;
     if (pageIndex > pages - 1) pageIndex = pages - 1;
     const start = size ? pageIndex * size : 0;
@@ -955,9 +973,9 @@ const apiBase = apiBaseProp ?? '';
         btn.disabled = back ? pageIndex === 0 : pageIndex >= pages - 1;
       });
     }
-    scheduleNameRoom();
   }
-  // A link to one server (?server=id, from the link button beside a name;
+
+  // A link to one server (?server=id, from the copy button beside a name;
   // or the server a private dashboard was asked for before the login sent
   // the visitor away, kept for the visit): its page, the server opened and
   // brought into view, once. An id not in the list is let go.
@@ -974,9 +992,10 @@ const apiBase = apiBaseProp ?? '';
     const rows = pagedRows();
     const index = rows.findIndex((r) => r.dataset.systemId === id);
     if (index < 0) return;
-    const size = currentPageSize();
+    const size = effectivePageSize();
     if (size) {
       pageIndex = Math.floor(index / size);
+      pageAnchor = index;
       applyPagination();
     }
     const row = rows[index];
@@ -1001,17 +1020,20 @@ const apiBase = apiBaseProp ?? '';
   }
   document.querySelectorAll('#systems-pagination .pagination-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const size = currentPageSize();
+      const size = effectivePageSize();
       if (!size) return;
       const last = Math.max(0, Math.ceil(pagedRows().length / size) - 1);
       const to = { first: 0, prev: pageIndex - 1, next: pageIndex + 1, last }[btn.dataset.page];
       const before = pageIndex;
       pageIndex = Math.min(Math.max(0, to), last);
+      pageAnchor = pageIndex * size;
       applyPagination();
       if (pageIndex !== before) revealListTop();
     });
   });
   window.addEventListener('navbarconfigready', () => applyPagination());
+  // The cards change columns at those widths: whole rows again.
+  cardColumnQueries.forEach((q) => q.addEventListener('change', () => applyPagination()));
   updateStatusUI();
 
   // The column tracks of each width tier with every field shown: the same
@@ -1046,7 +1068,10 @@ const apiBase = apiBaseProp ?? '';
     const root = document.getElementById('monitor-root');
     if (!root) return;
     HIDEABLE_COLS.forEach((c) => root.classList.toggle(`hide-col-${c}`, hiddenCols.includes(c)));
+    const wasGrid = root.classList.contains('layout-grid');
     root.classList.toggle('layout-grid', layoutMode() === 'grid');
+    // Cards and the table have their own page sizes (cards end on full rows).
+    if (wasGrid !== root.classList.contains('layout-grid')) applyPagination();
     root.classList.toggle('cols-custom', hiddenCols.length > 0);
     if (!hiddenCols.length) return;
     const tier = COLUMN_TIERS.find((t) => window.innerWidth >= t.min);
@@ -1193,9 +1218,8 @@ const apiBase = apiBaseProp ?? '';
       // - Gap before button: 6px (gap-1.5)
       // - Copy button: ~14px (w-2.5 sm:w-3)
       // - Extra buffer for font rendering variations: ~16px
-      // From 1280 px the dot is 8 px and both gaps 8 px: 58 px. The link
-      // button after the copy button: its 10 or 12 px and the gap.
-      const uiElementsWidth = (isSmallScreen ? 44 : isWide ? 58 : 50) + (isSmallScreen ? 14 : isWide ? 20 : 18);
+      // From 1280 px the dot is 8 px and both gaps 8 px: 58 px.
+      const uiElementsWidth = isSmallScreen ? 44 : isWide ? 58 : 50; // Mobile: 44px, Desktop: 50px
       const estimatedCellWidth = textWidth + uiElementsWidth + (item.alert ? (awaitingClient(item) ? awaitingWidth : chipWidth) : 0);
       maxWidth = Math.max(maxWidth, estimatedCellWidth);
     });
@@ -1237,26 +1261,6 @@ const apiBase = apiBaseProp ?? '';
     const items = Array.from(currentData.values());
     const width = calculateServerNameColumnWidth(items);
     applyServerNameColumnWidth(width);
-    scheduleNameRoom();
-  }
-
-  // Where the table is at its narrowest (about 1024 px: the other columns'
-  // minimums leave the names less than the width worked out for them), the
-  // link button gives its room back to the names, so no name is cut for it;
-  // wherever the names fit it stays. The column's width does not depend on
-  // what is in it, so one measurement, once a frame, settles it.
-  function scheduleNameRoom() {
-    if (nameRoomFrame) return;
-    nameRoomFrame = requestAnimationFrame(() => {
-      nameRoomFrame = 0;
-      const root = document.getElementById('monitor-root');
-      const cell = document.querySelector('#systems-body > .system-row:not([hidden]) .cell-name');
-      if (!root || !cell) return;
-      const want = parseFloat(root.style.getPropertyValue('--first-col-width')) || 0;
-      const tight = !root.classList.contains('layout-grid') && window.innerWidth >= 768 && want > 0
-        && cell.getBoundingClientRect().width < want - 1;
-      root.classList.toggle('names-tight', tight);
-    });
   }
 
   // The names change size at 1280 px (12 ↔ 14 px), and their width changes
@@ -1266,8 +1270,8 @@ const apiBase = apiBaseProp ?? '';
     const root = document.getElementById('monitor-root');
     if (!root || currentData.size === 0) return;
     root.style.setProperty('--first-col-width', `${calculateServerNameColumnWidth(Array.from(currentData.values()))}px`);
-    scheduleNameRoom();
   }
+
   window.matchMedia('(min-width: 1280px)').addEventListener('change', remeasureNameColumn);
   if (document.fonts) document.fonts.addEventListener('loadingdone', remeasureNameColumn);
 
@@ -1621,12 +1625,8 @@ const apiBase = apiBaseProp ?? '';
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${statusDotColor(item)} shrink-0"></span>
           <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap" title="${safeNameAttr}">${safeName}</span>${isOffline ? statusChip(item) : ''}
-          <button class="copy-btn text-[#595959] dark:text-[#ababab] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" tabindex="-1" aria-hidden="true" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
+          <button class="copy-btn text-[#595959] dark:text-[#ababab] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" tabindex="-1" aria-hidden="true" data-link-id="${safeId}" title="${translations.copyServerLink[getCurrentLanguage()]}" data-translate-title="copyServerLink">
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-            <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
-          </button>
-          <button class="link-btn text-[#595959] dark:text-[#ababab] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" tabindex="-1" aria-hidden="true" data-link-id="${safeId}" title="${translations.copyServerLink[getCurrentLanguage()]}" data-translate-title="copyServerLink">
-            <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
     </div>
@@ -1798,8 +1798,6 @@ const apiBase = apiBaseProp ?? '';
   const translations = {
     'noSystemsFound': { en: 'No servers found', zh: '未找到服务器' },
     'systemsWillAppear': { en: 'Servers will appear here once their clients start reporting', zh: '客户端开始上报后，服务器将显示在这里' },
-    'copySystemName': { en: 'Copy server name', zh: '复制服务器名称' },
-    'copied': { en: 'Copied!', zh: '已复制！' },
     'copyServerLink': { en: 'Copy a link to this server', zh: '复制这台服务器的链接' },
     'linkCopied': { en: 'Link copied', zh: '已复制链接' },
     // Empty state of a filter that matches nothing (the services exist).
@@ -2342,10 +2340,6 @@ const apiBase = apiBaseProp ?? '';
             if (span.classList.contains('row-name')) span.title = item.name || 'unknown';
             break; // Found the name span, no need to continue
           }
-        }
-        const copyBtn = systemCell.querySelector('.copy-btn');
-        if (copyBtn) {
-          copyBtn.dataset.systemName = item.name || 'unknown';
         }
         // Recalculate column width when name changes
         recalculateColumnWidthFromCurrentData();
@@ -5743,6 +5737,7 @@ const apiBase = apiBaseProp ?? '';
     // A filter, a sort or a status: from the first page (as Beszel), at once
     // (a filter that keeps every row leaves the render nothing to redraw).
     pageIndex = 0;
+    pageAnchor = 0;
     applyPagination();
     // A copy: the stream's own payload object would be taken for a stale
     // stream frame right after a reconnect, and not repainted.
@@ -6311,7 +6306,6 @@ const apiBase = apiBaseProp ?? '';
     }
     resizeTimeout = setTimeout(() => {
       recalculateColumnWidthFromCurrentData();
-      scheduleNameRoom();
       // Rotating the phone / resizing the browser changes the chart's CSS
       // box width (inside horizontally-scrollable table). Chart.js does not
       // always observe that layout shift reliably on mobile Safari — give it
@@ -6425,7 +6419,7 @@ const apiBase = apiBaseProp ?? '';
        the dot's 5.5 px once took it 5 px below the name. */
     #monitor-root:not(.layout-grid) .cell-name > .rounded-full:first-child { margin-top: 5.5px; }
     #monitor-root:not(.layout-grid) .cell-name > .offline-chip { margin-top: 0.5px; }
-    #monitor-root:not(.layout-grid) .cell-name > :is(.copy-btn, .link-btn) { height: 16.9px; display: inline-flex; align-items: center; }
+    #monitor-root:not(.layout-grid) .cell-name > .copy-btn { height: 16.9px; display: inline-flex; align-items: center; }
     #monitor-root:not(.layout-grid) .row-name {
       white-space: normal;
       overflow-wrap: anywhere;
@@ -6804,6 +6798,8 @@ const apiBase = apiBaseProp ?? '';
   #monitor-root.layout-grid #systems-body .system-row .cell-net * { order: 4; }
   #monitor-root.layout-grid #systems-body .system-row .cell-uptime * { order: 5; }
   #monitor-root.layout-grid #systems-body .system-details .details-content { padding-left: 20px; padding-right: 20px; }
+  /* Pages of cards end on full rows by these column counts (cardColumns()
+     in the script: keep the two in step). */
   @media (min-width: 640px) {
     #monitor-root.layout-grid #systems-body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
@@ -6833,7 +6829,6 @@ const apiBase = apiBaseProp ?? '';
   #monitor-root .detail-item { display: contents; }
   #monitor-root .detail-last-seen[hidden] { display: none; }
   #systems-body > .system-row { scroll-margin-top: 16px; }
-  #monitor-root.names-tight:not(.layout-grid) .cell-name > .link-btn { display: none; }
   html.sticky-table-header #systems-body > .system-row { scroll-margin-top: 72px; }
   #monitor-root .detail-icon { width: 14px; height: 14px; margin-top: 2px; flex: none; color: #595959; }
   html.dark #monitor-root .detail-icon { color: #ababab; }
