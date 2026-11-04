@@ -495,7 +495,7 @@ const customCodePlaceholder = [
           <div class="flex items-center justify-between gap-3 p-4">
             <div class="flex-1">
               <label for="card-layout-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="cardLayoutLabel">Card Layout</label>
-              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="cardLayoutDesc">Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu</p>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="cardLayoutDesc">Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu for their visit</p>
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="card-layout-toggle" name="card_layout" class="sr-only peer">
@@ -624,7 +624,7 @@ const customCodePlaceholder = [
         <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
           <div class="flex-1">
             <label for="privacy-enabled" class="block text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] mb-1" data-translate="enablePrivacyMode">Enable Privacy Mode</label>
-            <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="privacyModeDesc">When enabled, login page will appear before index page. Admin page does not require login.</p>
+            <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="privacyModeDesc">When on, visitors sign in before they see the dashboard. The admin page always requires signing in.</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
             <input type="checkbox" id="privacy-enabled" name="enabled" class="sr-only peer">
@@ -636,7 +636,7 @@ const customCodePlaceholder = [
         <div id="share-section" class="space-y-3 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
           <div>
             <label class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="temporaryShare">Temporary Share</label>
-            <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="temporaryShareDesc">Generate a temporary share link that allows access without login. Login page will appear before admin page for share links.</p>
+            <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="temporaryShareDesc">A time-limited link that opens the dashboard without signing in (not the admin page).</p>
           </div>
 
           <!-- Current Share Link -->
@@ -652,7 +652,7 @@ const customCodePlaceholder = [
               <button
                 type="button"
                 id="copy-share-link-btn"
-                class="rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-xs font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+                class="shrink-0 whitespace-nowrap rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-xs font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
                 data-translate="copy">Copy</button>
             </div>
             <p id="token-expires-info" class="mt-1 text-xs text-[#595959] dark:text-[#ababab]"></p>
@@ -682,7 +682,7 @@ const customCodePlaceholder = [
           <button
             type="button"
             id="revoke-share-link-btn"
-            class="w-full toolbar-control toolbar-btn"
+            class="hidden w-full toolbar-control toolbar-btn"
             data-translate="revokeShareLink">Revoke Share Link</button>
         </div>
 
@@ -2863,7 +2863,9 @@ const customCodePlaceholder = [
     let keyboardSaveTimer = null;
     const rowById = (id) => container.querySelector(`:scope > .draggable-item[data-system-id="${cssEscape(String(id))}"]`);
     // Keep the row under the pointer: past half of a neighbour's height it
-    // takes the neighbour's place.
+    // takes the neighbour's place. It is always the neighbour that moves:
+    // taking the dragged row out of the page, even to put it straight back,
+    // ends its pointer capture, and with it the drag (it stopped one row up).
     const follow = (clientY) => {
       if (!drag) return;
       const { row } = drag;
@@ -2876,7 +2878,7 @@ const customCodePlaceholder = [
           container.insertBefore(next, row);
           drag.startY += next.offsetHeight;
         } else if (dy < 0 && prev && prev.classList.contains('draggable-item') && -dy > prev.offsetHeight / 2) {
-          container.insertBefore(row, prev);
+          container.insertBefore(prev, row.nextSibling);
           drag.startY -= prev.offsetHeight;
         } else {
           break;
@@ -2946,7 +2948,8 @@ const customCodePlaceholder = [
       const row = handle.closest('.draggable-item');
       const sibling = e.key === 'ArrowUp' ? row.previousElementSibling : row.nextElementSibling;
       if (!sibling || !sibling.classList.contains('draggable-item')) return;
-      if (e.key === 'ArrowUp') container.insertBefore(row, sibling);
+      // The neighbour moves, so the focused handle stays in the page.
+      if (e.key === 'ArrowUp') container.insertBefore(sibling, row.nextSibling);
       else container.insertBefore(sibling, row);
       handle.focus();
       reorderActive = true;
@@ -3793,11 +3796,9 @@ const customCodePlaceholder = [
     return d.toLocaleString();
   }
 
-  // "Expires: <date>" in the page's language, optionally marked as estimated
-  // (before the server has confirmed the new link).
-  function shareExpiresText(date, estimated = false) {
-    const t = (key) => adminTranslations[key][adminLang()];
-    return t('shareExpires') + date + (estimated ? t('shareEstimated') : '');
+  // "Expires: <date>" in the page's language.
+  function shareExpiresText(date) {
+    return adminTranslations.shareExpires[adminLang()] + date;
   }
 
   // Function to load and display current privacy config
@@ -3838,6 +3839,7 @@ const customCodePlaceholder = [
           if (currentShareLinkContainer) {
             currentShareLinkContainer.classList.remove('hidden');
           }
+          revokeShareLinkBtn?.classList.remove('hidden');
           if (tokenExpiresInfo && config.token_expires) {
             // Use server time if available, otherwise fall back to client time
             const serverTime = config.server_time ? new Date(config.server_time) : new Date();
@@ -3870,6 +3872,8 @@ const customCodePlaceholder = [
           if (currentShareLinkContainer) {
             currentShareLinkContainer.classList.add('hidden');
           }
+          // Nothing to stop.
+          revokeShareLinkBtn?.classList.add('hidden');
         }
         return true;
       }
@@ -3913,64 +3917,65 @@ const customCodePlaceholder = [
     }
   });
 
-  // Generate share link
+  // The expiry line under the link, from the server's answer (its clock
+  // decides whether the link still works).
+  function showShareExpiry(cfg) {
+    if (!tokenExpiresInfo || !cfg || !cfg.token_expires) return;
+    const serverTime = cfg.server_time ? new Date(cfg.server_time) : new Date();
+    const expiresDate = new Date(cfg.token_expires);
+    const timeDiff = expiresDate.getTime() - serverTime.getTime();
+    if (isNaN(timeDiff) || cfg.token_expired === true || timeDiff <= 1000) {
+      tokenExpiresInfo.textContent = adminTranslations[isNaN(timeDiff) ? 'shareExpiryInvalid' : 'shareExpired'][adminLang()];
+      tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
+      return;
+    }
+    tokenExpiresInfo.textContent = shareExpiresText(formatDate(cfg.token_expires));
+    tokenExpiresInfo.className = 'mt-1 text-xs text-[#595959] dark:text-[#ababab]';
+    scheduleExpiryLabel(timeDiff);
+  }
+
+  // Generate a share link and save it at once, as stopping one does, so the
+  // link shown is the one that works. It used to wait for 保存: a link
+  // copied before closing the dialog with 取消 never opened the dashboard.
   generateShareLinkBtn?.addEventListener('click', async () => {
     const hours = parseInt(tokenExpiresHoursInput?.value || '1');
-    if (hours < 1 || hours > 720) {
+    if (!(hours >= 1 && hours <= 720)) {
       alert(adminTranslations.shareHoursInvalid[adminLang()]);
       return;
     }
-
-    // Convert hours to seconds for backend
-    const seconds = hours * 3600;
-
+    const messageEl = document.getElementById('privacy-config-message');
     const token = generateToken();
-
-    // Update UI immediately (show estimated expiration, will be updated after save)
-    const shareUrl = `${window.location.origin}/?token=${token}`;
-    if (currentShareLinkInput) {
-      currentShareLinkInput.value = shareUrl;
-    }
-    if (currentShareLinkContainer) {
-      currentShareLinkContainer.classList.remove('hidden');
-    }
-    if (tokenExpiresInfo) {
-      // Show estimated expiration (will be updated with server time after save)
-      const estimatedExpires = new Date();
-      estimatedExpires.setSeconds(estimatedExpires.getSeconds() + seconds);
-      tokenExpiresInfo.textContent = shareExpiresText(formatDate(estimatedExpires.toISOString()), true);
-      tokenExpiresInfo.className = 'mt-1 text-xs text-[#595959] dark:text-[#ababab]';
-    }
-
-    // Store temporarily in form data (will be sent to server)
-    if (privacyConfigForm) {
-      const hiddenTokenInput = document.createElement('input');
-      hiddenTokenInput.type = 'hidden';
-      hiddenTokenInput.name = 'share_token';
-      hiddenTokenInput.value = token;
-      hiddenTokenInput.id = 'temp-share-token';
-      
-      const existingTokenInput = document.getElementById('temp-share-token');
-      if (existingTokenInput) {
-        existingTokenInput.value = token;
-      } else {
-        privacyConfigForm.appendChild(hiddenTokenInput);
+    generateShareLinkBtn.disabled = true;
+    let cfg = null;
+    try {
+      const res = await fetch(`${apiBase}/api/privacy/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // The stored switch: an unsaved change of it is left to 保存.
+        body: JSON.stringify({ enabled: lastLoadedPrivacyEnabled, share_token: token, expires_in_seconds: hours * 3600 }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      cfg = (await res.json()).config || null;
+    } catch (err) {
+      generateShareLinkBtn.disabled = false;
+      if (messageEl) {
+        messageEl.textContent = adminT('shareLinkCreateFailed');
+        messageEl.className = 'text-sm text-red-500 dark:text-red-400';
       }
-
-      // Store seconds instead of calculated expiration time
-      // Server will calculate expiration time based on server time
-      const hiddenExpiresSecondsInput = document.createElement('input');
-      hiddenExpiresSecondsInput.type = 'hidden';
-      hiddenExpiresSecondsInput.name = 'expires_in_seconds';
-      hiddenExpiresSecondsInput.value = seconds.toString();
-      hiddenExpiresSecondsInput.id = 'temp-expires-in-seconds';
-      
-      const existingExpiresSecondsInput = document.getElementById('temp-expires-in-seconds');
-      if (existingExpiresSecondsInput) {
-        existingExpiresSecondsInput.value = seconds.toString();
-      } else {
-        privacyConfigForm.appendChild(hiddenExpiresSecondsInput);
-      }
+      return;
+    }
+    generateShareLinkBtn.disabled = false;
+    if (currentShareLinkInput) currentShareLinkInput.value = `${window.location.origin}/?token=${token}`;
+    currentShareLinkContainer?.classList.remove('hidden');
+    revokeShareLinkBtn?.classList.remove('hidden');
+    showShareExpiry(cfg);
+    // What 保存 sends: this link, with the expiry it was saved with.
+    ensurePrivacyHidden('temp-share-token', 'share_token').value = token;
+    ensurePrivacyHidden('temp-expires-in-seconds', 'expires_in_seconds').value = '0';
+    ensurePrivacyHidden('temp-token-expires', 'token_expires').value = (cfg && cfg.token_expires) || '';
+    if (messageEl) {
+      messageEl.textContent = adminT('shareLinkCreated');
+      messageEl.className = 'text-sm text-emerald-600 dark:text-emerald-400';
     }
   });
 
@@ -4021,6 +4026,7 @@ const customCodePlaceholder = [
     if (currentShareLinkContainer) {
       currentShareLinkContainer.classList.add('hidden');
     }
+    revokeShareLinkBtn.classList.add('hidden');
     if (currentShareLinkInput) {
       currentShareLinkInput.value = '';
     }
@@ -4636,11 +4642,9 @@ const customCodePlaceholder = [
     }
   }, 2500);
 
-  // Cleanup on page unload
+  // Cleanup on page unload. (It called the old reordering's stopAutoScroll,
+  // gone since v1.3.52: the ReferenceError skipped the rest.)
   window.addEventListener('beforeunload', () => {
-    // Stop auto-scroll if active
-    stopAutoScroll();
-    
     // Close SSE connection
     if (eventSource) {
       eventSource.close();
@@ -4738,7 +4742,6 @@ const customCodePlaceholder = [
     'serviceNameRequired': { en: 'Service name is required', zh: '服务名称不能为空' },
     'shareHoursInvalid': { en: 'Please enter a valid number of hours (1-720, max 30 days)', zh: '请输入有效的小时数（1-720，最长 30 天）' },
     'shareExpires': { en: 'Expires: ', zh: '过期时间：' },
-    'shareEstimated': { en: ' (estimated)', zh: '（预计）' },
     'shareExpired': { en: 'Expired', zh: '已过期' },
     'shareExpiryInvalid': { en: 'Invalid expiration date', zh: '过期时间无效' },
     'customizationSettings': { en: 'Customization Settings', zh: '自定义设置' },
@@ -4754,15 +4757,17 @@ const customCodePlaceholder = [
     'warning': { en: 'Warning', zh: '警告' },
     'privacySettings': { en: 'Privacy Settings', zh: '隐私设置' },
     'enablePrivacyMode': { en: 'Enable Privacy Mode', zh: '启用隐私模式' },
-    'privacyModeDesc': { en: 'When enabled, login page will appear before index page. Admin page does not require login.', zh: '启用后，登录页将出现在首页之前。管理页面无需登录。' },
+    'privacyModeDesc': { en: 'When on, visitors sign in before they see the dashboard. The admin page always requires signing in.', zh: '启用后，访客需登录才能查看首页；管理页始终需要登录。' },
     'temporaryShare': { en: 'Temporary Share', zh: '临时分享' },
-    'temporaryShareDesc': { en: 'Generate a temporary share link that allows access without login. Login page will appear before admin page for share links.', zh: '生成临时分享链接，允许无需登录访问。分享链接的登录页将出现在管理页面之前。' },
+    'temporaryShareDesc': { en: 'A time-limited link that opens the dashboard without signing in (not the admin page).', zh: '生成限时链接，持有者无需登录即可查看首页（不能进入管理页）。' },
     'currentShareLink': { en: 'Current Share Link', zh: '当前分享链接' },
     'expirationHours': { en: 'Expiration (Hours)', zh: '有效期（小时）' },
     'expirationHoursHint': { en: 'Number of hours until the share link expires (1-720, max 30 days)', zh: '分享链接过期前的小时数（1-720，最多 30 天）' },
     'generateShareLink': { en: 'Generate Share Link', zh: '生成分享链接' },
     'shareLinkRevoked': { en: 'The share link has been stopped; it no longer opens the dashboard.', zh: '分享链接已停止，原链接无法再打开面板。' },
     'shareLinkRevokeFailed': { en: 'Could not stop the share link. Please try again.', zh: '停止分享链接失败，请重试。' },
+    'shareLinkCreated': { en: 'Share link created; it opens the dashboard now.', zh: '分享链接已生成，现在即可打开面板。' },
+    'shareLinkCreateFailed': { en: 'Could not create the share link. Please try again.', zh: '生成分享链接失败，请重试。' },
     'revokeShareLink': { en: 'Revoke Share Link', zh: '立即停止分享链接' },
     'copy': { en: 'Copy', zh: '复制' },
     'customCode': { en: 'Custom CSS & JavaScript', zh: '自定义 CSS 和 JavaScript' },
@@ -4775,7 +4780,7 @@ const customCodePlaceholder = [
     'stickyHeaderLabel': { en: 'Sticky Table Header', zh: '表头吸顶' },
     'stickyHeaderDesc': { en: 'Keep the column names at the top of the window while a long list scrolls', zh: '滚动长列表时，列名固定在页面顶部' },
     'cardLayoutLabel': { en: 'Card Layout', zh: '卡片布局' },
-    'cardLayoutDesc': { en: 'Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu', zh: '用卡片代替表格显示每台服务器，电脑和手机都一样，访客仍可在视图菜单中切换' },
+    'cardLayoutDesc': { en: 'Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu for their visit', zh: '用卡片代替表格显示每台服务器，电脑和手机都一样；访客仍可在视图菜单中临时切换' },
   };
 
   // The visitor's stored choice, else the language the page head picked for

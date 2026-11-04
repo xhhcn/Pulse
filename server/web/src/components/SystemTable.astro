@@ -154,9 +154,10 @@ const apiBase = apiBaseProp ?? '';
           window.location.replace(url.toString());
           throw new Error('Share link ended - reopening without it');
         }
-        // The session (if this request sent it) was refused: drop it and log in.
+        // The session (if this request sent it) was refused: drop it and log
+        // in; a share link that ended while open says so on the login page.
         if (sentSession) localStorage.removeItem('admin_auth_token');
-        window.location.href = '/login?redirect=/';
+        window.location.href = urlShareToken() ? '/login?redirect=/&reason=link' : '/login?redirect=/';
         throw new Error('Unauthorized - redirecting to login');
       }
       throw new Error(`HTTP ${res.status}`);
@@ -557,39 +558,27 @@ const apiBase = apiBaseProp ?? '';
   // per page session.
   let staggerAnimationPlayed = false;
 
-  // Sort, kept in this browser as in Beszel; field null is the order the
-  // admin set. Measures sort the largest first, names from A. The filters
-  // start afresh on every load: a reload shows every service again, with
-  // the status back on 全部 and an empty filter field (the status used to
-  // be kept as well, so a page reloaded on 离线 kept hiding the rest).
+  // The view settings last for the visit: every load starts from the site's
+  // defaults — the order the admin set (sort field null), 全部 and an empty
+  // filter, the admin's layout (自定义设置 → 卡片布局: html.card-layout, set
+  // in the page head before the first paint; else the table) and every
+  // field. Beszel keeps them per account, its dashboard being a signed-in
+  // user's own; this page is the site's, and a layout kept in one browser
+  // hid the admin's default from it. Measures sort the largest first, names
+  // from A.
   const SORT_FIELDS = ['name', 'time', 'location', 'cpu', 'memory', 'disk', 'net', 'os'];
   const SORT_DESC_FIRST = ['time', 'cpu', 'memory', 'disk', 'net'];
-  const readViewSetting = (key, fallback) => {
-    try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v === null ? fallback : v; } catch (_) { return fallback; }
-  };
-  const saveViewSetting = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {} };
-  let currentSort = (() => {
-    const saved = readViewSetting('pulse-sort', null);
-    return saved && SORT_FIELDS.includes(saved.field) && (saved.direction === 'asc' || saved.direction === 'desc')
-      ? { field: saved.field, direction: saved.direction }
-      : { field: null, direction: 'asc' };
-  })();
+  // What earlier versions kept in the browser.
+  try { ['pulse-sort', 'pulse-status-filter', 'pulse-layout', 'pulse-hidden-cols'].forEach((key) => localStorage.removeItem(key)); } catch (_) {}
+  let currentSort = { field: null, direction: 'asc' };
   let statusFilter = 'all';
-  try { localStorage.removeItem('pulse-status-filter'); } catch (_) {}
   // Layout (the table — on phones its compact rows — or Beszel's cards, at
-  // every width as in Beszel) and the fields shown, Beszel's other two view
-  // settings. The name stays. A visitor's own layout choice wins; without
-  // one, the site's default applies at every width (自定义设置 → 卡片布局:
-  // html.card-layout, set in the page head before the first paint), else
-  // the table.
+  // every width as in Beszel) and the fields shown; the name stays.
   const HIDEABLE_COLS = ['uptime', 'location', 'cpu', 'memory', 'disk', 'net', 'os'];
-  let layoutChoice = ['table', 'grid'].includes(readViewSetting('pulse-layout', null)) ? readViewSetting('pulse-layout', null) : null;
+  let layoutChoice = null;
   const layoutMode = () => layoutChoice
     || (document.documentElement.classList.contains('card-layout') ? 'grid' : 'table');
-  let hiddenCols = (() => {
-    const saved = readViewSetting('pulse-hidden-cols', []);
-    return Array.isArray(saved) ? saved.filter((c) => HIDEABLE_COLS.includes(c)) : [];
-  })();
+  let hiddenCols = [];
 
   // Filter state
   let currentFilter = '';
@@ -627,6 +616,14 @@ const apiBase = apiBaseProp ?? '';
       const ipv4 = (system.ipv4 || '').toLowerCase();
       const ipv6 = (system.ipv6 || '').toLowerCase();
       if (ipv4.includes(filterLower) || ipv6.includes(filterLower)) return true;
+
+      // Search in the tags as they read (a coloured tag without its spr: /
+      // spy: / spb: prefix); the traffic and speed tags show numbers only
+      if (Array.isArray(system.tags) && system.tags.some((tag) => {
+        if (typeof tag !== 'string' || /^(traffic|speed):(in|out)$/.test(tag)) return false;
+        const label = /^sp[ryb]:/i.test(tag) && tag.slice(4).trim() ? tag.slice(4).trim() : tag;
+        return label.toLowerCase().includes(filterLower);
+      })) return true;
 
       return false;
     });
@@ -798,7 +795,6 @@ const apiBase = apiBaseProp ?? '';
     } else {
       currentSort = { field, direction: SORT_DESC_FIRST.includes(field) ? 'desc' : 'asc' };
     }
-    saveViewSetting('pulse-sort', currentSort.field ? currentSort : null);
     updateSortUI();
     rerenderForView();
   }
@@ -934,7 +930,6 @@ const apiBase = apiBaseProp ?? '';
   document.querySelectorAll('.layout-option').forEach((btn) => {
     btn.addEventListener('click', () => {
       layoutChoice = btn.dataset.layout === 'grid' ? 'grid' : 'table';
-      saveViewSetting('pulse-layout', layoutChoice);
       updateLayoutUI();
       applyViewLayout();
     });
@@ -943,7 +938,6 @@ const apiBase = apiBaseProp ?? '';
     btn.addEventListener('click', () => {
       const col = btn.dataset.col;
       hiddenCols = hiddenCols.includes(col) ? hiddenCols.filter((c) => c !== col) : [...hiddenCols, col];
-      saveViewSetting('pulse-hidden-cols', hiddenCols);
       updateLayoutUI();
       applyViewLayout();
     });
@@ -967,58 +961,77 @@ const apiBase = apiBaseProp ?? '';
     return s === '100.0' ? '100%' : `${s}%`;
   };
 
+  // Text widths by size and text, kept between renders. Every live update
+  // renders the rows again, and measuring every name each time cost one
+  // layout per name (131 names: ~45 ms of each update on a desktop, several
+  // times that on a phone). Texts not measured yet are measured together, in
+  // one layout. Emptied when a web font finishes loading: the widths change
+  // with it.
+  const textWidths = new Map();
+  if (document.fonts && document.fonts.addEventListener) {
+    document.fonts.addEventListener('loadingdone', () => textWidths.clear());
+  }
+
   // Pre-calculate server name column width from data (before rendering DOM)
   // This prevents visual jitter by setting the correct width from the start
   function calculateServerNameColumnWidth(items) {
     if (!items || items.length === 0) return 100;
-    
+
     let maxWidth = 100; // Minimum width in pixels (reduced for better mobile experience)
-    
-    // Create a temporary hidden span to measure text width accurately
-    const tempSpan = document.createElement('span');
-    // Measure in the body's own font (read from the page) so the widths
-    // match what the rows render. A generic sans-serif here would make the
-    // measurement silently drift from the real row width
-    // (different glyph metrics → first column too wide or too narrow → the
-    // very column-jitter we went to great lengths to eliminate).
-    tempSpan.style.cssText = `
-      position: absolute;
-      visibility: hidden;
-      white-space: nowrap;
-      font-family: ${getComputedStyle(document.body).fontFamily};
-      font-size: 12px;
-      font-weight: 500;
-      letter-spacing: normal;
-    `;
+
     // The rows' name size: 10 px below 640 px (text-[10px] sm:text-xs),
     // 12 px, and 14 px from 1280 px (the Beszel tier in the styles below).
     const isSmallScreen = window.innerWidth < 640;
     const isWide = window.matchMedia('(min-width: 1280px)').matches;
-    if (isSmallScreen) {
-      tempSpan.style.fontSize = '10px';
-    } else if (isWide) {
-      tempSpan.style.fontSize = '14px';
-    }
-    
-    document.body.appendChild(tempSpan);
+    const nameFontSize = isSmallScreen ? '10px' : isWide ? '14px' : '12px';
+    const nameKey = (item) => `${nameFontSize} 500 ${item.name || 'unknown'}`;
 
     // An offline row also carries the "离线 / Offline" chip after its name:
     // its 10 px semibold label plus 12 px of padding and the gap (4 px, 8 px
     // from 1280 px).
-    const nameFontSize = tempSpan.style.fontSize;
-    tempSpan.style.fontSize = '10px';
-    tempSpan.style.fontWeight = '600';
-    tempSpan.textContent = translations.offlineChip[getCurrentLanguage()];
-    const chipWidth = tempSpan.offsetWidth + (isWide ? 20 : 16);
-    tempSpan.style.fontSize = nameFontSize;
-    tempSpan.style.fontWeight = '500';
+    const chipText = translations.offlineChip[getCurrentLanguage()];
+    const chipKey = `10px 600 ${chipText}`;
+
+    const missing = new Map();
+    if (!textWidths.has(chipKey)) missing.set(chipKey, ['10px', '600', chipText]);
+    for (const item of items) {
+      const key = nameKey(item);
+      if (!textWidths.has(key)) missing.set(key, [nameFontSize, '500', item.name || 'unknown']);
+    }
+    if (missing.size > 0) {
+      // A hidden span per text, all in place before the first width is read.
+      const box = document.createElement('div');
+      // Measure in the body's own font (read from the page) so the widths
+      // match what the rows render. A generic sans-serif here would make the
+      // measurement silently drift from the real row width
+      // (different glyph metrics → first column too wide or too narrow → the
+      // very column-jitter we went to great lengths to eliminate).
+      box.style.cssText = `
+        position: absolute;
+        visibility: hidden;
+        white-space: nowrap;
+        font-family: ${getComputedStyle(document.body).fontFamily};
+        letter-spacing: normal;
+      `;
+      const spans = [];
+      for (const [key, [size, weight, text]] of missing) {
+        const span = document.createElement('span');
+        span.style.fontSize = size;
+        span.style.fontWeight = weight;
+        span.textContent = text;
+        box.append(span, document.createElement('br'));
+        spans.push([key, span]);
+      }
+      document.body.appendChild(box);
+      for (const [key, span] of spans) textWidths.set(key, span.offsetWidth);
+      box.remove();
+    }
+    const chipWidth = textWidths.get(chipKey) + (isWide ? 20 : 16);
 
     // Measure each server name
     items.forEach(item => {
-      const name = item.name || 'unknown';
-      tempSpan.textContent = name;
-      const textWidth = tempSpan.offsetWidth;
-      
+      const textWidth = textWidths.get(nameKey(item));
+
       // Add space for UI elements and ensure complete text display:
       // - Status dot: ~8px (w-1.5 sm:w-2)
       // - Gap after dot: 6px (gap-1.5)
@@ -1030,9 +1043,7 @@ const apiBase = apiBaseProp ?? '';
       const estimatedCellWidth = textWidth + uiElementsWidth + (item.alert ? chipWidth : 0);
       maxWidth = Math.max(maxWidth, estimatedCellWidth);
     });
-    
-    document.body.removeChild(tempSpan);
-    
+
     // Return the calculated width based on longest name
     // Table container has overflow-x-auto for horizontal scrolling on mobile if needed
     return Math.ceil(maxWidth);
@@ -1052,7 +1063,9 @@ const apiBase = apiBaseProp ?? '';
       
       // Use the larger of current width or new calculated width
       const newWidth = Math.max(currentWidth, columnWidth);
-      
+      // Unchanged (most live updates): nothing to commit, no reflow.
+      if (currentWidthStr && newWidth === currentWidth) return;
+
       root.style.setProperty('--first-col-width', `${newWidth}px`);
       
       // CRITICAL: Force browser to immediately recalculate styles (trigger reflow)
@@ -1420,9 +1433,9 @@ const apiBase = apiBaseProp ?? '';
             <!-- Tags (first row) -->
             ${renderTagStrip(item)}
             <!-- Location and OS with the kind of machine, as Beszel's info bar
-                 carries the OS, where the row doesn't show them as text (the
-                 styles leave them out where it does): the cards and phone rows
-                 show only the flag and the logo, 768-1023 px has no columns. -->
+                 carries the OS, only where the row doesn't show them (the
+                 styles leave them out where it does): the table at 768-1023 px
+                 has no such columns, and a field can be hidden in the view menu. -->
             <div class="detail-item detail-location">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></g></svg>
               <div class="detail-label shrink-0" data-translate-detail="locationInfo">Location:</div>
@@ -4400,10 +4413,11 @@ const apiBase = apiBaseProp ?? '';
   }
 
   // When the probes have stopped (an offline server, or probing that ended)
-  // the subtitle says when the last one ran: the lines end there, and a
-  // blank stretch after them would read like lost probes (the chart draws
-  // timeouts as gaps). Stopped = the newest probe is older than three
-  // intervals, and at least 5 minutes old.
+  // the subtitle says when the last one ran: the lines end there. (A blank
+  // stretch after them would look like the chart's gaps, which mark a time
+  // without answers: no samples, or two or more lost probes in a row; a
+  // single lost probe is bridged.) Stopped = the newest probe is older than
+  // three intervals, and at least 5 minutes old.
   function tcpingLastProbeText(time, lang = getCurrentLanguage()) {
     const at = new Date(time);
     const hm = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
@@ -6146,6 +6160,8 @@ const apiBase = apiBaseProp ?? '';
      for (the tiers above); calculateServerNameColumnWidth measures the
      names at the same sizes. */
   @media (min-width: 1280px) {
+    /* 17.5 + the 20 px line + 17.5 = 55, and the 1 px divider: rows 56 px
+       apart, as Beszel's */
     #monitor-root .system-row > [data-system-id] { padding-top: 17.5px; padding-bottom: 17.5px; }
     #monitor-root .system-row :is(.cell-uptime, .cell-net, .cell-location, .cell-os, .cell-cpu span.font-medium, .cell-memory span.font-medium, .cell-disk span.font-medium) { font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; }
     #monitor-root .system-row :is(.row-name, .cell-uptime, .cell-net, .cell-location > span:not(.flag-icon), .cell-os > span:not(.os-icon)),
@@ -6382,16 +6398,17 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .detail-item + .detail-item::before { content: ''; position: absolute; top: 50%; left: -13px; width: 1px; height: 16px; margin-top: -8px; background: rgba(24, 24, 27, 0.3); }
     html.dark #monitor-root .detail-item + .detail-item::before { background: rgba(244, 245, 245, 0.3); }
   }
-  /* The location and the OS stay out of the details where the row above
-     already shows them, as Beszel's info bar leaves out an item that would
-     repeat what is on screen: the table from 1024 px, the two columns shown,
-     under a pointer that hovers (the cells' tooltips give the country's full
-     name and the kind of machine). Phones and cards (icons only), 768-1023 px
-     (no columns), touch screens (no tooltips) and a hidden column keep them;
-     the next item's divider falls outside the list's edge. */
-  @media (min-width: 1024px) and (hover: hover) {
-    #monitor-root:not(.layout-grid):not(.hide-col-location) .detail-location,
-    #monitor-root:not(.layout-grid):not(.hide-col-os) .detail-os { display: none; }
+  /* The location and the OS stay out of the details wherever the row or
+     card above shows them, as Beszel's info bar leaves out an item that
+     would repeat what is on screen: the flag and the logo on phones and
+     cards, the two columns of the table from 1024 px. They show in the table
+     at 768-1023 px, which has neither column, and for a field hidden in the
+     view menu. The next item's divider falls outside the list's edge. */
+  #monitor-root:not(.hide-col-location) .detail-location,
+  #monitor-root:not(.hide-col-os) .detail-os { display: none; }
+  @media (min-width: 768px) and (max-width: 1023.98px) {
+    #monitor-root:not(.layout-grid) .detail-location,
+    #monitor-root:not(.layout-grid) .detail-os { display: flex; }
   }
   @media (min-width: 1280px) {
     #monitor-root .detail-list { font-size: 14px; }

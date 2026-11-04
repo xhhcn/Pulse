@@ -111,6 +111,8 @@ html.dark .toolbar-icon-btn[aria-expanded="true"] { background-color: rgba(40, 4
 /* Beszel's outline button with text (the admin page's settings menu and
    add-service buttons): the same control with an icon and a label. */
 .toolbar-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; font-size: 14px; font-weight: 500; line-height: 20px; white-space: nowrap; }
+/* The display above comes after Tailwind's utilities: a hidden button stays hidden. */
+.toolbar-btn.hidden { display: none; }
 .toolbar-btn:hover,
 .toolbar-btn[aria-expanded="true"] { background-color: rgba(243, 239, 236, 0.7); }
 html.dark .toolbar-btn:hover,
@@ -796,11 +798,13 @@ html.glass-enabled.dark [data-tcping-no-data] {
 }
 
 /* Grey tags in the details. The coloured spr:/spy:/spb: badges
-   ([data-color-tag]) keep their own gradient at full opacity. */
-html.glass-enabled.light .system-details .inline-flex:not([data-color-tag]) {
+   ([data-color-tag]) keep their own gradient at full opacity. Only the tag
+   row: the chart's legend entries are inline-flex too, and with this tint
+   every one of them looked picked. */
+html.glass-enabled.light .system-details [data-tag-strip] > .inline-flex:not([data-color-tag]) {
   background: rgba(0, 0, 0, 0.05) !important;
 }
-html.glass-enabled.dark .system-details .inline-flex:not([data-color-tag]) {
+html.glass-enabled.dark .system-details [data-tag-strip] > .inline-flex:not([data-color-tag]) {
   background: rgba(255, 255, 255, 0.08) !important;
 }
 

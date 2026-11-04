@@ -122,13 +122,17 @@
       setupSubtitle: 'Set up your admin password (first time only)',
       error: 'Error',
       invalidPassword: 'Invalid password',
+      tooManyAttempts: 'Too many wrong passwords. Try again in {n} min.',
       serverUnreachable: 'Could not reach the server, please try again',
       storageBlocked: 'This browser blocks site data for this page, so the login cannot be kept. Allow cookies and site data for this site.',
       passwordMismatch: 'Passwords do not match',
       passwordTooShort: 'Password must be at least 6 characters',
       setupSuccess: 'Password set successfully! Redirecting...',
       loginSuccess: 'Login successful! Redirecting...',
-      backHome: 'Back to dashboard'
+      backHome: 'Back to dashboard',
+      visitorTitle: 'Sign in to view',
+      visitorSubtitle: 'This dashboard is private. Sign in with the admin password, or open it with a share link from its owner.',
+      linkEnded: 'This share link no longer works. Ask the owner for a new one, or sign in.'
     },
     zh: {
       title: '管理员登录',
@@ -142,13 +146,17 @@
       setupSubtitle: '设置您的管理员密码（仅首次）',
       error: '错误',
       invalidPassword: '密码错误',
+      tooManyAttempts: '密码错误次数过多，请 {n} 分钟后再试。',
       serverUnreachable: '无法连接服务器，请稍后再试',
       storageBlocked: '浏览器禁止了本站存储数据，无法保持登录。请允许本站使用 Cookie 和网站数据。',
       passwordMismatch: '密码不匹配',
       passwordTooShort: '密码至少需要 6 个字符',
       setupSuccess: '密码设置成功！正在跳转...',
       loginSuccess: '登录成功！正在跳转...',
-      backHome: '返回首页'
+      backHome: '返回首页',
+      visitorTitle: '登录后查看',
+      visitorSubtitle: '此监控面板为私有，请输入管理员密码登录，或使用站长提供的分享链接打开。',
+      linkEnded: '分享链接已失效，请向站长索取新的链接，或登录查看。'
     }
   };
 
@@ -221,6 +229,26 @@
         el.placeholder = t[key];
       }
     });
+    applyHeading();
+  }
+
+  // The heading and the button follow the form's mode, also across a
+  // language switch (which used to put the login heading on the first-run
+  // setup form). A visitor sent here by a private dashboard (redirect=/) is
+  // told why instead of being asked for the admin panel, and one whose
+  // share link stopped working (reason=link) is told that.
+  let setupMode = false;
+  const loginParams = new URLSearchParams(window.location.search);
+  const forDashboard = loginParams.get('redirect') === '/';
+  const linkEnded = forDashboard && loginParams.get('reason') === 'link';
+  function applyHeading() {
+    const t = translations[getCurrentLanguage()];
+    const title = document.querySelector('[data-translate-login="title"]');
+    const subtitle = document.querySelector('[data-translate-login="subtitle"]');
+    const submit = document.querySelector('#login-submit [data-translate-login="submit"]');
+    if (title) title.textContent = setupMode ? t.setupPassword : forDashboard ? t.visitorTitle : t.title;
+    if (subtitle) subtitle.textContent = setupMode ? t.setupSubtitle : linkEnded ? t.linkEnded : forDashboard ? t.visitorSubtitle : t.subtitle;
+    if (submit) submit.textContent = setupMode ? t.setupPassword : t.submit;
   }
 
   // Check if password is already set
@@ -260,6 +288,26 @@
     }
   }
 
+  // The server refuses every attempt for 15 minutes after the fifth wrong
+  // password in a row, answering just as for a wrong one (by design). The
+  // same count is kept here, so the form can say why even the right
+  // password is refused instead of repeating 密码错误. Returns the time the
+  // lock ends, or 0.
+  const LOCK_KEY = 'pulse-login-lock';
+  function noteLoginFailure() {
+    const now = Date.now();
+    let lock = { count: 0, last: 0, until: 0 };
+    try { lock = { ...lock, ...JSON.parse(localStorage.getItem(LOCK_KEY) || '{}') }; } catch (_) {}
+    if (now >= lock.until) {
+      if (now - lock.last > 15 * 60e3) lock.count = 0;
+      lock.count += 1;
+      lock.last = now;
+      if (lock.count >= 5) lock.until = now + 15 * 60e3;
+    }
+    try { localStorage.setItem(LOCK_KEY, JSON.stringify(lock)); } catch (_) {}
+    return now < lock.until ? lock.until : 0;
+  }
+
   // Login with password. Returns true, or the message to show: only a 4xx
   // answer means a wrong password (the server answers a lockout the same
   // way); a dropped request or a 5xx from the server or a CDN does not.
@@ -276,11 +324,16 @@
       return translations[lang].serverUnreachable;
     }
     if (!res.ok) {
+      if (res.status === 401) {
+        const until = noteLoginFailure();
+        if (until) return translations[lang].tooManyAttempts.replace('{n}', String(Math.max(1, Math.ceil((until - Date.now()) / 60e3))));
+      }
       return res.status >= 400 && res.status < 500 ? translations[lang].invalidPassword : translations[lang].serverUnreachable;
     }
     let data = null;
     try { data = await res.json(); } catch (_) { /* not the API */ }
     if (!data || !data.success) return translations[lang].serverUnreachable;
+    try { localStorage.removeItem(LOCK_KEY); } catch (_) {}
     // Site data blocked: the session could not reach the admin page, which
     // would send the visitor straight back here without a word.
     if (window.__pulseStorageBlocked) return translations[lang].storageBlocked;
@@ -413,28 +466,21 @@
     const confirmPasswordField = document.getElementById('confirm-password-field');
     const confirmPasswordInput = document.getElementById('confirm-password');
     const submitButton = document.getElementById('login-submit');
-    const title = document.querySelector('[data-translate-login="title"]');
-    const subtitle = document.querySelector('[data-translate-login="subtitle"]');
 
     // Switch the form between first-time setup and login. Kept as a
     // function because setup can complete while the follow-up login fails,
     // and the form must then behave as a login form instead of re-posting
     // /api/auth/setup (which the server rejects once a password exists).
     function applyLoginMode(setup) {
-      const lang = getCurrentLanguage();
+      setupMode = setup;
+      applyHeading();
       if (setup) {
-        title.textContent = translations[lang].setupPassword;
-        subtitle.textContent = translations[lang].setupSubtitle;
         confirmPasswordField.classList.remove('hidden');
         confirmPasswordInput.required = true;
-        submitButton.querySelector('[data-translate-login="submit"]').textContent = translations[lang].setupPassword;
       } else {
-        title.textContent = translations[lang].title;
-        subtitle.textContent = translations[lang].subtitle;
         confirmPasswordField.classList.add('hidden');
         confirmPasswordInput.required = false;
         confirmPasswordInput.value = '';
-        submitButton.querySelector('[data-translate-login="submit"]').textContent = translations[lang].submit || translations[lang].login || 'Login';
       }
     }
     applyLoginMode(isPasswordSet === false);

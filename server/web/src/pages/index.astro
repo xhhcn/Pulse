@@ -455,8 +455,9 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
           }
         }
         
-        // No valid token, redirect to login with redirect parameter
-        window.location.href = '/login?redirect=/';
+        // No valid token, redirect to login with redirect parameter (and
+        // say so when it was a share link that no longer works)
+        window.location.href = shareToken ? '/login?redirect=/&reason=link' : '/login?redirect=/';
       } else {
         // Privacy config check failed, allow access (fail open)
         revealAuthContent();
