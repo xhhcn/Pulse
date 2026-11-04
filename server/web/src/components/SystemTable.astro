@@ -1638,8 +1638,20 @@ const apiBase = apiBaseProp ?? '';
         <div class="cell-uptime text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center">${cardLabel('uptime')}<span class="cell-value">${escapeHtml(item.time || '-')}</span></div>
         <div class="cell-os text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center w-full min-w-0" title="${escapeHtmlAttr(osDetailText(item))}">${osCellHTML(item)}</div>
     </div>
-      <!-- Expandable details section -->
-      <div class="system-details hidden border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60 dark:bg-[#171717] bg-[#f8f8f8] overflow-hidden" data-details-id="${safeId}" style="width: 100%;">
+      <!-- Expandable details: built the first time the row is opened
+           (ensureDetails), so the page holds no details for rows nobody
+           opens: they were more than half of its elements. -->
+      <div class="system-details hidden border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60 dark:bg-[#171717] bg-[#f8f8f8] overflow-hidden" data-details-id="${safeId}" data-tcping="${showTCPing ? '1' : '0'}" style="width: 100%;"></div>
+</div>
+  `;
+  };
+
+  // A row's details (info bar, and the TCPing card where it shows): built
+  // the first time the row is opened, from the newest data, then kept up to
+  // date by updateRow like the row itself.
+  const renderDetailsContent = (item, showTCPing = true) => {
+    const safeId = escapeHtmlAttr(item.id || '');
+    return `
         <div class="details-content px-3 sm:px-4 md:px-6 py-3 sm:py-4">
           <div class="detail-list">
             <!-- Tags (first row) -->
@@ -1733,22 +1745,16 @@ const apiBase = apiBaseProp ?? '';
       ${showTCPing ? `<!-- TCPing Chart Section -->
       <div class="px-3 sm:px-4 md:px-6 pb-2 sm:pb-3" data-tcping-chart-container="${safeId}" style="width: 100%;">
         <div class="rounded-[12.8px] border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#151515] dark:bg-[#1a1a1a] bg-white p-3 sm:p-4">
-          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 sm:gap-4 mb-3">
+          <div class="tcping-head flex items-start justify-between gap-3 sm:gap-4 mb-3">
             <div class="min-w-0">
-              <h2 class="text-sm sm:text-base font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate-detail="tcpingLatency">TCPing Latency (24h)</h2>
+              <h2 class="text-sm sm:text-base font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate-detail="tcpingLatency">TCPing Latency</h2>
               <div class="mt-1 text-xs sm:text-[13px] text-[#595959] dark:text-[#ababab]"><span data-translate-detail="tcpingChartDesc">TCP handshake time of every probe</span><span data-tcping-last="${safeId}" hidden></span></div>
             </div>
-            <!-- Statistics display -->
-            <div class="flex gap-3 sm:gap-4 text-[10px] sm:text-xs" data-tcping-stats="${safeId}">
-              <div class="flex items-center gap-1">
-                <span class="text-[#595959] dark:text-[#ababab]" data-translate-detail="avgLatency">Avg:</span>
-                <span class="font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-tcping-avg="${safeId}">-</span>
-          </div>
-              <div class="flex items-center gap-1">
-                <span class="text-[#595959] dark:text-[#ababab]" data-translate-detail="packetLoss">Loss:</span>
-                <span class="font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-tcping-loss="${safeId}">-</span>
-        </div>
-        </div>
+            <!-- The time range picker, added once the chart is drawn. No
+                 statistics here (Beszel's chart cards carry none): the legend
+                 gives each target's average, the loss band the losses (or the
+                 legend, where the band is off). -->
+            <div class="tcping-tools" data-tcping-tools></div>
         </div>
           <!-- Chart canvas -->
           <div class="relative" style="height: 200px; width: 100%; min-height: 200px;">
@@ -1790,10 +1796,29 @@ const apiBase = apiBaseProp ?? '';
           <div class="flex items-center justify-center gap-x-1 gap-y-1 flex-wrap pt-2" data-tcping-tabs="${safeId}"></div>
       </div>` : ''}
     </div>
-  </div>
-</div>
   `;
   };
+  function ensureDetails(systemRow) {
+    const details = systemRow && systemRow.querySelector(':scope > .system-details');
+    if (!details || details.dataset.built === '1') return details;
+    const id = systemRow.getAttribute('data-system-id');
+    const entry = currentData.get(id) || currentData.get(Number(id));
+    const item = entry ? (entry.original || entry) : null;
+    if (!item) return details;
+    details.innerHTML = renderDetailsContent(item, details.dataset.tcping === '1');
+    details.dataset.built = '1';
+    // In the page's language at once (the labels carry English defaults)
+    const lang = getCurrentLanguage();
+    details.querySelectorAll('[data-translate-detail]').forEach((el) => {
+      const text = translations[el.getAttribute('data-translate-detail')]?.[lang];
+      if (text) el.textContent = text;
+    });
+    details.querySelectorAll('[data-translate-title]').forEach((el) => {
+      const text = translations[el.getAttribute('data-translate-title')]?.[lang];
+      if (text) el.setAttribute('title', text);
+    });
+    return details;
+  }
 
   const translations = {
     'noSystemsFound': { en: 'No servers found', zh: '未找到服务器' },
@@ -1821,7 +1846,9 @@ const apiBase = apiBaseProp ?? '';
     'realtimeTraffic': { en: 'Speed:', zh: '网速:' },
     'totalTraffic': { en: 'Traffic:', zh: '流量:' },
     'totalTrafficHint': { en: 'Since the server last booted', zh: '开机以来的总流量' },
-    'tcpingLatency': { en: 'TCPing Latency (24h)', zh: 'TCPing 延迟 (24 小时)' },
+    'tcpingLatency': { en: 'TCPing Latency', zh: 'TCPing 延迟' },
+    'tcpingRange': { en: 'Time range', zh: '时间范围' },
+    'tcpingTabLoss': { en: '· {pct} lost', zh: '· 丢包 {pct}' },
     'loadFailed': { en: "Couldn't load the server list", zh: '无法加载服务器列表' },
     'loadRetrying': { en: 'Retrying automatically…', zh: '正在自动重试…' },
     'tcpingChartDesc': { en: 'TCP handshake time of every probe', zh: '每次探测的 TCP 握手时间' },
@@ -1897,6 +1924,10 @@ const apiBase = apiBaseProp ?? '';
   function updateTranslations() {
     const lang = getCurrentLanguage();
     renderSystemsSummary();
+    // The time range picker's label (an open menu closes), the legend's words
+    closeTCPingRangeMenu();
+    syncTCPingRangeButtons();
+    tcpingCharts.forEach((entry, key) => updateTCPingTabAverages(key.replace(/_all$/, '')));
     // The pages' footer texts
     applyPagination();
     refreshLastSeen();
@@ -2224,10 +2255,18 @@ const apiBase = apiBaseProp ?? '';
     // If no old data, update all fields (treat as new item)
     const shouldUpdateAll = !previousItem && !currentData.get(item.id);
 
+    // The row's own details panel (its sibling inside .system-row). Looked up
+    // in the row, not the page: a page-wide attribute search ran for every
+    // row on every live update and was most of the update's cost.
+    const rowDetails = () => {
+      const details = rowElement.parentElement?.querySelector(':scope > .system-details');
+      return details && details.dataset.built === '1' ? details : null;
+    };
+
     // Tags changed by the admin: the details' tag row is drawn again.
     if (!shouldUpdateAll && oldItemNormalized.tags !== newItemNormalized.tags) {
-      const detailsSection = document.querySelector(`[data-details-id="${cssEscape(String(item.id))}"]`);
-      const column = detailsSection && detailsSection.querySelector('.details-content > .flex-col');
+      const detailsSection = rowDetails();
+      const column = detailsSection && detailsSection.querySelector('.detail-list');
       if (column) {
         const strip = column.querySelector(':scope > [data-tag-strip]');
         const html = renderTagStrip(item).trim();
@@ -2248,7 +2287,7 @@ const apiBase = apiBaseProp ?? '';
       // Find all traffic and speed tags in the details section
       // Update them regardless of whether the section is expanded or collapsed
       // This ensures tags show latest data when user expands the section
-      const detailsSection = document.querySelector(`[data-details-id="${cssEscape(String(item.id))}"]`);
+      const detailsSection = rowDetails();
       if (detailsSection) {
         // Update traffic:in tags (total cumulative)
         if (trafficTagTotalInChanged || shouldUpdateAll) {
@@ -2476,7 +2515,7 @@ const apiBase = apiBaseProp ?? '';
     // Always update the data, even if hidden, so it's ready when expanded
     const systemRow = rowElement.closest('.system-row');
     if (systemRow) {
-      const detailsSection = systemRow.querySelector('.system-details');
+      const detailsSection = rowDetails();
       if (detailsSection) {
         // Update details content - check if values changed
         const locationEl = detailsSection.querySelector('[data-detail="location"]');
@@ -3395,11 +3434,16 @@ const apiBase = apiBaseProp ?? '';
       dot.setAttribute('data-tcping-dot', '');
       dot.setAttribute('aria-hidden', 'true');
       dot.className = 'inline-block w-2 h-2 shrink-0 rounded-[2px]';
-      // The target's own 24 h average after its name (updateTCPingTabAverages).
+      // The target's own average over the span shown after its name, and,
+      // where the loss band is off, its loss when it lost probes
+      // (updateTCPingTabAverages).
       const average = document.createElement('span');
       average.setAttribute('data-tcping-tab-avg', '');
       average.className = 'tabular-nums text-[#595959] dark:text-[#ababab] empty:hidden';
-      tab.append(dot, document.createTextNode(target.name || target.address), average);
+      const loss = document.createElement('span');
+      loss.setAttribute('data-tcping-tab-loss', '');
+      loss.className = 'tabular-nums text-[#595959] dark:text-[#ababab] empty:hidden';
+      tab.append(dot, document.createTextNode(target.name || target.address), average, loss);
       tab.dataset.target = target.address;
       tab.dataset.targetName = target.name || target.address;
 
@@ -3786,7 +3830,7 @@ const apiBase = apiBaseProp ?? '';
     });
     
     // Calculate statistics for all targets (use pre-calculated stats if available from backend)
-    if (preCalculatedStats && !selectedTarget) {
+    if (preCalculatedStats && !selectedTarget && tcpingRangeHours() === 24) {
       // Use pre-calculated statistics from backend (much faster!)
       updateTCPingStats(systemId, preCalculatedStats.avg_latency, preCalculatedStats.packet_loss_rate);
     } else {
@@ -3968,8 +4012,9 @@ const apiBase = apiBaseProp ?? '';
             
             // Update x-axis range if we have valid time range
             if (updatedMinTime !== null && updatedMaxTime !== null && chart.options.scales && chart.options.scales.x) {
-              chart.options.scales.x.min = updatedMinTime;
-              chart.options.scales.x.max = updatedMaxTime;
+              const bounds = tcpingAxisBounds(updatedMinTime, updatedMaxTime);
+              chart.options.scales.x.min = bounds.min;
+              chart.options.scales.x.max = bounds.max;
             }
             
             chart.update('none');
@@ -3978,7 +4023,7 @@ const apiBase = apiBaseProp ?? '';
             
             // Update statistics after incremental update
             // Use pre-calculated stats if available and no target is selected
-            if (preCalculatedStats && !selectedTarget) {
+            if (preCalculatedStats && !selectedTarget && tcpingRangeHours() === 24) {
               updateTCPingStats(systemId, preCalculatedStats.avg_latency, preCalculatedStats.packet_loss_rate);
             } else {
               calculateAndUpdateStats(systemId, selectedTarget);
@@ -4465,8 +4510,8 @@ const apiBase = apiBaseProp ?? '';
             // The span of the data: a blank stretch would read like lost
             // probes, which the chart draws as gaps (stale data is named in
             // the subtitle instead, updateTCPingLastProbe).
-            min: minTime !== null ? minTime : undefined,
-            max: maxTime !== null ? maxTime : undefined,
+            min: tcpingAxisBounds(minTime, maxTime).min,
+            max: tcpingAxisBounds(minTime, maxTime).max,
             time: {
               displayFormats: {
                 second: 'HH:mm:ss',
@@ -4573,13 +4618,15 @@ const apiBase = apiBaseProp ?? '';
     updateTCPingTabAverages(systemId);
     updateTCPingLastProbe(systemId);
 
-    // The summary for a selected target is computed from the chart's
-    // datasets, which did not exist yet when the stats were calculated
-    // above on a first load: recompute it now that the chart is registered.
+    // The summary for a selected target, or for a span shorter than the
+    // server's day statistics, is computed from the chart's datasets, which
+    // did not exist yet when the stats were calculated above on a first
+    // load: recompute it now that the chart is registered.
     const activeNow = tcpingActiveTargets.get(systemId);
-    if (activeNow && activeNow.target) {
-      calculateAndUpdateStats(systemId, activeNow.target);
+    if ((activeNow && activeNow.target) || tcpingRangeHours() !== 24) {
+      calculateAndUpdateStats(systemId, activeNow ? activeNow.target : null);
     }
+    ensureTCPingRangeButton(container);
     
     // Hide loading state and show chart (for full reload or new chart creation)
     // If incremental update created a new chart (no-data to has-data transition), also show it
@@ -4811,19 +4858,183 @@ const apiBase = apiBaseProp ?? '';
   // so the targets compare at a glance: the summary above is one figure for
   // all of them unless one is selected. Same rule as the summary: probes up
   // to 1000 ms count, a timeout does not.
+  // The span the TCPing chart shows, as the time menu on Beszel's charts:
+  // the last 1, 6, 12 or 24 hours of probes. Every probe of the day stays on
+  // the chart and its time axis is narrowed to the newest probe's last hours
+  // (the axis still spans data, never blank time), so a change needs no
+  // fetch and live probes keep sliding in; the averages, the loss and the
+  // loss band count that span, the latency axis fits it (Chart.js leaves
+  // points outside the time bounds out of the value range). Per visit, for
+  // every server's chart, like the view menu's choices.
+  const TCPING_RANGES_H = [1, 6, 12, 24];
+  // Until the visitor picks a span: 1 hour on phones (a day of probes is a
+  // solid band in that width), 24 hours on wider screens.
+  let tcpingRangePicked = null;
+  const tcpingPhoneQuery = window.matchMedia('(max-width: 767.98px)');
+  const tcpingRangeHours = () => tcpingRangePicked || (tcpingPhoneQuery.matches ? 1 : 24);
+  function tcpingAxisBounds(minTime, maxTime) {
+    if (minTime === null || maxTime === null) return { min: undefined, max: undefined };
+    const hours = tcpingRangeHours();
+    const from = hours < 24 ? Math.max(minTime, maxTime - hours * 3600e3) : minTime;
+    return { min: from, max: maxTime };
+  }
+  // Where the span shown starts (the axis start), for the counts.
+  function tcpingSpanStart(chart) {
+    const min = chart && chart.options && chart.options.scales && chart.options.scales.x ? chart.options.scales.x.min : undefined;
+    return Number.isFinite(min) ? min : -Infinity;
+  }
+  const tcpingRangeLabel = (h, lang = getCurrentLanguage()) => (lang === 'zh' ? `${h} 小时` : `${h} ${h === 1 ? 'hour' : 'hours'}`);
+  // Beszel's trigger: the history icon, the span, a chevron; one per drawn
+  // chart (added with the chart, so the rows carry none).
+  const TCPING_RANGE_ICON = '<svg class="tcping-range-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9a9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5m4-1v5l4 2"/></g></svg>';
+  const TCPING_RANGE_CHEVRON = '<svg class="tcping-range-chevron" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9l6 6l6-6"/></svg>';
+  const TCPING_RANGE_CHECK = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 6L9 17l-5-5"/></svg>';
+  function syncTCPingRangeButtons() {
+    const lang = getCurrentLanguage();
+    document.querySelectorAll('.tcping-range-btn').forEach((btn) => {
+      const label = btn.querySelector('.tcping-range-label');
+      if (label) label.textContent = tcpingRangeLabel(tcpingRangeHours(), lang);
+      btn.setAttribute('aria-label', `${translations.tcpingRange[lang]}: ${tcpingRangeLabel(tcpingRangeHours(), lang)}`);
+    });
+  }
+  function ensureTCPingRangeButton(container) {
+    const tools = container && container.querySelector('[data-tcping-tools]');
+    if (!tools || tools.querySelector('.tcping-range-btn')) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tcping-range-btn';
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.innerHTML = `${TCPING_RANGE_ICON}<span class="tcping-range-label"></span>${TCPING_RANGE_CHEVRON}`;
+    tools.appendChild(btn);
+    syncTCPingRangeButtons();
+  }
+  // Its menu, Beszel's select list: the spans with a check by the one
+  // shown, under the button (in the page, as the details clip their content).
+  let tcpingRangeMenu = null;
+  function closeTCPingRangeMenu(refocus = false) {
+    if (!tcpingRangeMenu) return;
+    const btn = tcpingRangeMenu._button;
+    tcpingRangeMenu.remove();
+    tcpingRangeMenu = null;
+    if (btn) {
+      btn.setAttribute('aria-expanded', 'false');
+      if (refocus && btn.isConnected) btn.focus();
+    }
+  }
+  function openTCPingRangeMenu(btn) {
+    closeTCPingRangeMenu();
+    const lang = getCurrentLanguage();
+    const menu = document.createElement('div');
+    menu.className = 'tcping-range-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', translations.tcpingRange[lang]);
+    const shown = tcpingRangeHours();
+    menu.innerHTML = TCPING_RANGES_H.map((h) => `<button type="button" role="menuitemradio" class="view-menu-item" data-range="${h}" aria-checked="${h === shown}"><span class="view-menu-mark">${h === shown ? TCPING_RANGE_CHECK : ''}</span>${tcpingRangeLabel(h, lang)}</button>`).join('');
+    document.body.appendChild(menu);
+    const r = btn.getBoundingClientRect();
+    menu.style.minWidth = `${Math.round(r.width)}px`;
+    const left = Math.max(8, Math.min(document.documentElement.clientWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth));
+    menu.style.left = `${Math.round(left + window.scrollX)}px`;
+    menu.style.top = `${Math.round(r.bottom + 4 + window.scrollY)}px`;
+    menu._button = btn;
+    tcpingRangeMenu = menu;
+    btn.setAttribute('aria-expanded', 'true');
+    (menu.querySelector('[aria-checked="true"]') || menu.firstElementChild).focus({ preventScroll: true });
+  }
+  function setTCPingRange(h) {
+    if (!TCPING_RANGES_H.includes(h)) return;
+    const before = tcpingRangeHours();
+    tcpingRangePicked = h;
+    if (h !== before) applyTCPingRange();
+  }
+  // Every open chart to the span (a pick, or the default after a resize
+  // across the phone width).
+  function applyTCPingRange() {
+    syncTCPingRangeButtons();
+    tcpingCharts.forEach((entry, key) => {
+      const chart = entry && entry.chart;
+      if (!chart || !chart.options || !chart.options.scales || !chart.options.scales.x) return;
+      const systemId = key.replace(/_all$/, '');
+      let lo = null, hi = null;
+      chart.data.datasets.forEach((d) => {
+        const pts = d.data || [];
+        if (!pts.length) return;
+        if (lo === null || pts[0].x < lo) lo = pts[0].x;
+        if (hi === null || pts[pts.length - 1].x > hi) hi = pts[pts.length - 1].x;
+      });
+      const bounds = tcpingAxisBounds(lo, hi);
+      chart.options.scales.x.min = bounds.min;
+      chart.options.scales.x.max = bounds.max;
+      try { chart.update('none'); } catch (_) {}
+      const active = tcpingActiveTargets.get(systemId);
+      calculateAndUpdateStats(systemId, active ? active.target : null);
+      updateTCPingTabAverages(systemId);
+    });
+  }
+  tcpingPhoneQuery.addEventListener('change', () => { if (!tcpingRangePicked) applyTCPingRange(); });
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('.tcping-range-btn');
+    if (btn) {
+      if (tcpingRangeMenu && tcpingRangeMenu._button === btn) closeTCPingRangeMenu();
+      else openTCPingRangeMenu(btn);
+      return;
+    }
+    const item = e.target.closest && e.target.closest('.tcping-range-menu [data-range]');
+    if (item) {
+      setTCPingRange(Number(item.dataset.range));
+      closeTCPingRangeMenu(true);
+      return;
+    }
+    if (tcpingRangeMenu && !(e.target.closest && e.target.closest('.tcping-range-menu'))) closeTCPingRangeMenu();
+  });
+  // Keys as in Beszel's select: arrows move, Enter/Space pick (buttons),
+  // Escape closes back on the button (and goes no further), Tab leaves.
+  document.addEventListener('keydown', (e) => {
+    if (!tcpingRangeMenu) return;
+    const items = [...tcpingRangeMenu.querySelectorAll('[data-range]')];
+    const at = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      closeTCPingRangeMenu(true);
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = at < 0 ? 0 : (at + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+      items[next].focus();
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      items[e.key === 'Home' ? 0 : items.length - 1].focus();
+    } else if (e.key === 'Tab') {
+      closeTCPingRangeMenu();
+    }
+  }, true);
+  window.addEventListener('resize', () => closeTCPingRangeMenu());
+
   function updateTCPingTabAverages(systemId) {
     const entry = tcpingCharts.get(`${systemId}_all`);
     const strip = document.querySelector(`[data-tcping-tabs="${cssEscape(String(systemId))}"]`);
     if (!entry || !entry.chart || !strip) return;
+    const from = tcpingSpanStart(entry.chart);
+    const bandOn = document.documentElement.classList.contains('loss-timeline');
+    const lang = getCurrentLanguage();
     entry.chart.data.datasets.forEach((dataset) => {
-      let sum = 0, n = 0;
+      let sum = 0, n = 0, probes = 0;
       dataset.data.forEach((point) => {
-        if (point && point.y !== null && point.y !== undefined && point.y <= 1000) { sum += point.y; n++; }
+        if (!point || point.x < from) return;
+        probes++;
+        if (point.y !== null && point.y !== undefined && point.y <= 1000) { sum += point.y; n++; }
       });
-      const cell = strip.querySelector(`button[data-target="${cssEscape(String(dataset.targetAddress))}"] [data-tcping-tab-avg]`);
-      if (!cell) return;
+      const tab = strip.querySelector(`button[data-target="${cssEscape(String(dataset.targetAddress))}"]`);
+      if (!tab) return;
+      const cell = tab.querySelector('[data-tcping-tab-avg]');
       const text = n ? `${Math.round(sum / n)} ms` : '';
-      if (cell.textContent !== text) cell.textContent = text;
+      if (cell && cell.textContent !== text) cell.textContent = text;
+      const lossCell = tab.querySelector('[data-tcping-tab-loss]');
+      const lost = probes - n;
+      const pct = probes ? (lost / probes) * 100 : 0;
+      const lossText = !bandOn && n && lost > 0 ? translations.tcpingTabLoss[lang].replace('{pct}', `${pct < 10 ? pct.toFixed(2) : pct.toFixed(1)}%`) : '';
+      if (lossCell && lossCell.textContent !== lossText) lossCell.textContent = lossText;
     });
   }
 
@@ -4874,6 +5085,8 @@ const apiBase = apiBaseProp ?? '';
     let totalCount = 0;
     let successCount = 0;
     let totalLatency = 0;
+    // The span the chart shows (the time range picker)
+    const from = tcpingSpanStart(chart);
     
     chart.data.datasets.forEach(dataset => {
       // If selectedTarget is specified, only count data from that target
@@ -4882,6 +5095,7 @@ const apiBase = apiBaseProp ?? '';
       }
       
       dataset.data.forEach(point => {
+        if (point && point.x < from) return;
         if (point && point.x && point.y !== null && point.y !== undefined) {
           totalCount++;
           if (point.y <= PACKET_LOSS_THRESHOLD_MS) {
@@ -4943,8 +5157,9 @@ const apiBase = apiBaseProp ?? '';
         const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         
         if (isExpanding) {
+          ensureDetails(systemRow);
           // (a row whose TCPing card the admin hid has no history to show)
-          if (systemRow.querySelector('[data-tcping-chart-container]')) prefetchTCPingHistory(systemId);
+          if (detailsSection.dataset.tcping === '1') prefetchTCPingHistory(systemId);
           // IMPORTANT: Close all other expanded sections first to prevent CPU overload
           // Only keep one section expanded at a time
           const allExpandedSections = container.querySelectorAll('.system-details:not(.hidden)');
@@ -5092,7 +5307,7 @@ const apiBase = apiBaseProp ?? '';
       const systemRow = rowElement && rowElement.closest('.system-row');
       const details = systemRow && systemRow.querySelector('.system-details');
       return details && details.classList.contains('hidden')
-        && systemRow.querySelector('[data-tcping-chart-container]') ? rowElement.dataset.systemId : null;
+        && details.dataset.tcping === '1' ? rowElement.dataset.systemId : null;
     };
     container.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'mouse') return;
@@ -5377,7 +5592,7 @@ const apiBase = apiBaseProp ?? '';
         rowsToAdd.push({ item, index });
         hasChanges = true;
       } else if (oldItem && (oldItem.hide_tcping !== normalizedItem.hide_tcping
-        || (tcpingConfigKnown && !!existingRow.parentElement?.querySelector('[data-tcping-chart-container]') !== (tcpingConfigured && item.hide_tcping !== true)))) {
+        || (tcpingConfigKnown && (existingRow.parentElement?.querySelector(':scope > .system-details')?.dataset.tcping === '1') !== (tcpingConfigured && item.hide_tcping !== true)))) {
         // Admin flipped "show TCPing", or the first TCPing target was added
         // (or the last removed): the panel is part of the row markup, so
         // rebuild the row (remove + add) instead of patching in place.
@@ -6838,7 +7053,6 @@ const apiBase = apiBaseProp ?? '';
   #monitor-root .detail-value:not(:is([data-detail="location"], [data-detail="os"], [data-detail="cpu_model"])) { font-variant-numeric: tabular-nums; }
   html.dark #monitor-root .detail-value { color: #f5f5f5; }
   #monitor-root .detail-pair > span { white-space: nowrap; }
-  #monitor-root [data-tcping-stats] { font-size: 12px; }
   @media (min-width: 768px) {
     #monitor-root .detail-list { display: flex; flex-wrap: wrap; column-gap: 25px; row-gap: 10px; font-size: 13px; line-height: 20px; overflow: hidden; }
     #monitor-root .detail-list > [data-tag-strip] { flex-basis: 100%; }
@@ -6862,13 +7076,43 @@ const apiBase = apiBaseProp ?? '';
   @media (min-width: 1280px) {
     #monitor-root .detail-list { font-size: 14px; }
     #monitor-root .detail-icon { width: 16px; height: 16px; }
-    #monitor-root [data-tcping-stats] { font-size: 13px; }
   }
 
   /* The TCPing chart's tooltip (tcpingTooltipExternal), Beszel's chart
      tooltip: the page's ground, a light border, a deep soft shadow, 12 px
      text; the time in medium weight, each row a colour square, the target
      muted and the value in medium weight to the right. */
+  /* The TCPing card's header: the title and its line left, the time range
+     picker right (Beszel's chart time select: history icon, span, chevron;
+     its list with a check by the span shown). */
+  .tcping-tools { display: flex; flex: none; align-items: center; }
+  @media (max-width: 639.98px) {
+    .tcping-range-btn { height: 28px; padding: 0 6px 0 8px; gap: 5px; font-size: 12px; }
+    .tcping-range-icon, .tcping-range-chevron { width: 13px; height: 13px; }
+  }
+  .tcping-range-btn {
+    display: inline-flex; flex: none; align-items: center; gap: 6px;
+    height: 32px; padding: 0 8px 0 10px;
+    border: 1px solid #dadada; border-radius: 10.8px; background: transparent;
+    font-size: 13px; line-height: 1; color: #1d1d20; white-space: nowrap; cursor: pointer;
+  }
+  .tcping-range-btn:hover { background-color: rgba(243, 239, 236, 0.7); }
+  .tcping-range-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #837e79; }
+  html.dark .tcping-range-btn { border-color: #2c2c2c; color: #f5f5f5; }
+  html.dark .tcping-range-btn:hover { background-color: rgba(40, 40, 40, 0.7); }
+  html.dark .tcping-range-btn:focus-visible { box-shadow: 0 0 0 2px #1a1a1a, 0 0 0 4px #cacbce; }
+  .tcping-range-icon { width: 14px; height: 14px; flex: none; opacity: 0.85; }
+  .tcping-range-chevron { width: 14px; height: 14px; flex: none; opacity: 0.5; }
+  .tcping-range-menu {
+    position: absolute; z-index: 60; padding: 4px;
+    border: 1px solid #dadada; border-radius: 10.8px; background-color: #ffffff;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    animation: view-menu-in 150ms ease; transform-origin: top right;
+  }
+  html.dark .tcping-range-menu { border-color: #2c2c2c; background-color: #171717; }
+  .tcping-range-menu .view-menu-item { padding: 6px 12px 6px 32px; font-size: 13px; white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { .tcping-range-menu { animation: none; } }
+
   .tcping-tooltip {
     position: fixed;
     left: 0;

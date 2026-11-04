@@ -872,6 +872,7 @@ html.glass-enabled.dark .glass-login input:not([type="checkbox"]) {
    The only surfaces that blur (and saturate) what lies beneath them;
    opaque enough that their text stays crisp over the table. */
 html.glass-enabled.light #columns-dropdown,
+html.glass-enabled.light .tcping-range-menu,
 html.glass-enabled.light .admin-menu,
 html.glass-enabled.light [data-modal-content] {
   background: rgba(250, 250, 252, 0.86) !important;
@@ -883,6 +884,7 @@ html.glass-enabled.light [data-modal-content] {
     0 14px 40px -10px rgba(0, 0, 0, 0.28) !important;
 }
 html.glass-enabled.dark #columns-dropdown,
+html.glass-enabled.dark .tcping-range-menu,
 html.glass-enabled.dark .admin-menu,
 html.glass-enabled.dark [data-modal-content] {
   background: rgba(38, 38, 42, 0.82) !important;
@@ -1020,23 +1022,23 @@ html.glass-enabled.dark :is(.pulse-tooltip, .pulse-tooltip-arrow, .tcping-toolti
         relied on a blur.
    ======================================== */
 @media (prefers-reduced-transparency: reduce) {
-  html.glass-enabled :is(#columns-dropdown, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
+  html.glass-enabled :is(#columns-dropdown, .tcping-range-menu, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
-  html.glass-enabled.dark :is(.glass-nav, .glass-card, .glass-login, #columns-dropdown, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
+  html.glass-enabled.dark :is(.glass-nav, .glass-card, .glass-login, #columns-dropdown, .tcping-range-menu, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
     background: #26262a !important;
   }
-  html.glass-enabled.light :is(.glass-nav, .glass-card, .glass-login, #columns-dropdown, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
+  html.glass-enabled.light :is(.glass-nav, .glass-card, .glass-login, #columns-dropdown, .tcping-range-menu, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
     background: #ffffff !important;
   }
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  html.glass-enabled.dark :is(#columns-dropdown, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
+  html.glass-enabled.dark :is(#columns-dropdown, .tcping-range-menu, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
     background: rgba(38, 38, 42, 0.97) !important;
   }
-  html.glass-enabled.light :is(#columns-dropdown, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
+  html.glass-enabled.light :is(#columns-dropdown, .tcping-range-menu, [data-modal-content], .pulse-tooltip, .pulse-tooltip-arrow, .tcping-tooltip, .pulse-toast) {
     background: rgba(250, 250, 252, 0.97) !important;
   }
 }

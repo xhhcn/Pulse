@@ -16,15 +16,18 @@ import Icon from './Icon.astro';
   </div>
   <!-- Filter and view menu, as in Beszel: one height, radius, border and
        ground for both; the menu sorts by any column (also a click on a column
-       header) and shows all, online or offline services. -->
-  <div class="flex items-center gap-2 w-full md:w-auto">
-    <div class="relative flex-1 md:flex-none">
+       header) and shows all, online or offline services. Below 900 px they
+       take a full row of their own under the title (Beszel's narrow layout):
+       beside the title and its summary they no longer fit, and a short box
+       under it left most of the row empty. -->
+  <div class="flex items-center gap-2 w-full min-[900px]:w-auto">
+    <div class="relative flex-1 min-[900px]:flex-none">
       <input
         id="system-filter-input"
         type="text"
         autocomplete="off"
         spellcheck="false"
-        class="toolbar-control w-full md:w-[272px] pl-4 pr-10 text-sm leading-normal"
+        class="toolbar-control w-full min-[900px]:w-[272px] pl-4 pr-10 text-sm leading-normal"
         aria-keyshortcuts="Control+K Meta+K /"
         placeholder="Filter..."
         data-placeholder-en="Filter..."
