@@ -146,25 +146,25 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} fixes reordering on the admin page, makes the admin's card layout show for every visitor, stops the details from repeating what the row already shows, and makes share links work the moment they are generated. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} adds optional pages to the dashboard, turns the offline count into a filter, ties an opened card to its details, shows each server's location and client version on the admin page, walks a newly added server through installing its client, and settles the wording on 服务器, 网速 and 流量. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Admin: dragging a server carries it any number of places up or down (it stopped after one place up). Keyboard ↑/↓ keeps the focus on the moved row.
-            - Web: the view menu's layout, fields and sort last for the visit, and every load starts from the site's settings, so 自定义设置 → 卡片布局 shows for every visitor. Choices kept by earlier versions are cleared.
-            - Web: the details no longer repeat the location and OS that the flag and logo (phones, cards) or the table's columns already show; they still appear where the table has no such columns.
-            - Admin: 生成分享链接 saves the link at once, so a copied link works even if the dialog is closed with 取消; 立即停止分享链接 appears only when there is a link.
-            - Privacy mode: visitors who reach the login page are told the dashboard is private, and an ended share link says so; the site logo keeps a share link's token. The privacy dialog's description is corrected.
-            - Login: after five wrong passwords the form says the login is locked for 15 minutes; the heading follows a language switch on every form.
-            - Web: the filter also searches tags; in glass mode only the picked legend entry is highlighted; live updates do less layout work with many servers; leaving the admin page no longer throws an error.
+            - Web: optional pages (自定义设置 → 分页显示): the dashboard a page at a time, with Beszel's footer under the list — the servers shown, a page size visitors can change for their visit, and first / previous / next / last. Off by default; filters and sorting start again from the first page, live updates keep it.
+            - Web: the red 「N 离线」 count is a button that shows only the offline servers, and all of them again; it follows the view menu.
+            - Web: an opened card has a darker edge and its details point at it with a notch; the glass wallpaper now meets the space kept for a scrollbar without a hard edge (desktops whose scrollbars take room).
+            - Admin: each server shows its location (flag and code), OS and client version; a client older than the newest one you run is marked 需更新, and the delete dialog names the location and the address.
+            - Admin: after a server is added, the dialog shows its install command with buttons to copy the Linux or the Windows one (as Beszel's Add System dialog), and 完成 brings the new row into view.
+            - Web: a server whose client has never reported shows 等待接入 in grey instead of a red 离线, with a count of its own (Beszel's pending systems).
+            - Wording: 网速 for the transfer rate and 流量 for the amount since boot; 服务器 (Server) throughout.
 
             ### Compatibility
 
-            - Existing clients continue to work; no wire format or server change.
+            - Existing clients continue to work; the server's display settings gain page_size (0, one list, unless set).
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: reordering by mouse (several places, with turns on the way) and keyboard, and by touch in Chromium; the view settings across reloads with the card layout on and off and over choices an older version kept; the details at phone, card, 800, 900 and 1440 px and with a hidden field; generating, cancelling, reopening and stopping a share link; the login headings in both languages and on the first-run form; the lockout message; the privacy redirects; tag search; the glass legend; name-column widths identical to v1.3.53; with every earlier suite.
+            - Chromium, Firefox and WebKit: pages (off by default; first / previous / next / last, the page size keeping the first server shown, a filter, the offline button and a sort going back to page 1, live updates keeping the page, cards, phones, English, the admin switch); the offline button by mouse and keyboard and with the view menu; the card notch at 1440 and 390 px, after a resize and in glass; the glass edge with space-taking scrollbars; the admin lines on desktop and phone (flags, versions, 需更新, 等待接入), the delete dialog, adding a server through the install step and its copy buttons; a server waiting for its client on the home page (dot, chip, counts, filter); 24 px touch targets for the summary's chips; the new wording in both languages; with every earlier suite and a theme audit of 60 pages (no new findings).
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
