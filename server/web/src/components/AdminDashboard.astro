@@ -1,5 +1,14 @@
 ---
 import Icon from './Icon.astro';
+import { FLAG_ICONS, LOCAL_ICONS } from '../utils/icon-manifest.ts';
+
+// The flags shipped with the dashboard, by country code ("DE" → "germany"),
+// for the inline script's location badges (it cannot import modules).
+const localFlags = Object.fromEntries(
+  Object.entries(FLAG_ICONS)
+    .filter(([, name]) => LOCAL_ICONS.has(`emojione-v1:${name}`))
+    .map(([code, name]) => [code, name.replace(/^flag-for-/, '')])
+);
 
 const { apiBase: apiBaseProp } = Astro.props ?? {};
 const apiBase = apiBaseProp ?? '';
@@ -40,8 +49,8 @@ const customCodePlaceholder = [
   <div class="glass-card mb-4 sm:mb-6 rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white px-3 py-5 sm:p-6">
     <div class="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div class="px-2 sm:px-1">
-        <h1 id="system-list-title" class="text-[1.4rem] sm:text-2xl font-semibold tracking-tight leading-none sm:leading-none text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="systemList">Service List</h1>
-        <p class="mt-1.5 text-sm text-[#595959] dark:text-[#ababab]" data-translate="systemListDesc">Drag to reorder; the dashboard shows the services in this order.</p>
+        <h1 id="system-list-title" class="text-[1.4rem] sm:text-2xl font-semibold tracking-tight leading-none sm:leading-none text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="systemList">Server List</h1>
+        <p class="mt-1.5 text-sm text-[#595959] dark:text-[#ababab] [text-wrap:pretty]" data-translate="systemListDesc">Drag to reorder; the dashboard shows the servers in this order.</p>
       </div>
       <!-- Beszel's toolbar: outline buttons with labels (its "Add System"),
            the settings and the sign-out in one menu of labelled items, and
@@ -70,7 +79,7 @@ const customCodePlaceholder = [
         </div>
         <button id="add-system-btn" type="button" class="toolbar-control toolbar-btn">
           <Icon name="plus" size={16} class="w-4 h-4 -ms-1" />
-          <span data-translate="addSystem">Add Service</span>
+          <span data-translate="addSystem">Add Server</span>
         </button>
       </div>
     </div>
@@ -107,7 +116,7 @@ const customCodePlaceholder = [
             data-placeholder-zh="我的服务器"
             class="w-full toolbar-control px-3 text-sm"
           />
-          <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="displayNameForThisSystem">Display name for this service</p>
+          <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="displayNameForThisSystem">Display name for this server</p>
         </div>
 
         <div class="rounded-lg bg-[#282828] dark:bg-[#282828] bg-[#f5f5f5] p-3">
@@ -134,6 +143,33 @@ const customCodePlaceholder = [
           </button>
         </div>
       </form>
+
+      <!-- Once the server is added: how to install its client, in place of the
+           form (Beszel's Add System dialog carries the agent's command too).
+           The commands are the ones the row's Linux and Windows buttons copy. -->
+      <div id="add-system-install" class="hidden space-y-4">
+        <p id="add-install-desc" class="text-sm text-[#595959] dark:text-[#ababab] [text-wrap:pretty]"></p>
+        <pre id="add-install-command" class="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-[#f5f5f5] dark:bg-[#282828] p-3 font-mono text-xs leading-5 text-[#1d1d20] dark:text-[#d4d4d4]"></pre>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <button type="button" id="copy-install-linux-btn" class="toolbar-control toolbar-btn" data-kind="linux">
+            <svg class="shrink-0" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
+                <g fill="none" fill-rule="evenodd"><path d="m12.594 23.258l-.012.002l-.071.035l-.02.004l-.014-.004l-.071-.036q-.016-.004-.024.006l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.016-.018m.264-.113l-.014.002l-.184.093l-.01.01l-.003.011l.018.43l.005.012l.008.008l.201.092q.019.005.029-.008l.004-.014l-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.003-.011l.018-.43l-.003-.012l-.01-.01z"/><path fill="currentColor" d="M8.264 15.29a1 1 0 0 1 .822.522l1.892 3.493a1.809 1.809 0 0 1-1.856 2.65l-3.93-.582a1 1 0 0 1-.672-1.563l.623-.89l-.174-.984a1 1 0 0 1 .811-1.159l.985-.173l.623-.89a1 1 0 0 1 .876-.425Zm6.347-.024a1 1 0 0 1 .858-.043l.116.057l.94.543l.966-.259a1 1 0 0 1 1.188.596l.037.111l.259.966l.94.543a1 1 0 0 1 .154 1.623l-.103.078l-3.315 2.188a1.809 1.809 0 0 1-2.805-1.46l.003-.158l.238-3.965a1 1 0 0 1 .524-.82M12 2a4 4 0 0 1 4 4v1c0 1.214.502 2.267 1.166 3.354l.736 1.165c.1.16.195.315.28.457c.32.541.628 1.14.788 1.781a7 7 0 0 1 .194 1.358a2 2 0 0 0-1.932-.516l-.565.151l-.582-.336a2 2 0 0 0-2.996 1.613l-.238 3.965c-.021.345.022.684.121 1.003l-.269.005h-.406q-.114 0-.226-.004c.22-.71.152-1.492-.214-2.167l-1.891-3.493a2 2 0 0 0-3.397-.195l-.385.55l-.33.058a5.4 5.4 0 0 1 .024-1.16c.037-.285.086-.567.152-.832c.198-.792.535-1.459.857-2.02l.437-.74C7.74 10.28 8 9.722 8 9V6a4 4 0 0 1 4-4m-1.438 5.778l-.822.41c.224.597.572 1.156.897 1.6l.204.269l.184.225l.081.094l.25-.141l.329-.197c.176-.109.368-.232.566-.367c.604-.412 1.225-.91 1.662-1.427l-2.316-.58a1.5 1.5 0 0 0-1.035.114"/></g>
+              </svg>
+            <span data-copy-label data-translate="copyLinuxCommand">Copy Linux install command</span>
+          </button>
+          <button type="button" id="copy-install-windows-btn" class="toolbar-control toolbar-btn" data-kind="windows">
+            <svg class="shrink-0" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24">
+                <g fill="none"><path d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"/><path fill="currentColor" d="M21 13v7.434a1.5 1.5 0 0 1-1.553 1.499l-.133-.011L12 21.008V13zm-11 0v7.758l-5.248-.656A2 2 0 0 1 3 18.117V13zm9.314-10.922a1.5 1.5 0 0 1 1.68 1.355l.006.133V11h-9V2.992zM10 3.242V11H3V5.883a2 2 0 0 1 1.752-1.985z"/></g>
+              </svg>
+            <span data-copy-label data-translate="copyWindowsCommand">Copy Windows install command</span>
+          </button>
+        </div>
+        <div class="flex justify-end">
+          <button type="button" id="add-install-done-btn" class="h-10 min-w-24 rounded-lg bg-[#171717] px-6 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]">
+            <span data-translate="done">Done</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -180,8 +216,8 @@ const customCodePlaceholder = [
         <div class="rounded-[10.8px] border border-[#dadada]/60 dark:border-[#2c2c2c]/60 divide-y divide-[#dadada]/60 dark:divide-[#2c2c2c]/60">
           <div class="flex items-center justify-between gap-3 px-3 py-2.5">
             <div class="flex-1 pr-3">
-              <label for="edit-show-on-home" class="block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="showOnHomeLabel">首页展示该服务</label>
-              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showOnHomeDesc">关闭后首页不再展示该服务，API 与管理页仍然可见。</p>
+              <label for="edit-show-on-home" class="block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="showOnHomeLabel">首页展示该服务器</label>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showOnHomeDesc">关闭后首页不再展示该服务器，API 与管理页仍然可见。</p>
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="edit-show-on-home" name="show_on_home" class="sr-only peer" checked>
@@ -191,7 +227,7 @@ const customCodePlaceholder = [
           <div class="flex items-center justify-between gap-3 px-3 py-2.5">
             <div class="flex-1 pr-3">
               <label for="edit-show-tcping" class="block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="showTcpingLabel">展示 TCPing</label>
-              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showTcpingDesc">关闭后首页不再展示该服务的 TCPing 图表。</p>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showTcpingDesc">关闭后首页不再展示该服务器的 TCPing 图表。</p>
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="edit-show-tcping" name="show_tcping" class="sr-only peer" checked>
@@ -220,7 +256,7 @@ const customCodePlaceholder = [
             type="submit"
             class="flex-1 h-10 rounded-lg bg-[#171717] px-4 text-sm font-medium text-white transition-colors hover:bg-[#2a2a2a] dark:bg-[#f5f5f5] dark:text-[#171717] dark:hover:bg-[#e0e0e0]"
           >
-            <span data-translate="updateSystem">Update Service</span>
+            <span data-translate="updateSystem">Save</span>
           </button>
         </div>
       </form>
@@ -242,6 +278,8 @@ const customCodePlaceholder = [
         <p class="text-sm text-[#595959] dark:text-[#ababab]">
           <span data-translate="areYouSureYouWantToDelete">Are you sure you want to delete</span> <span class="font-medium text-[#1d1d20] dark:text-[#d4d4d4]" id="delete-system-name"></span>?
         </p>
+        <!-- Which one, when names repeat: its location and address -->
+        <p id="delete-system-meta" class="mt-1.5 hidden flex-wrap items-center gap-x-1 text-xs text-[#595959] dark:text-[#ababab]"></p>
         <p class="mt-3 flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
           <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
           <span data-translate="thisActionCannotBeUndone">This action cannot be undone.</span>
@@ -502,6 +540,32 @@ const customCodePlaceholder = [
               <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
             </label>
           </div>
+          <!-- Pages: the dashboard a page at a time (page_size; 0 keeps one list) -->
+          <div class="p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex-1">
+                <label for="page-size-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="pagesLabel">Pages</label>
+                <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="pagesDesc">Show the servers a page at a time, with a footer to turn the pages (as Beszel); visitors can pick another page size for their visit</p>
+              </div>
+              <label class="relative inline-flex shrink-0 items-center cursor-pointer">
+                <input type="checkbox" id="page-size-toggle" class="sr-only peer">
+                <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              </label>
+            </div>
+            <div id="page-size-row" class="mt-3 hidden items-center gap-3">
+              <label for="page-size-select" class="text-sm text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="pageSizeLabel">Servers per page</label>
+              <select id="page-size-select" class="toolbar-control w-24 px-2 text-sm text-[#1d1d20] dark:text-[#f5f5f5]">
+                <option value="10">10</option>
+                <option value="15">15</option>
+                <option value="20" selected>20</option>
+                <option value="30">30</option>
+                <option value="40">40</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+              </select>
+            </div>
+          </div>
           </div>
         </section>
 
@@ -712,6 +776,7 @@ const customCodePlaceholder = [
 <div
   id="admin-root"
   data-api-base={apiBase}
+  data-flags={JSON.stringify(localFlags)}
   style="display: none;"
 ></div>
 
@@ -1185,15 +1250,45 @@ const customCodePlaceholder = [
   const closeAddBtn = document.getElementById('close-add-modal-btn');
   const cancelAddBtn = document.getElementById('cancel-add-btn');
 
+  // The dialog's second step, once the server is added: installing its
+  // client (see the markup). addedSystemId is the server it is about.
+  const addInstall = document.getElementById('add-system-install');
+  let addedSystemId = null;
+  function showAddDialogStep(system) {
+    const form = document.getElementById('add-system-form');
+    const title = document.getElementById('add-new-system-title');
+    addedSystemId = system ? String(system.id) : null;
+    form?.classList.toggle('hidden', !!system);
+    addInstall?.classList.toggle('hidden', !system);
+    if (title) {
+      // The step's own title, which a language switch must not undo.
+      if (system) title.removeAttribute('data-translate');
+      else title.setAttribute('data-translate', 'addNewSystem');
+      title.textContent = adminT(system ? 'installClientTitle' : 'addNewSystem');
+    }
+    if (!system || !addInstall) return;
+    addInstall.dataset.system = JSON.stringify({ id: system.id, secret: system.secret || '' });
+    const desc = document.getElementById('add-install-desc');
+    if (desc) desc.textContent = adminT('installClientDesc').replace('{name}', system.name || '');
+    const command = document.getElementById('add-install-command');
+    if (command) command.textContent = linuxInstallCommand(system);
+    document.getElementById('copy-install-linux-btn')?.focus();
+  }
+
   function openAddModal() {
     if (addModal) {
       const form = document.getElementById('add-system-form');
       if (form) form.reset();
+      showAddDialogStep(null);
       openModalWithAnimation(addModal);
     }
   }
 
   function closeAddModal() {
+    // Closed after adding a server: show its row, where the dashboard will
+    // list it once the client reports.
+    const added = addedSystemId;
+    addedSystemId = null;
     closeModalWithAnimation(addModal, () => {
       const form = document.getElementById('add-system-form');
       if (form) {
@@ -1206,8 +1301,36 @@ const customCodePlaceholder = [
           messageEl.className = 'hidden text-sm';
         }
       }
+      showAddDialogStep(null);
+      const row = added && document.querySelector(`#systems-list > .draggable-item[data-system-id="${cssEscape(added)}"]`);
+      if (row) {
+        const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        row.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' });
+        if (!still && row.animate) {
+          row.animate([{ backgroundColor: 'rgba(250, 204, 21, 0.18)' }, { backgroundColor: 'rgba(250, 204, 21, 0)' }], { duration: 2000, easing: 'ease-out' });
+        }
+      }
     });
   }
+
+  // The step's copy buttons: the command shown is the one copied.
+  addInstall?.querySelectorAll('button[data-kind]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      let system = {};
+      try { system = JSON.parse(addInstall.dataset.system || '{}'); } catch (_) {}
+      const text = btn.dataset.kind === 'windows' ? windowsInstallCommand(system) : linuxInstallCommand(system);
+      const command = document.getElementById('add-install-command');
+      if (command) command.textContent = text;
+      const ok = await copyToClipboard(text);
+      const label = btn.querySelector('[data-copy-label]');
+      if (!label) return;
+      const key = label.getAttribute('data-translate');
+      label.textContent = adminT(ok ? 'copied' : 'copyFailed');
+      clearTimeout(btn._labelTimer);
+      btn._labelTimer = setTimeout(() => { label.textContent = adminT(key); }, 1500);
+    });
+  });
+  document.getElementById('add-install-done-btn')?.addEventListener('click', closeAddModal);
 
   addBtn?.addEventListener('click', openAddModal);
   closeAddBtn?.addEventListener('click', closeAddModal);
@@ -1293,6 +1416,15 @@ const customCodePlaceholder = [
       pendingDeleteId = systemId;
       pendingDeleteName = systemName;
       document.getElementById('delete-system-name').textContent = `"${systemName}"`;
+      const meta = document.getElementById('delete-system-meta');
+      const cached = currentData.get(String(systemId));
+      const system = cached && cached.original;
+      if (meta) {
+        const parts = system ? [adminLocationHTML(system.location), escapeHtml(system.ipv4 || system.ipv6 || '')].filter(Boolean) : [];
+        meta.innerHTML = parts.join('<span aria-hidden="true">·</span>');
+        meta.classList.toggle('hidden', parts.length === 0);
+        meta.classList.toggle('flex', parts.length > 0);
+      }
       openModalWithAnimation(deleteModal);
     }
   }
@@ -1357,6 +1489,8 @@ const customCodePlaceholder = [
       total_net_in_bytes: Number(item.total_net_in_bytes || 0),
       total_net_out_bytes: Number(item.total_net_out_bytes || 0),
       cpu_model: String(item.cpu_model || ''),
+      memory_info: String(item.memory_info || ''),
+      agent_version: String(item.agent_version || ''),
       order: Number(item.order || 0),
       tags: Array.isArray(item.tags) ? item.tags : [],
       // Admin visibility toggles (absent on the wire when false: omitempty)
@@ -1394,6 +1528,8 @@ const customCodePlaceholder = [
       old.total_net_in_bytes !== new_.total_net_in_bytes ||
       old.total_net_out_bytes !== new_.total_net_out_bytes ||
       old.cpu_model !== new_.cpu_model ||
+      old.memory_info !== new_.memory_info ||
+      old.agent_version !== new_.agent_version ||
       old.order !== new_.order ||
       old.hide_on_home !== new_.hide_on_home ||
       old.hide_tcping !== new_.hide_tcping ||
@@ -1446,6 +1582,88 @@ const customCodePlaceholder = [
     return `'${String(value ?? '').replace(/'/g, `''`)}'`;
   }
 
+  // The flags the dashboard ships (public/icons), by country code: the page
+  // hands them over (data-flags), as this inline script cannot import
+  // utils/icons.ts. A code without one is shown alone.
+  const LOCAL_FLAGS = (() => { try { return JSON.parse(root?.dataset.flags || '{}'); } catch (_) { return {}; } })();
+  // Location as the dashboard's table shows it: the flag and the two-letter
+  // code (UK and EL are GB and GR), anything else as entered.
+  function adminLocationHTML(location) {
+    const raw = String(location || '').trim();
+    if (!raw) return '';
+    if (!/^[A-Za-z]{2}$/.test(raw)) return `<span class="min-w-0 truncate">${escapeHtml(raw)}</span>`;
+    let code = raw.toUpperCase();
+    if (code === 'UK') code = 'GB';
+    else if (code === 'EL') code = 'GR';
+    const slug = LOCAL_FLAGS[code];
+    const flag = typeof slug === 'string' && /^[a-z0-9-]+$/.test(slug)
+      ? `<img class="h-3.5 w-3.5 shrink-0" src="/icons/emojione-v1/flag-for-${slug}.svg" alt="" aria-hidden="true" decoding="async">` : '';
+    return `<span class="inline-flex items-center gap-1">${flag}${code}</span>`;
+  }
+
+  // A server whose client has never reported (added, not yet installed): it
+  // has no OS, CPU or memory to show. Beszel calls the state pending.
+  const isAwaitingClient = (s) => !s.os && !s.cpu_model && !s.memory_info;
+  // The newest client version among the servers that report. A client
+  // older than it is marked for an update (the agents of this release are
+  // what the install command fetches).
+  const versionCompare = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true });
+  let newestAgentVersion = '';
+  function noteNewestAgent(list) {
+    newestAgentVersion = (list || [])
+      .filter((s) => s && !isAwaitingClient(s) && /^\d+(\.\d+)+$/.test(String(s.agent_version || '')))
+      .map((s) => String(s.agent_version))
+      .sort(versionCompare)
+      .pop() || '';
+  }
+
+  // The line under a server's name: its location, the kind of machine, the
+  // OS and the client. Phones leave out the kind and an up-to-date client.
+  // Each item carries the dot before it, so a wrapped line never ends on one.
+  // A client that needs attention (an update, or none has reported yet) is
+  // a line of its own, in amber.
+  function adminSublineHTML(s) {
+    const items = [];
+    let status = '';
+    const location = adminLocationHTML(s.location);
+    if (location) items.push({ html: location, phone: true });
+    if (s.virtualization_type) items.push({ html: escapeHtml(s.virtualization_type), phone: false });
+    if (s.os) items.push({ html: escapeHtml(s.os), phone: true });
+    if (isAwaitingClient(s)) {
+      status = adminT('agentPending');
+    } else if (s.agent_version) {
+      if (newestAgentVersion && versionCompare(s.agent_version, newestAgentVersion) < 0) {
+        status = `${adminT('agentLabel')} ${escapeHtml(s.agent_version)} · ${adminT('agentUpdate')}`;
+      } else {
+        items.push({ html: `${adminT('agentLabel')} ${escapeHtml(s.agent_version)}`, phone: false });
+      }
+    }
+    const statusLine = status ? `<span class="basis-full text-[#b45309] dark:text-[#fbbf24]">${status}</span>` : '';
+    if (!items.length) return statusLine || '<span class="invisible">-</span>';
+    let first = { all: true, phone: true };
+    return items.map((item) => {
+      const dotAll = first.all ? '' : '· ';
+      const dotPhone = first.phone ? '' : '· ';
+      first.all = false;
+      if (item.phone) first.phone = false;
+      // the dot can differ on phones, where an item before it may be left out
+      return item.phone
+        ? `<span class="inline-flex items-center gap-1 whitespace-nowrap"><span class="hidden sm:inline" aria-hidden="true">${dotAll}</span><span class="sm:hidden" aria-hidden="true">${dotPhone}</span>${item.html}</span>`
+        : `<span class="hidden sm:inline-flex items-center gap-1 whitespace-nowrap"><span aria-hidden="true">${dotAll}</span>${item.html}</span>`;
+    }).join('') + statusLine;
+  }
+  const adminSublineKey = (s) => [s.location, s.virtualization_type, s.os, s.agent_version, isAwaitingClient(s), newestAgentVersion, adminLang()].join('|');
+  function refreshAdminSubline(row, s) {
+    const line = row.querySelector('.admin-subline');
+    if (!line) return;
+    const key = adminSublineKey(s);
+    if (line.dataset.key === key) return;
+    line.dataset.key = key;
+    line.innerHTML = adminSublineHTML(s);
+  }
+  // A long name breaks before a bracket rather than inside a price ("V.PS(€94.98/5Y)").
+  const adminNameHTML = (name) => escapeHtml(name || '').replace(/\(/g, '<wbr>(');
+
   function renderSystemItem(system, index) {
     return `
         <div class="draggable-item relative px-3 sm:px-4 py-3 hover:bg-[#f5f5f5] dark:hover:bg-[#222]/50" data-system-id="${escapeHtmlAttr(system.id || '')}" data-index="${index}">
@@ -1472,13 +1690,9 @@ const customCodePlaceholder = [
             <div class="flex-1 min-w-0 flex items-center gap-3">
               <!-- Left: Name -->
               <div class="admin-name-col flex flex-col gap-1 flex-shrink-0 lg:w-[250px]" style="flex-shrink: 1; min-width: 0; max-width: 250px;">
-                <span class="system-name text-sm font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" style="word-break: break-word; overflow-wrap: break-word; display: block;">${escapeHtml(system.name || '')}</span>
-                <!-- Other Info (Virtualization Type, OS) -->
-                <div class="flex flex-wrap gap-2 text-xs text-[#595959] dark:text-[#ababab] min-h-[16px]">
-                  ${system.virtualization_type ? `<span class="system-virtualization-type">${escapeHtml(system.virtualization_type)}</span>` : ''}
-                  ${system.os ? `<span class="system-os">• ${escapeHtml(system.os)}</span>` : ''}
-                  ${!system.virtualization_type && !system.os ? '<span class="invisible">-</span>' : ''}
-                </div>
+                <span class="system-name text-sm font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" style="word-break: break-word; overflow-wrap: break-word; display: block;">${adminNameHTML(system.name)}</span>
+                <!-- Location, kind of machine, OS, client (adminSublineHTML) -->
+                <div class="admin-subline flex flex-wrap items-center gap-x-1 gap-y-0.5 text-xs text-[#595959] dark:text-[#ababab] min-h-[16px]" data-key="${escapeHtmlAttr(adminSublineKey(system))}">${adminSublineHTML(system)}</div>
               </div>
               
               ${(system.ipv4 || system.ipv6) ? `
@@ -1563,7 +1777,7 @@ const customCodePlaceholder = [
                 (system.hide_on_home === true ? '1' : '0') + '|' +
                 (system.hide_tcping === true ? '1' : '0')
               )}'
-              title="${adminT('editSystem')}" data-title-en="Edit Service" data-title-zh="编辑服务"
+              title="${adminT('editSystem')}" data-title-en="Edit Server" data-title-zh="编辑服务器"
               aria-label="${adminT('editSystem')}"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1607,7 +1821,7 @@ const customCodePlaceholder = [
               class="delete-btn shrink-0 rounded-lg p-2 text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 self-center"
               data-system-id="${escapeHtmlAttr(system.id || '')}"
               data-system-name="${escapeHtmlAttr(system.name || '')}"
-              title="${adminT('deleteSystem')}" data-title-en="Delete Service" data-title-zh="删除服务"
+              title="${adminT('deleteSystem')}" data-title-en="Delete Server" data-title-zh="删除服务器"
               aria-label="${adminT('deleteSystem')}"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1643,80 +1857,14 @@ const customCodePlaceholder = [
     if (oldItemNormalized.name !== newItemNormalized.name) {
       const nameSpan = itemElement.querySelector('.system-name');
       if (nameSpan) {
-        nameSpan.textContent = item.name;
+        nameSpan.innerHTML = adminNameHTML(item.name);
       }
     }
     
-    // Update location and OS - handle creation/deletion
-    // Find the info container (the div containing location and OS)
-    // It's the second child div inside the flex-col container
-    const nameContainer = itemElement.querySelector('.flex.flex-col.gap-1.flex-shrink-0');
-    const infoContainer = nameContainer?.querySelector('.flex.flex-wrap.gap-2.text-xs');
-    if (!infoContainer) {
-      // If container doesn't exist, we can't update - this shouldn't happen
-    } else {
-      // Update virtualization type (replacing location)
-      if (oldItemNormalized.virtualization_type !== newItemNormalized.virtualization_type) {
-        let virtualizationSpan = itemElement.querySelector('.system-virtualization-type');
-        if (item.virtualization_type) {
-          // Virtualization type exists - update or create
-          if (virtualizationSpan) {
-            virtualizationSpan.textContent = item.virtualization_type;
-          } else {
-            // Create new virtualization type span
-            virtualizationSpan = document.createElement('span');
-            virtualizationSpan.className = 'system-virtualization-type';
-            virtualizationSpan.textContent = item.virtualization_type;
-            // Insert before OS if it exists, otherwise before invisible placeholder or at start
-            const osSpan = infoContainer.querySelector('.system-os');
-            const placeholder = infoContainer.querySelector('.invisible');
-            if (osSpan) {
-              infoContainer.insertBefore(virtualizationSpan, osSpan);
-            } else if (placeholder) {
-              infoContainer.insertBefore(virtualizationSpan, placeholder);
-            } else {
-              infoContainer.appendChild(virtualizationSpan);
-            }
-          }
-        } else {
-          // Virtualization type removed - delete span
-          if (virtualizationSpan) {
-            virtualizationSpan.remove();
-          }
-        }
-      }
-      
-      // Update OS
-      if (oldItemNormalized.os !== newItemNormalized.os) {
-        let osSpan = itemElement.querySelector('.system-os');
-        if (item.os) {
-          // OS exists - update or create
-          if (osSpan) {
-            osSpan.textContent = `• ${item.os}`;
-          } else {
-            // Create new OS span
-            osSpan = document.createElement('span');
-            osSpan.className = 'system-os';
-            osSpan.textContent = `• ${item.os}`;
-            // Insert after virtualization type if it exists, otherwise before invisible placeholder or at start
-            const virtualizationSpan = infoContainer.querySelector('.system-virtualization-type');
-            const placeholder = infoContainer.querySelector('.invisible');
-            if (virtualizationSpan) {
-              virtualizationSpan.insertAdjacentElement('afterend', osSpan);
-            } else if (placeholder) {
-              infoContainer.insertBefore(osSpan, placeholder);
-            } else {
-              infoContainer.appendChild(osSpan);
-            }
-          }
-        } else {
-          // OS removed - delete span
-          if (osSpan) {
-            osSpan.remove();
-          }
-        }
-      }
-      
+    // The line under the name (location, kind, OS, client): drawn again when
+    // any of it changed, or the newest client among the servers did.
+    refreshAdminSubline(itemElement, item);
+    {
       // Update CPU brand icon in the background (absolute positioned, centered)
       // Only update if CPU model actually changed to avoid unnecessary icon reloading
       if (oldItemNormalized.cpu_model !== newItemNormalized.cpu_model) {
@@ -1757,34 +1905,6 @@ const customCodePlaceholder = [
         }
       }
       
-      // Update placeholder visibility
-      // Find info container by looking for the container with virtualization type or OS
-      // Reuse the infoContainer from above if available, otherwise find it again
-      let infoContainerForPlaceholder = infoContainer;
-      if (!infoContainerForPlaceholder) {
-        const nameContainerForPlaceholder = itemElement.querySelector('.flex.flex-col.gap-1.flex-shrink-0');
-        infoContainerForPlaceholder = nameContainerForPlaceholder ? nameContainerForPlaceholder.querySelector('.flex.flex-wrap.gap-2.text-xs') : null;
-      }
-      if (infoContainerForPlaceholder) {
-        const placeholder = infoContainerForPlaceholder.querySelector('.invisible');
-        const hasVirtualizationType = itemElement.querySelector('.system-virtualization-type');
-        const hasOS = itemElement.querySelector('.system-os');
-        
-        if (hasVirtualizationType || hasOS) {
-          // Has content - remove placeholder if exists
-          if (placeholder) {
-            placeholder.remove();
-          }
-        } else {
-          // No content - add placeholder if doesn't exist
-          if (!placeholder) {
-            const placeholderSpan = document.createElement('span');
-            placeholderSpan.className = 'invisible';
-            placeholderSpan.textContent = '-';
-            infoContainerForPlaceholder.appendChild(placeholderSpan);
-          }
-        }
-      }
     }
     
     // Update IPv4 - handle creation/deletion of IP rows
@@ -2244,6 +2364,18 @@ const customCodePlaceholder = [
       return;
     }
 
+    // The newest client among the servers decides which rows say an update
+    // is due: when it moves, every row's line is drawn again.
+    const newestBefore = newestAgentVersion;
+    noteNewestAgent(data);
+    if (newestAgentVersion !== newestBefore && currentData.size > 0) {
+      const byId = new Map(data.map((s) => [String(s.id), s]));
+      container.querySelectorAll(':scope > .draggable-item').forEach((row) => {
+        const s = byId.get(row.dataset.systemId);
+        if (s) refreshAdminSubline(row, s);
+      });
+    }
+
     // Create new data map with normalized items
     const newData = new Map();
     data.forEach(item => {
@@ -2451,41 +2583,59 @@ const customCodePlaceholder = [
     currentData = newData;
   }
 
-  // Setup event handlers for system items (copy buttons, edit, delete)
-  function setupSystemEventHandlers(container) {
-    // Copy to clipboard helper function with fallback
-    async function copyToClipboard(text) {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        try {
-          await navigator.clipboard.writeText(text);
-          return true;
-        } catch (err) {
-          // Clipboard API failed, trying fallback
-        }
-      }
-      
+  // Copy to clipboard, with the textarea fallback where the Clipboard API
+  // is refused.
+  async function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
       try {
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        
-        const successful = document.execCommand('copy');
-        document.body.removeChild(textArea);
-        
-        if (successful) {
-          return true;
-        } else {
-          throw new Error('execCommand copy failed');
-        }
+        await navigator.clipboard.writeText(text);
+        return true;
       } catch (err) {
-        return false;
+        // Clipboard API failed, trying fallback
       }
     }
+    
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      if (successful) {
+        return true;
+      } else {
+        throw new Error('execCommand copy failed');
+      }
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // The install commands for a server (its id and secret, this site).
+  function linuxInstallCommand(system) {
+    const secret = system.secret || '';
+    let command = `curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id ${shellQuote(system.id)} --server ${shellQuote(window.location.origin)}`;
+    if (secret) command += ` --secret ${shellQuote(secret)}`;
+    return command;
+  }
+  function windowsInstallCommand(system) {
+    const secret = system.secret || '';
+    // Backticks keep PowerShell from expanding $env: too early
+    let command = `powershell -ExecutionPolicy Bypass -Command "& { \`$env:AgentId=${powershellQuote(system.id)}; \`$env:ServerBase=${powershellQuote(window.location.origin)}`;
+    if (secret) command += `; \`$env:Secret=${powershellQuote(secret)}`;
+    command += `; irm https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.ps1 | iex }"`;
+    return command;
+  }
+
+  // Setup event handlers for system items (copy buttons, edit, delete)
+  function setupSystemEventHandlers(container) {
 
     // Setup copy IP buttons
     container.querySelectorAll('.copy-ip-btn').forEach(btn => {
@@ -2563,17 +2713,9 @@ const customCodePlaceholder = [
       newBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const systemId = newBtn.dataset.systemId;
-        const serverUrl = window.location.origin;
-        
-        // Get system secret from the system data
+        // The server's secret from the row's data
         const system = JSON.parse(newBtn.closest('.draggable-item').querySelector('.edit-btn').dataset.system);
-        const secret = system.secret || '';
-        
-        // Build command with secret if available
-        let command = `curl -sSL https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.sh | sudo bash -s -- --id ${shellQuote(systemId)} --server ${shellQuote(serverUrl)}`;
-        if (secret) {
-          command += ` --secret ${shellQuote(secret)}`;
-        }
+        const command = linuxInstallCommand({ ...system, id: systemId });
         
         const linuxIcon = newBtn.querySelector('.linux-icon');
         const checkIcon = newBtn.querySelector('.check-icon');
@@ -2612,19 +2754,9 @@ const customCodePlaceholder = [
       newBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const systemId = newBtn.dataset.systemId;
-        const serverUrl = window.location.origin;
-        
-        // Get system secret from the system data
+        // The server's secret from the row's data
         const system = JSON.parse(newBtn.closest('.draggable-item').querySelector('.edit-btn').dataset.system);
-        const secret = system.secret || '';
-        
-        // Build command with secret if available
-        // Use backtick to escape $env: so PowerShell doesn't expand it prematurely
-        let command = `powershell -ExecutionPolicy Bypass -Command "& { \`$env:AgentId=${powershellQuote(systemId)}; \`$env:ServerBase=${powershellQuote(serverUrl)}`;
-        if (secret) {
-          command += `; \`$env:Secret=${powershellQuote(secret)}`;
-        }
-        command += `; irm https://raw.githubusercontent.com/xhhcn/Pulse/main/client/install.ps1 | iex }"`;
+        const command = windowsInstallCommand({ ...system, id: systemId });
         
         const windowsIcon = newBtn.querySelector('.windows-icon');
         const checkIcon = newBtn.querySelector('.check-icon');
@@ -2700,6 +2832,7 @@ const customCodePlaceholder = [
       // render through the serialiser so concurrent loadSystems + SSE
       // updates cannot interleave DOM mutations.
       await renderSystemsSerialized(data);
+      return data;
     } catch (err) {
       console.error('Failed to load systems:', err);
       // The list DOM is replaced below; forget the diff cache too, otherwise
@@ -3043,8 +3176,13 @@ const customCodePlaceholder = [
 
         if (res.ok) {
           addForm.reset();
-          closeAddModal();
-          await loadSystems();
+          // The list as loaded (a render already running may still hold it
+          // back from the rows): the new server, with its secret.
+          const list = await loadSystems();
+          const added = Array.isArray(list) && list.find((s) => String(s.id) === String(data.id));
+          // The next step: installing the client, with the commands for it.
+          if (added) showAddDialogStep(added);
+          else closeAddModal();
         } else {
           const errorText = await res.text();
           throw new Error(errorText || `HTTP ${res.status}`);
@@ -3614,6 +3752,7 @@ const customCodePlaceholder = [
         if (cardLayoutToggle) {
           cardLayoutToggle.checked = config.card_layout === true;
         }
+        showPageSize(Number(config.page_size) || 0);
         return true;
       }
     } catch (err) {
@@ -4145,6 +4284,27 @@ const customCodePlaceholder = [
     }
   });
 
+  // Pages (分页显示): the switch, and with it on, the page size. A size saved
+  // that is not offered (another client wrote it) is offered as it is.
+  function syncPageSizeRow() {
+    const on = !!document.getElementById('page-size-toggle')?.checked;
+    const row = document.getElementById('page-size-row');
+    row?.classList.toggle('hidden', !on);
+    row?.classList.toggle('flex', on);
+  }
+  function showPageSize(size) {
+    const toggle = document.getElementById('page-size-toggle');
+    const select = document.getElementById('page-size-select');
+    if (toggle) toggle.checked = size > 0;
+    if (select) {
+      const value = String(size > 0 ? size : 20);
+      if (![...select.options].some((o) => o.value === value)) select.add(new Option(value, value));
+      select.value = value;
+    }
+    syncPageSizeRow();
+  }
+  document.getElementById('page-size-toggle')?.addEventListener('change', syncPageSizeRow);
+
   // Handle navbar config form submission
   navbarConfigForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -4216,6 +4376,8 @@ const customCodePlaceholder = [
     const showGlassToggle = document.getElementById('show-glass-toggle');
     const stickyHeaderToggle = document.getElementById('sticky-header-toggle');
     const cardLayoutToggle = document.getElementById('card-layout-toggle');
+    const pageSizeToggle = document.getElementById('page-size-toggle');
+    const pageSizeSelect = document.getElementById('page-size-select');
     const data = {
       text: formData.get('text')?.trim() || 'Pulse',
       logo: formData.get('logo')?.trim() || '',
@@ -4226,6 +4388,7 @@ const customCodePlaceholder = [
       show_glass: showGlassToggle?.checked || false,
       sticky_header: stickyHeaderToggle?.checked || false,
       card_layout: cardLayoutToggle?.checked || false,
+      page_size: pageSizeToggle?.checked ? (parseInt(pageSizeSelect?.value || '', 10) || 20) : 0,
     };
 
     // Set button to saving state
@@ -4654,9 +4817,9 @@ const customCodePlaceholder = [
 
   // Translation functionality for AdminDashboard
   const adminTranslations = {
-    'systemList': { en: 'Service List', zh: '服务列表' },
-    'systemListDesc': { en: 'Drag a row by its handle to reorder; the dashboard shows the services in this order.', zh: '拖动左侧把手调整顺序，首页按此顺序显示服务。' },
-    'addSystem': { en: 'Add Service', zh: '添加服务' },
+    'systemList': { en: 'Server List', zh: '服务器列表' },
+    'systemListDesc': { en: 'Drag a row by its handle to reorder; the dashboard shows the servers in this order.', zh: '拖动左侧把手调整顺序，首页按此顺序显示。' },
+    'addSystem': { en: 'Add Server', zh: '添加服务器' },
     'settingsMenu': { en: 'Settings', zh: '设置' },
     'downloadBackup': { en: 'Download Backup', zh: '下载备份' },
     'logout': { en: 'Log Out', zh: '退出登录' },
@@ -4678,31 +4841,37 @@ const customCodePlaceholder = [
     'targetFormatDesc': { en: 'Format: name and address (e.g., Google DNS, 8.8.8.8:53)', zh: '格式：名称和地址（例如：Google DNS, 8.8.8.8:53）' },
     'targetName': { en: 'Target Name', zh: '目标名称' },
     'save': { en: 'Save', zh: '保存' },
-    'loadingSystems': { en: 'Loading services...', zh: '加载服务中...' },
-    'addNewSystem': { en: 'Add New Service', zh: '添加新服务' },
-    'editSystem': { en: 'Edit Service', zh: '编辑服务' },
+    'loadingSystems': { en: 'Loading servers...', zh: '加载服务器中...' },
+    'addNewSystem': { en: 'Add New Server', zh: '添加新服务器' },
+    'editSystem': { en: 'Edit Server', zh: '编辑服务器' },
     'trafficIn': { en: 'In:', zh: '入站:' },
     'trafficOut': { en: 'Out:', zh: '出站:' },
-    'deleteSystem': { en: 'Delete Service', zh: '删除服务' },
-    'systemName': { en: 'Service Name', zh: '服务名称' },
-    'displayNameForThisSystem': { en: 'Display name for this service', zh: '此服务的显示名称' },
+    'deleteSystem': { en: 'Delete Server', zh: '删除服务器' },
+    'systemName': { en: 'Server Name', zh: '服务器名称' },
+    'displayNameForThisSystem': { en: 'Display name for this server', zh: '此服务器的显示名称' },
     'myServer': { en: 'My Server', zh: '我的服务器' },
     'tags': { en: 'Tags', zh: '标签' },
     'tagsCommaSeparated': { en: '(comma-separated)', zh: '（逗号分隔）' },
-    'showOnHomeLabel': { en: 'Show on homepage', zh: '首页展示该服务' },
-    'showOnHomeDesc': { en: 'When off, the homepage hides this service; the API and admin page still list it.', zh: '关闭后首页不再展示该服务，API 与管理页仍然可见。' },
+    'showOnHomeLabel': { en: 'Show on homepage', zh: '首页展示该服务器' },
+    'showOnHomeDesc': { en: 'When off, the homepage hides this server; the API and admin page still list it.', zh: '关闭后首页不再展示该服务器，API 与管理页仍然可见。' },
     'showTcpingLabel': { en: 'Show TCPing', zh: '展示 TCPing' },
-    'showTcpingDesc': { en: 'When off, the homepage hides the TCPing chart for this service.', zh: '关闭后首页不再展示该服务的 TCPing 图表。' },
+    'showTcpingDesc': { en: 'When off, the homepage hides the TCPing chart for this server.', zh: '关闭后首页不再展示该服务器的 TCPing 图表。' },
     'tagsHint': { en: 'Enter tags separated by commas (e.g., Python, traffic:in, speed:in, spr:VIP, spy:staff, spb:pro). Prefix with spr:/spy:/spb: for a red/amber/blue gradient badge.', zh: '输入标签，用逗号分隔（例如：Python, traffic:in, speed:in, spr:VIP, spy:staff, spb:pro）。前缀 spr:/spy:/spb: 分别表示红色 / 金色 / 蓝色起始的渐变彩色徽章。' },
     'cancel': { en: 'Cancel', zh: '取消' },
-    'updateSystem': { en: 'Update Service', zh: '更新服务' },
+    'updateSystem': { en: 'Save', zh: '保存' },
     'updating': { en: 'Updating...', zh: '更新中...' },
     'targetAddressMissing': { en: 'Enter an address for each target that has a name.', zh: '有名称的目标请填写地址。' },
     'settingsLoadFailed': { en: 'Could not load the current settings. Close this window and try again; saving now would overwrite them.', zh: '无法读取当前设置。请关闭窗口后重试，现在保存会覆盖原有设置。' },
     'saving': { en: 'Saving...', zh: '保存中...' },
     'deleting': { en: 'Deleting...', zh: '删除中...' },
-    'noSystems': { en: 'No services found', zh: '未找到服务' },
+    'noSystems': { en: 'No servers found', zh: '未找到服务器' },
     'areYouSureYouWantToDelete': { en: 'Are you sure you want to delete', zh: '您确定要删除' },
+    'installClientTitle': { en: 'Install the client', zh: '安装客户端' },
+    'installClientDesc': { en: 'Run this as root on “{name}”. The server appears on the dashboard once its client reports.', zh: '在「{name}」上以 root 运行下面的命令，客户端上报后即会显示在首页。' },
+    'done': { en: 'Done', zh: '完成' },
+    'agentLabel': { en: 'Client', zh: '客户端' },
+    'agentUpdate': { en: 'needs update', zh: '需更新' },
+    'agentPending': { en: 'Waiting for the client', zh: '等待接入' },
     'thisActionCannotBeUndone': { en: 'This action cannot be undone.', zh: '此操作无法撤销。' },
     'delete': { en: 'Delete', zh: '删除' },
     'remove': { en: 'Remove', zh: '移除' },
@@ -4728,18 +4897,18 @@ const customCodePlaceholder = [
     'copyWindowsCommand': { en: 'Copy Windows install command', zh: '复制 Windows 安装命令' },
     'copied': { en: 'Copied!', zh: '已复制！' },
     'copyFailed': { en: 'Copy failed', zh: '复制失败' },
-    'addServiceFailed': { en: 'Failed to add service: ', zh: '添加服务失败：' },
-    'loadServicesFailed': { en: 'Could not load the existing services, please try again: ', zh: '无法读取现有服务，请重试：' },
+    'addServiceFailed': { en: 'Failed to add server: ', zh: '添加服务器失败：' },
+    'loadServicesFailed': { en: 'Could not load the existing servers, please try again: ', zh: '无法读取现有服务器，请重试：' },
     'savePrivacyFailed': { en: 'Failed to save privacy settings: ', zh: '保存隐私设置失败：' },
     'saveCustomizationFailed': { en: 'Failed to save customization settings: ', zh: '保存自定义设置失败：' },
     'saveFailed': { en: 'Failed to save: ', zh: '保存失败：' },
     'errorPrefix': { en: 'Error: ', zh: '错误：' },
     'duplicateTargetAddress': { en: 'Duplicate target address: ', zh: '目标地址重复：' },
-    'loadServicesError': { en: 'Failed to load services', zh: '加载服务失败' },
+    'loadServicesError': { en: 'Failed to load servers', zh: '加载服务器失败' },
     'unknownError': { en: 'Unknown error', zh: '未知错误' },
-    'deleteServiceFailed': { en: 'Failed to delete service: ', zh: '删除服务失败：' },
-    'updateServiceFailed': { en: 'Failed to update service: ', zh: '更新服务失败：' },
-    'serviceNameRequired': { en: 'Service name is required', zh: '服务名称不能为空' },
+    'deleteServiceFailed': { en: 'Failed to delete server: ', zh: '删除服务器失败：' },
+    'updateServiceFailed': { en: 'Failed to update server: ', zh: '更新服务器失败：' },
+    'serviceNameRequired': { en: 'Server name is required', zh: '服务器名称不能为空' },
     'shareHoursInvalid': { en: 'Please enter a valid number of hours (1-720, max 30 days)', zh: '请输入有效的小时数（1-720，最长 30 天）' },
     'shareExpires': { en: 'Expires: ', zh: '过期时间：' },
     'shareExpired': { en: 'Expired', zh: '已过期' },
@@ -4780,6 +4949,9 @@ const customCodePlaceholder = [
     'stickyHeaderLabel': { en: 'Sticky Table Header', zh: '表头吸顶' },
     'stickyHeaderDesc': { en: 'Keep the column names at the top of the window while a long list scrolls', zh: '滚动长列表时，列名固定在页面顶部' },
     'cardLayoutLabel': { en: 'Card Layout', zh: '卡片布局' },
+    'pagesLabel': { en: 'Pages', zh: '分页显示' },
+    'pagesDesc': { en: 'Show the servers a page at a time, with a footer to turn the pages (as Beszel); visitors can pick another page size for their visit', zh: '服务器按页显示，页脚可翻页（同 Beszel）；访客可在页脚临时调整每页数量' },
+    'pageSizeLabel': { en: 'Servers per page', zh: '每页显示' },
     'cardLayoutDesc': { en: 'Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu for their visit', zh: '用卡片代替表格显示每台服务器，电脑和手机都一样；访客仍可在视图菜单中临时切换' },
   };
 
@@ -4813,6 +4985,11 @@ const customCodePlaceholder = [
     document.querySelectorAll('.system-total-net-in, .system-total-net-out').forEach((el) => {
       const key = el.classList.contains('system-total-net-in') ? 'trafficIn' : 'trafficOut';
       el.textContent = el.textContent.replace(/^\S+:/, adminT(key));
+    });
+    // The lines under the names (客户端 / 需更新 / 等待接入)
+    document.querySelectorAll('#systems-list > .draggable-item').forEach((row) => {
+      const cached = currentData.get(row.dataset.systemId);
+      if (cached && cached.original) refreshAdminSubline(row, cached.original);
     });
     
     // Update all elements with data-translate attribute

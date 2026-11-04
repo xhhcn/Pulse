@@ -5,14 +5,14 @@ import Icon from './Icon.astro';
 <div id="system-table-header-container" class="mb-3 sm:mb-4 flex flex-wrap items-end justify-between gap-x-5 gap-y-3">
   <div id="system-table-header-text" class="px-2 sm:px-1">
     <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-      <h1 id="all-systems-title" class="text-[1.4rem] sm:text-2xl font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5] leading-none sm:leading-none">All Services</h1>
+      <h1 id="all-systems-title" class="text-[1.4rem] sm:text-2xl font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5] leading-none sm:leading-none">All Servers</h1>
       <!-- Live summary (SystemTable fills it from the same list as the rows).
            Until then two invisible chips of a usual width hold its place,
            so nothing below moves when the real ones arrive (on phones they
            take a line of their own under the title). -->
-      <p id="systems-summary" class="invisible flex flex-wrap items-center gap-1.5 text-xs font-medium leading-none"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1">000 services</span><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1"><span class="h-1.5 w-1.5 rounded-full"></span>000 online</span></p>
+      <p id="systems-summary" class="invisible flex flex-wrap items-center gap-1.5 text-xs font-medium leading-none"><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1">000 servers</span><span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1"><span class="h-1.5 w-1.5 rounded-full"></span>000 online</span></p>
     </div>
-    <p id="all-systems-desc" class="text-sm text-[#595959] dark:text-[#ababab]">Updated in real time. Click on a service to view information.</p>
+    <p id="all-systems-desc" class="text-sm text-[#595959] dark:text-[#ababab] [text-wrap:pretty]">Updated in real time. Click on a server to view information.</p>
   </div>
   <!-- Filter and view menu, as in Beszel: one height, radius, border and
        ground for both; the menu sorts by any column (also a click on a column
@@ -186,8 +186,8 @@ import Icon from './Icon.astro';
   
   // Translation map for this component
   const translations = {
-    'allSystems': { en: 'All Services', zh: '所有服务' },
-    'updatedInRealTime': { en: 'Updated in real time. Click on a service to view information.', zh: '实时更新，点击服务查看详细信息。' },
+    'allSystems': { en: 'All Servers', zh: '所有服务器' },
+    'updatedInRealTime': { en: 'Updated in real time. Click on a server to view information.', zh: '实时更新，点击服务器查看详细信息。' },
     'filter': { en: 'Filter...', zh: '筛选...' },
     'viewOptions': { en: 'View options', zh: '视图选项' },
     'clear': { en: 'Clear', zh: '清除' },

@@ -91,6 +91,18 @@ const { isAdmin = false, bare = false } = Astro.props;
   // Beszel-style tooltips for every icon-only control on the page.
   import '../utils/tooltip.ts';
 
+  // The room the root keeps for a scrollbar (scrollbar-gutter), which the
+  // glass wallpaper fades into (global.css): what the page is narrower than
+  // the window; 0 where scrollbars overlay the page (phones, macOS).
+  {
+    const syncGutter = () => {
+      const gutter = Math.max(0, Math.round(window.innerWidth - document.documentElement.getBoundingClientRect().width));
+      document.documentElement.style.setProperty('--pulse-gutter', `${gutter}px`);
+    };
+    syncGutter();
+    window.addEventListener('resize', syncGutter);
+  }
+
   // A dashboard opened with a share link keeps it on the logo's link home:
   // without it a private dashboard sent the visitor to the login page.
   {

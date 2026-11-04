@@ -666,8 +666,14 @@ html.glass-enabled body::before {
   z-index: -1;
   pointer-events: none;
 }
+/* Where scrollbars take room, the room the root keeps for one (scrollbar-gutter
+   above) shows the page colour only: no layer can paint there. The first
+   layer fades the wallpaper into that colour over three gutter widths before
+   it, so the two meet without an edge. --pulse-gutter (NavBar) is 0 where
+   scrollbars overlay the page, and the layer is then nothing. */
 html.glass-enabled.light body::before {
   background:
+    linear-gradient(to right, rgba(238, 236, 233, 0) calc(100vw - 4 * var(--pulse-gutter, 0px)), #eeece9 calc(100vw - var(--pulse-gutter, 0px))),
     radial-gradient(48% 52% at 8% 2%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 70%),
     radial-gradient(38% 44% at 88% 22%, rgba(178, 200, 240, 0.62), rgba(178, 200, 240, 0) 70%),
     radial-gradient(36% 40% at 30% 58%, rgba(214, 196, 236, 0.45), rgba(214, 196, 236, 0) 70%),
@@ -676,6 +682,7 @@ html.glass-enabled.light body::before {
 }
 html.glass-enabled.dark body::before {
   background:
+    linear-gradient(to right, rgba(14, 15, 17, 0) calc(100vw - 4 * var(--pulse-gutter, 0px)), #0e0f11 calc(100vw - var(--pulse-gutter, 0px))),
     radial-gradient(48% 52% at 8% 2%, rgba(130, 150, 200, 0.18), rgba(130, 150, 200, 0) 70%),
     radial-gradient(38% 44% at 88% 22%, rgba(50, 90, 180, 0.3), rgba(50, 90, 180, 0) 70%),
     radial-gradient(36% 40% at 30% 58%, rgba(100, 70, 160, 0.22), rgba(100, 70, 160, 0) 70%),

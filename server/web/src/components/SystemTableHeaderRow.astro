@@ -11,7 +11,7 @@ import Icon from './Icon.astro';
   <div data-col="name" class="h-5 flex items-center gap-1">
     <button type="button" class="sort-header" data-sort="name">
       <Icon name="server" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />
-      <span data-translate="system">Service</span>
+      <span data-translate="system">Server</span>
       <span class="sort-header-arrow" aria-hidden="true"></span>
     </button>
   </div>
@@ -71,7 +71,7 @@ import Icon from './Icon.astro';
   import { getLanguage } from '../utils/i18n.ts';
 
   const translations = {
-    'system': { en: 'Service', zh: '服务' },
+    'system': { en: 'Server', zh: '服务器' },
     'time': { en: 'Uptime', zh: '运行时间' },
     'location': { en: 'Location', zh: '位置' },
     'cpu': { en: 'CPU', zh: 'CPU' },

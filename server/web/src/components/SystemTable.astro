@@ -45,6 +45,32 @@ const apiBase = apiBaseProp ?? '';
       </div>
     </div>
   </div>
+
+  <!-- Pages (自定义设置 → 分页) under the list, as Beszel's: which servers
+       this page holds, how many a page, which page, and the way to the
+       others. Hidden while the list is one page (applyPagination). -->
+  <nav id="systems-pagination" class="mt-3.5 hidden items-center gap-4 ps-1 text-sm tabular-nums lg:gap-6" aria-label="Pages">
+    <p id="pagination-range" class="hidden flex-1 text-[#595959] dark:text-[#ababab] lg:block"></p>
+    <label class="hidden items-center gap-2 sm:flex">
+      <span class="sr-only font-medium text-[#1d1d20] dark:text-[#f5f5f5] md:not-sr-only" data-translate-detail="rowsPerPage">Rows per page</span>
+      <select id="pagination-size" class="toolbar-control text-sm text-[#1d1d20] dark:text-[#f5f5f5]"></select>
+    </label>
+    <p id="pagination-page" class="whitespace-nowrap font-medium text-[#1d1d20] dark:text-[#f5f5f5]"></p>
+    <div class="ms-auto flex items-center gap-2 lg:ms-0">
+      <button type="button" class="pagination-btn toolbar-control hidden md:inline-flex" data-page="first" title="First page" data-translate-title="firstPage">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>
+      </button>
+      <button type="button" class="pagination-btn toolbar-control inline-flex" data-page="prev" title="Previous page" data-translate-title="prevPage">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      <button type="button" class="pagination-btn toolbar-control inline-flex" data-page="next" title="Next page" data-translate-title="nextPage">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+      <button type="button" class="pagination-btn toolbar-control hidden md:inline-flex" data-page="last" title="Last page" data-translate-title="lastPage">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></svg>
+      </button>
+    </div>
+  </nav>
 </div>
 
 <script>
@@ -586,7 +612,10 @@ const apiBase = apiBaseProp ?? '';
   // Filter systems function - filters systems based on search query
   function filterSystems(systems) {
     if (statusFilter !== 'all') {
-      systems = systems.filter((system) => (statusFilter === 'offline') === !!(system && system.alert));
+      // 离线 leaves out a server still waiting for its client (only 全部 has it).
+      systems = systems.filter((system) => (statusFilter === 'offline'
+        ? !!(system && system.alert) && !awaitingClient(system)
+        : !(system && system.alert)));
     }
     if (!currentFilter || currentFilter.trim() === '') {
       return systems; // No filter
@@ -810,7 +839,8 @@ const apiBase = apiBaseProp ?? '';
 
   function updateStatusCounts() {
     if (!systemsSummary) return;
-    const counts = { all: systemsSummary.total, online: systemsSummary.total - systemsSummary.offline, offline: systemsSummary.offline };
+    const { total, offline, awaiting = 0 } = systemsSummary;
+    const counts = { all: total, online: total - offline - awaiting, offline };
     document.querySelectorAll('.status-count').forEach((el) => {
       const value = String(counts[el.dataset.count] ?? '');
       if (el.textContent !== value) el.textContent = value;
@@ -854,13 +884,87 @@ const apiBase = apiBaseProp ?? '';
   document.querySelectorAll('.sort-header').forEach((btn) => {
     btn.addEventListener('click', () => setSort(btn.dataset.sort));
   });
+  const setStatusFilter = (status) => {
+    statusFilter = status || 'all';
+    updateStatusUI();
+    renderSystemsSummary();
+    rerenderForView();
+  };
   document.querySelectorAll('.status-option').forEach((btn) => {
+    btn.addEventListener('click', () => setStatusFilter(btn.dataset.status));
+  });
+  document.getElementById('systems-summary')?.addEventListener('click', (e) => {
+    if (e.target.closest('#summary-offline-chip')) setStatusFilter(statusFilter === 'offline' ? 'all' : 'offline');
+  });
+
+  // Pages (自定义设置 → 分页): the list N servers at a time, with Beszel's
+  // footer under it. The admin sets N (html.dataset.pageSize, from the site
+  // config in the page head; 0 keeps one list); a visitor can pick another
+  // size for the visit, like the other view settings. Filtering, sorting or
+  // a status choice go back to the first page (rerenderForView); a live
+  // update keeps the page, and a list that shrank under it shows its last
+  // page. The other pages' rows stay in the list, hidden: their updates cost
+  // no layout, and the name column keeps one width across the pages.
+  const PAGE_SIZES = [10, 15, 20, 30, 40, 50, 100, 200];
+  let pageIndex = 0;
+  let pageSizeChoice = null;
+  const sitePageSize = () => Math.min(200, Math.max(0, parseInt(document.documentElement.dataset.pageSize || '0', 10) || 0));
+  const currentPageSize = () => (sitePageSize() > 0 ? pageSizeChoice || sitePageSize() : 0);
+  const pagedRows = () => [...(document.getElementById('systems-body')?.children || [])].filter((r) => r.classList.contains('system-row'));
+  function applyPagination() {
+    const nav = document.getElementById('systems-pagination');
+    const rows = pagedRows();
+    const size = currentPageSize();
+    const pages = size ? Math.max(1, Math.ceil(rows.length / size)) : 1;
+    if (pageIndex > pages - 1) pageIndex = pages - 1;
+    const start = size ? pageIndex * size : 0;
+    rows.forEach((row, i) => {
+      const off = !!size && (i < start || i >= start + size);
+      if (row.hidden !== off) row.hidden = off;
+    });
+    // Nothing to page or to change while the list fits the smallest page.
+    const show = !!size && rows.length > PAGE_SIZES[0];
+    if (nav) {
+      nav.classList.toggle('hidden', !show);
+      nav.classList.toggle('flex', show);
+    }
+    if (show && nav) {
+      const lang = getCurrentLanguage();
+      const fill = (key, values) => Object.entries(values).reduce((text, [k, v]) => text.replace(`{${k}}`, String(v)), translations[key][lang]);
+      nav.setAttribute('aria-label', translations.paginationLabel[lang]);
+      document.getElementById('pagination-range').textContent = fill('paginationRange', { from: start + 1, to: Math.min(start + size, rows.length), total: rows.length });
+      document.getElementById('pagination-page').textContent = fill('paginationPage', { page: pageIndex + 1, pages });
+      const select = document.getElementById('pagination-size');
+      const sizes = [...new Set([...PAGE_SIZES, sitePageSize()])].sort((a, b) => a - b);
+      const options = sizes.map((n) => `<option value="${n}">${n}</option>`).join('');
+      if (select.innerHTML !== options) select.innerHTML = options;
+      select.value = String(size);
+      nav.querySelectorAll('.pagination-btn').forEach((btn) => {
+        const back = btn.dataset.page === 'first' || btn.dataset.page === 'prev';
+        btn.disabled = back ? pageIndex === 0 : pageIndex >= pages - 1;
+      });
+    }
+    placeCardNotch();
+  }
+  document.querySelectorAll('#systems-pagination .pagination-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      statusFilter = btn.dataset.status || 'all';
-      updateStatusUI();
-      rerenderForView();
+      const size = currentPageSize();
+      if (!size) return;
+      const last = Math.max(0, Math.ceil(pagedRows().length / size) - 1);
+      const to = { first: 0, prev: pageIndex - 1, next: pageIndex + 1, last }[btn.dataset.page];
+      pageIndex = Math.min(Math.max(0, to), last);
+      applyPagination();
     });
   });
+  document.getElementById('pagination-size')?.addEventListener('change', (e) => {
+    // The page that holds the first server shown stays in view.
+    const first = pageIndex * currentPageSize();
+    pageSizeChoice = parseInt(e.target.value, 10) || null;
+    const size = currentPageSize();
+    pageIndex = size ? Math.floor(first / size) : 0;
+    applyPagination();
+  });
+  window.addEventListener('navbarconfigready', () => applyPagination());
   updateStatusUI();
 
   // The column tracks of each width tier with every field shown: the same
@@ -891,12 +995,29 @@ const apiBase = apiBaseProp ?? '';
     if (bottom.length) lines.push(spread(bottom));
     return lines.map((l) => `"${l}"`).join(' ');
   }
+  // Cards: an opened card's panel points at the card (the notch over its
+  // middle, see the styles). Placed once the panel has settled open, and
+  // again whenever the grid may have moved the card: a resize, the layout or
+  // the fields changing, a render that reordered the cards.
+  function placeCardNotch() {
+    const root = document.getElementById('monitor-root');
+    if (!root || !root.classList.contains('layout-grid')) return;
+    document.querySelectorAll('#systems-body .system-details.is-settled').forEach((panel) => {
+      const card = panel.parentElement && panel.parentElement.querySelector(':scope > [data-system-id]');
+      if (!card) return;
+      const c = card.getBoundingClientRect();
+      const p = panel.getBoundingClientRect();
+      const x = `${Math.round(c.left + c.width / 2 - p.left)}px`;
+      if (panel.style.getPropertyValue('--card-notch-x') !== x) panel.style.setProperty('--card-notch-x', x);
+    });
+  }
   function applyViewLayout() {
     const root = document.getElementById('monitor-root');
     if (!root) return;
     HIDEABLE_COLS.forEach((c) => root.classList.toggle(`hide-col-${c}`, hiddenCols.includes(c)));
     root.classList.toggle('layout-grid', layoutMode() === 'grid');
     root.classList.toggle('cols-custom', hiddenCols.length > 0);
+    requestAnimationFrame(placeCardNotch);
     if (!hiddenCols.length) return;
     const tier = COLUMN_TIERS.find((t) => window.innerWidth >= t.min);
     if (tier) {
@@ -991,9 +1112,12 @@ const apiBase = apiBaseProp ?? '';
     // from 1280 px).
     const chipText = translations.offlineChip[getCurrentLanguage()];
     const chipKey = `10px 600 ${chipText}`;
+    const awaitingText = translations.awaitingChip[getCurrentLanguage()];
+    const awaitingKey = `10px 600 ${awaitingText}`;
 
     const missing = new Map();
     if (!textWidths.has(chipKey)) missing.set(chipKey, ['10px', '600', chipText]);
+    if (!textWidths.has(awaitingKey)) missing.set(awaitingKey, ['10px', '600', awaitingText]);
     for (const item of items) {
       const key = nameKey(item);
       if (!textWidths.has(key)) missing.set(key, [nameFontSize, '500', item.name || 'unknown']);
@@ -1027,6 +1151,7 @@ const apiBase = apiBaseProp ?? '';
       box.remove();
     }
     const chipWidth = textWidths.get(chipKey) + (isWide ? 20 : 16);
+    const awaitingWidth = textWidths.get(awaitingKey) + (isWide ? 20 : 16);
 
     // Measure each server name
     items.forEach(item => {
@@ -1040,7 +1165,7 @@ const apiBase = apiBaseProp ?? '';
       // - Extra buffer for font rendering variations: ~16px
       // From 1280 px the dot is 8 px and both gaps 8 px: 58 px.
       const uiElementsWidth = isSmallScreen ? 44 : isWide ? 58 : 50; // Mobile: 44px, Desktop: 50px
-      const estimatedCellWidth = textWidth + uiElementsWidth + (item.alert ? chipWidth : 0);
+      const estimatedCellWidth = textWidth + uiElementsWidth + (item.alert ? (awaitingClient(item) ? awaitingWidth : chipWidth) : 0);
       maxWidth = Math.max(maxWidth, estimatedCellWidth);
     });
 
@@ -1103,6 +1228,13 @@ const apiBase = apiBaseProp ?? '';
   // and red.
   const OFFLINE_BAR = 'bg-[#a3a3a3] dark:bg-[#525252]';
   const offlineChip = () => `<span class="offline-chip shrink-0 rounded-full px-1.5 text-[11px] font-semibold leading-4 bg-red-500/10 text-red-700 dark:bg-red-400/15 dark:text-red-300" data-translate-detail="offlineChip">${translations.offlineChip[getCurrentLanguage()]}</span>`;
+  // A server added in the admin page whose client has never reported (no
+  // OS, CPU or memory yet) is waiting for it, not down: grey, not red, and
+  // not counted as offline (Beszel's pending systems).
+  const awaitingClient = (item) => !!(item && item.alert && !item.os && !item.cpu_model && !item.memory_info);
+  const awaitingChip = () => `<span class="offline-chip awaiting-chip shrink-0 rounded-full px-1.5 text-[11px] font-semibold leading-4 bg-black/5 text-[#595959] dark:bg-white/[0.06] dark:text-[#ababab]" data-translate-detail="awaitingChip">${translations.awaitingChip[getCurrentLanguage()]}</span>`;
+  const statusChip = (item) => (awaitingClient(item) ? awaitingChip() : offlineChip());
+  const statusDotColor = (item) => (awaitingClient(item) ? 'bg-[#a3a3a3]' : item.alert ? 'bg-[#fb2c36]' : 'bg-[#3db866]');
   const getProgressColor = (value, isOffline = false) => {
     if (isOffline) return OFFLINE_BAR;
     if (value >= 90) return 'bg-[#fb2c36]';
@@ -1411,8 +1543,8 @@ const apiBase = apiBaseProp ?? '';
     <div class="system-row${isOffline ? ' is-offline' : ''}" data-system-id="${safeId}">
       <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer" data-system-id="${safeId}" role="button" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
-          <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${isOffline ? 'bg-[#fb2c36]' : 'bg-[#3db866]'} shrink-0"></span>
-          <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap" title="${safeNameAttr}">${safeName}</span>${isOffline ? offlineChip() : ''}
+          <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${statusDotColor(item)} shrink-0"></span>
+          <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap" title="${safeNameAttr}">${safeName}</span>${isOffline ? statusChip(item) : ''}
           <button class="copy-btn text-[#595959] dark:text-[#ababab] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" tabindex="-1" aria-hidden="true" data-system-name="${safeNameAttr}" title="${translations.copySystemName[getCurrentLanguage()]}" data-translate-title="copySystemName">
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
@@ -1474,7 +1606,7 @@ const apiBase = apiBaseProp ?? '';
             <!-- Real-time Traffic -->
             <div class="detail-item" data-traffic-row="speed">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
-              <div class="detail-label shrink-0" data-translate-detail="realtimeTraffic">Traffic:</div>
+              <div class="detail-label shrink-0" data-translate-detail="realtimeTraffic">Speed:</div>
               ${(item.alert || (!item.cpu_model && !item.memory_info && !item.disk_info)) ? `
               <div class="detail-value" data-traffic-placeholder="speed">-</div>
               ` : `
@@ -1493,7 +1625,7 @@ const apiBase = apiBaseProp ?? '';
             <!-- Total Traffic -->
             <div class="detail-item" data-traffic-row="total">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/></svg>
-              <div class="detail-label shrink-0" data-translate-detail="totalTraffic">Total:</div>
+              <div class="detail-label shrink-0" data-translate-detail="totalTraffic" data-translate-title="totalTrafficHint" title="Since the server last booted">Traffic:</div>
               ${(!item.cpu_model && !item.memory_info && !item.disk_info) ? `
               <div class="detail-value" data-traffic-placeholder="total">-</div>
               ` : `
@@ -1578,12 +1710,12 @@ const apiBase = apiBaseProp ?? '';
   };
 
   const translations = {
-    'noSystemsFound': { en: 'No services found', zh: '未找到服务' },
-    'systemsWillAppear': { en: 'Services will appear here once their clients start reporting', zh: '客户端开始上报后，服务将显示在这里' },
-    'copySystemName': { en: 'Copy service name', zh: '复制服务名称' },
+    'noSystemsFound': { en: 'No servers found', zh: '未找到服务器' },
+    'systemsWillAppear': { en: 'Servers will appear here once their clients start reporting', zh: '客户端开始上报后，服务器将显示在这里' },
+    'copySystemName': { en: 'Copy server name', zh: '复制服务器名称' },
     'copied': { en: 'Copied!', zh: '已复制！' },
     // Empty state of a filter that matches nothing (the services exist).
-    'noMatchingServices': { en: 'No matching services', zh: '没有匹配的服务' },
+    'noMatchingServices': { en: 'No matching servers', zh: '没有匹配的服务器' },
     'tryAnotherFilter': { en: 'Try a different filter', zh: '换个筛选条件试试' },
     'locationInfo': { en: 'Location:', zh: '位置:' },
     'osInfo': { en: 'OS:', zh: '系统:' },
@@ -1591,10 +1723,14 @@ const apiBase = apiBaseProp ?? '';
     'memoryInfo': { en: 'Memory:', zh: '内存:' },
     'swapPartition': { en: 'Swap:', zh: '交换:' },
     'diskInformation': { en: 'Disk:', zh: '磁盘:' },
-    'realtimeTraffic': { en: 'Traffic:', zh: '流量:' },
-    'totalTraffic': { en: 'Total:', zh: '总量:' },
+    // As VPS users read them (and other probes, Nezha among them, put them):
+    // 网速 the rate, 流量 the amount. The totals are the interfaces' counters,
+    // which start again when the server boots.
+    'realtimeTraffic': { en: 'Speed:', zh: '网速:' },
+    'totalTraffic': { en: 'Traffic:', zh: '流量:' },
+    'totalTrafficHint': { en: 'Since the server last booted', zh: '开机以来的总流量' },
     'tcpingLatency': { en: 'TCPing Latency (24h)', zh: 'TCPing 延迟 (24 小时)' },
-    'loadFailed': { en: "Couldn't load the server list", zh: '无法加载服务列表' },
+    'loadFailed': { en: "Couldn't load the server list", zh: '无法加载服务器列表' },
     'loadRetrying': { en: 'Retrying automatically…', zh: '正在自动重试…' },
     'tcpingChartDesc': { en: 'TCP handshake time of every probe', zh: '每次探测的 TCP 握手时间' },
     'avgLatency': { en: 'Avg:', zh: '平均:' },
@@ -1617,9 +1753,21 @@ const apiBase = apiBaseProp ?? '';
     'tcpingTimeout': { en: 'Timeout', zh: '超时' },
     // Offline row chip and the summary beside the title.
     'offlineChip': { en: 'Offline', zh: '离线' },
-    'summaryTotal': { en: 'services', zh: '个服务' },
+    'awaitingChip': { en: 'Pending', zh: '等待接入' },
+    'summaryTotal': { en: 'servers', zh: '台服务器' },
     'summaryOnline': { en: 'online', zh: '在线' },
     'summaryOffline': { en: 'offline', zh: '离线' },
+    'summaryAwaiting': { en: 'pending', zh: '等待接入' },
+    'summaryShowOffline': { en: 'Show only the offline servers', zh: '只看离线的服务器' },
+    'summaryShowAll': { en: 'Show all servers', zh: '显示全部服务器' },
+    'paginationLabel': { en: 'Pages', zh: '分页' },
+    'paginationRange': { en: '{from}–{to} of {total}', zh: '第 {from}–{to} 台，共 {total} 台' },
+    'paginationPage': { en: 'Page {page} of {pages}', zh: '第 {page} / {pages} 页' },
+    'rowsPerPage': { en: 'Rows per page', zh: '每页' },
+    'firstPage': { en: 'First page', zh: '第一页' },
+    'prevPage': { en: 'Previous page', zh: '上一页' },
+    'nextPage': { en: 'Next page', zh: '下一页' },
+    'lastPage': { en: 'Last page', zh: '最后一页' },
     'connectionLost': { en: 'Connection lost, reconnecting…', zh: '连接中断，正在重连…' },
   };
 
@@ -1639,6 +1787,8 @@ const apiBase = apiBaseProp ?? '';
   function updateTranslations() {
     const lang = getCurrentLanguage();
     renderSystemsSummary();
+    // The pages' footer texts
+    applyPagination();
     
     // Update empty state - fix null check
     if (body) {
@@ -1840,6 +1990,8 @@ const apiBase = apiBaseProp ?? '';
     </div>
   `;
     }
+    // No rows: no pages.
+    applyPagination();
   };
 
   // Normalize data for comparison (ensure consistent types)
@@ -2003,22 +2155,22 @@ const apiBase = apiBaseProp ?? '';
     // Cell 0: System name (with status dot and copy button)
     const systemCell = cell('name');
     if (systemCell) {
-      if (shouldUpdateAll || oldItemNormalized.alert !== newItemNormalized.alert) {
+      if (shouldUpdateAll || oldItemNormalized.alert !== newItemNormalized.alert
+        || awaitingClient(oldItemNormalized) !== awaitingClient(newItemNormalized)) {
         // Use rounded-full to match the status dot (which has h-1.5 w-1.5 sm:h-2 sm:w-2)
         const statusDot = systemCell.querySelector('span.rounded-full.shrink-0');
         if (statusDot) {
-          // Offline/paused state: red, Online state: green
+          // Offline/paused state: red, waiting for its client: grey, online: green
           // Preserve responsive classes: h-1.5 w-1.5 sm:h-2 sm:w-2
-          statusDot.className = `h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${item.alert ? 'bg-[#fb2c36]' : 'bg-[#3db866]'} shrink-0`;
+          statusDot.className = `h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${statusDotColor(item)} shrink-0`;
         }
         const rowEl = systemCell.closest('.system-row');
         if (rowEl) rowEl.classList.toggle('is-offline', !!item.alert);
-        const chip = systemCell.querySelector('.offline-chip');
-        if (item.alert && !chip) {
+        // The chip says which (离线 or 等待接入): drawn again on any change.
+        systemCell.querySelector('.offline-chip')?.remove();
+        if (item.alert) {
           const nameSpan = systemCell.querySelector('.row-name');
-          if (nameSpan) nameSpan.insertAdjacentHTML('afterend', offlineChip());
-        } else if (!item.alert && chip) {
-          chip.remove();
+          if (nameSpan) nameSpan.insertAdjacentHTML('afterend', statusChip(item));
         }
         // The chip widens the name cell (the column only ever grows).
         if (item.alert) recalculateColumnWidthFromCurrentData();
@@ -4545,6 +4697,7 @@ const apiBase = apiBaseProp ?? '';
               const otherSystemId = otherRowElement ? otherRowElement.dataset.systemId : null;
               
               // Collapse this section
+              section.classList.remove('is-settled');
               section.style.maxHeight = section.scrollHeight + 'px';
               section.style.opacity = '1';
               section.offsetHeight; // Trigger reflow
@@ -4580,7 +4733,7 @@ const apiBase = apiBaseProp ?? '';
             clearTimeout(detailsSection._closeTimer);
             detailsSection._closeTimer = null;
           }
-          detailsSection.classList.remove('hidden');
+          detailsSection.classList.remove('hidden', 'is-settled');
           detailsSection.style.maxHeight = '0';
           detailsSection.style.opacity = '0';
           
@@ -4616,6 +4769,10 @@ const apiBase = apiBaseProp ?? '';
               setTimeout(() => {
                 detailsSection.style.maxHeight = '';
                 detailsSection.style.transition = '';
+                if (rowElement.getAttribute('aria-expanded') === 'true') {
+                  detailsSection.classList.add('is-settled');
+                  placeCardNotch();
+                }
               }, 300);
             });
           });
@@ -4637,6 +4794,7 @@ const apiBase = apiBaseProp ?? '';
           // after the animation (below), not before it: destroying it at
           // click time blanked the chart while the section was still
           // visibly closing.
+          detailsSection.classList.remove('is-settled');
           detailsSection.style.maxHeight = detailsSection.scrollHeight + 'px';
           detailsSection.style.opacity = '1';
           
@@ -4893,6 +5051,7 @@ const apiBase = apiBaseProp ?? '';
 
       body.innerHTML = items.map(item => renderRow(item, tcpingConfigured && item.hide_tcping !== true)).join('');
       currentData = newData;
+      applyPagination();
 
       // The first data replaces the loading preview with one 150 ms fade
       // of the whole list, at the ALREADY-settled column width (locked in
@@ -5142,6 +5301,9 @@ const apiBase = apiBaseProp ?? '';
     })) {
       setTimeout(() => recalculateColumnWidthFromCurrentData(), 0);
     }
+    // The pages follow the list (rows came, went or moved), and the cards may
+    // have moved under an opened card's panel.
+    applyPagination();
   };
 
   // renderData is the single, self-serialized render path for the table.
@@ -5219,26 +5381,38 @@ const apiBase = apiBaseProp ?? '';
   // Summary beside the title: "131 台 · 128 在线 · 3 离线", from the same
   // list as the rows (the offline chip only when a server is offline).
   function updateSystemsSummary(list) {
-    systemsSummary = { total: list.length, offline: list.filter((s) => s && s.alert).length };
+    const awaiting = list.filter(awaitingClient).length;
+    systemsSummary = { total: list.length, offline: list.filter((s) => s && s.alert).length - awaiting, awaiting };
     renderSystemsSummary();
   }
   function renderSystemsSummary() {
     const el = document.getElementById('systems-summary');
     if (!el || !systemsSummary) return;
     const lang = getCurrentLanguage();
-    const { total, offline } = systemsSummary;
+    const { total, offline, awaiting = 0 } = systemsSummary;
     const chip = 'inline-flex items-center gap-1.5 rounded-full px-2 py-1';
     const quiet = `${chip} bg-black/5 dark:bg-white/[0.06] text-[#595959] dark:text-[#d4d4d4]`;
     const dot = (c) => `<span class="h-1.5 w-1.5 rounded-full ${c}"></span>`;
     let html = `<span class="${quiet}">${total} ${translations.summaryTotal[lang]}</span>`
-      + `<span class="${quiet}">${dot('bg-[#3db866]')}${total - offline} ${translations.summaryOnline[lang]}</span>`;
+      + `<span class="${quiet}">${dot('bg-[#3db866]')}${total - offline - awaiting} ${translations.summaryOnline[lang]}</span>`;
+    // The offline count is a button: it shows only the offline servers (the
+    // view menu's 离线), and again everything.
     if (offline > 0) {
-      html += `<span class="${chip} bg-red-500/10 dark:bg-red-400/15 text-red-700 dark:text-red-300">${dot('bg-[#fb2c36]')}${offline} ${translations.summaryOffline[lang]}</span>`;
+      const pressed = statusFilter === 'offline';
+      html += `<button type="button" id="summary-offline-chip" class="${chip} summary-offline-chip bg-red-500/10 dark:bg-red-400/15 text-red-700 dark:text-red-300" aria-pressed="${pressed}" data-tooltip="${translations[pressed ? 'summaryShowAll' : 'summaryShowOffline'][lang]}">${dot('bg-[#fb2c36]')}${offline} ${translations.summaryOffline[lang]}</button>`;
+    }
+    if (awaiting > 0) {
+      html += `<span class="${quiet}">${dot('bg-[#a3a3a3]')}${awaiting} ${translations.summaryAwaiting[lang]}</span>`;
     }
     if (connectionLost) {
       html += `<span class="${chip} bg-black/5 dark:bg-white/[0.06] text-[#595959] dark:text-[#ababab]" role="status">${dot('bg-[#a3a3a3]')}${translations.connectionLost[lang]}</span>`;
     }
-    if (el.innerHTML !== html) el.innerHTML = html;
+    if (el.innerHTML !== html) {
+      // A redraw replaces the offline button: keep the keyboard on it.
+      const hadFocus = document.activeElement && document.activeElement.id === 'summary-offline-chip';
+      el.innerHTML = html;
+      if (hadFocus) document.getElementById('summary-offline-chip')?.focus({ preventScroll: true });
+    }
     el.classList.remove('invisible');
     el.classList.toggle('hidden', total === 0);
     updateStatusCounts();
@@ -5303,6 +5477,10 @@ const apiBase = apiBaseProp ?? '';
   // used to download the whole list again.
   let lastRenderedPayload = null;
   function rerenderForView() {
+    // A filter, a sort or a status: from the first page (as Beszel), at once
+    // (a filter that keeps every row leaves the render nothing to redraw).
+    pageIndex = 0;
+    applyPagination();
     // A copy: the stream's own payload object would be taken for a stale
     // stream frame right after a reconnect, and not repainted.
     if (lastRenderedPayload) renderData(lastRenderedPayload.slice());
@@ -5870,6 +6048,7 @@ const apiBase = apiBaseProp ?? '';
     }
     resizeTimeout = setTimeout(() => {
       recalculateColumnWidthFromCurrentData();
+      placeCardNotch();
       // Rotating the phone / resizing the browser changes the chart's CSS
       // box width (inside horizontally-scrollable table). Chart.js does not
       // always observe that layout shift reliably on mobile Safari — give it
@@ -6270,16 +6449,38 @@ const apiBase = apiBaseProp ?? '';
     transition: box-shadow 0.2s ease, border-color 0.2s ease;
   }
   #monitor-root.layout-grid #systems-body .system-row > [data-system-id]:hover { background: transparent; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
-  #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #c9c9c9; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
+  #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #837e79; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); }
   html.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id] { border-color: #2c2c2c; }
-  html.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #474747; }
-  /* The opened card's details: a panel across the grid, under its row */
+  html.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: #737373; }
+  /* The opened card's details: a panel across the grid, under its row. It
+     points at its card, which a row of look-alike cards needs: a notch over
+     the card's middle (--card-notch-x, kept by placeCardNotch()). The panel
+     clips its content while it slides open or shut (is-settled marks the
+     time between), so the notch only shows once it is open. */
   #monitor-root.layout-grid #systems-body .system-details {
+    position: relative;
     grid-column: 1 / -1;
     border: 1px solid rgba(221, 218, 215, 0.6);
     border-radius: 12.8px;
   }
   html.dark #monitor-root.layout-grid #systems-body .system-details { border-color: #2c2c2c; }
+  #monitor-root.layout-grid #systems-body .system-details.is-settled { overflow: visible; }
+  #monitor-root.layout-grid #systems-body .system-details.is-settled::before {
+    content: '';
+    position: absolute;
+    top: -7.5px;
+    left: calc(var(--card-notch-x, 50%) - 6px);
+    width: 12px;
+    height: 12px;
+    transform: rotate(45deg);
+    background: inherit;
+    border-top: 1px solid;
+    border-left: 1px solid;
+    border-color: inherit;
+    /* the upper half, and a sliver over the panel's top edge */
+    clip-path: polygon(0 0, 100% 0, 100% 2px, 2px 100%, 0 100%);
+    pointer-events: none;
+  }
   /* Header band */
   #monitor-root.layout-grid #systems-body .system-row .cell-name {
     grid-column: 1 / -1;
@@ -6367,6 +6568,8 @@ const apiBase = apiBaseProp ?? '';
   html.glass-enabled.light #monitor-root.layout-grid #systems-body .system-details { background: rgba(255, 255, 255, 0.45) !important; border-color: rgba(255, 255, 255, 0.65) !important; }
   html.glass-enabled.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id],
   html.glass-enabled.dark #monitor-root.layout-grid #systems-body .system-details { background: rgba(255, 255, 255, 0.03) !important; border-color: rgba(255, 255, 255, 0.07) !important; }
+  html.glass-enabled.light #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: rgba(90, 84, 78, 0.45) !important; }
+  html.glass-enabled.dark #monitor-root.layout-grid #systems-body .system-row > [data-system-id][aria-expanded="true"] { border-color: rgba(255, 255, 255, 0.3) !important; }
 
   /* An opened row's details, after Beszel's info bar (InfoBar): an icon,
      the muted label and the value for each item. On phones they line up in
@@ -6491,6 +6694,25 @@ const apiBase = apiBaseProp ?? '';
 
   /* An offline server: its last known values stay, muted (the bars turn
      grey in getProgressColor and a chip follows the name). */
+  /* Pages: the other pages' rows stay in the list, hidden (the cards' rows
+     are display: contents, which [hidden] alone would not override). The
+     footer's controls are Beszel's 36 px. */
+  #systems-body > .system-row[hidden] { display: none !important; }
+  #systems-pagination .toolbar-control { height: 36px; }
+  #systems-pagination select.toolbar-control { width: 4.5rem; padding: 0 8px; }
+  #systems-pagination .pagination-btn { width: 36px; padding: 0; align-items: center; justify-content: center; color: inherit; }
+  #systems-pagination .pagination-btn:disabled { opacity: 0.5; cursor: default; }
+  /* The offline count is a button (it filters): a stronger tint under the
+     pointer, a ring while it filters. */
+  #systems-summary .summary-offline-chip { cursor: pointer; transition: background-color 50ms ease, box-shadow 50ms ease; }
+  #systems-summary .summary-offline-chip:hover { background-color: rgb(239 68 68 / 0.16); }
+  html.dark #systems-summary .summary-offline-chip:hover { background-color: rgb(248 113 113 / 0.22); }
+  #systems-summary .summary-offline-chip[aria-pressed="true"] { box-shadow: 0 0 0 1.5px #ef4444; }
+  /* On touch screens the summary's chips are 24 px tall, the smallest
+     target a finger is given (WCAG 2.5.8): the offline one is a button. All
+     of them, so they keep one height, the load placeholders too. */
+  @media (pointer: coarse) { #systems-summary > * { min-height: 24px; } }
+  html.dark #systems-summary .summary-offline-chip[aria-pressed="true"] { box-shadow: 0 0 0 1.5px #f87171; }
   .system-row.is-offline :is(.cell-uptime, .cell-net, .cell-cpu, .cell-memory, .cell-disk) :is(span.font-medium, .cell-value) {
     color: #595959;
   }

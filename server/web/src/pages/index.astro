@@ -227,6 +227,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
               if (config.sticky_header === true) document.documentElement.classList.add('sticky-table-header');
               // Default layout unless the visitor chose one (自定义设置 → 卡片布局)
               if (config.card_layout === true) document.documentElement.classList.add('card-layout');
+              // Servers per page (自定义设置 → 分页); 0 is one list
+              document.documentElement.dataset.pageSize = String(Number(config.page_size) || 0);
               // Dispatch event when config is ready
               window.dispatchEvent(new CustomEvent('navbarconfigready', { detail: config }));
             }
@@ -258,6 +260,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
             if (config.sticky_header === true) document.documentElement.classList.add('sticky-table-header');
             // Default layout unless the visitor chose one (自定义设置 → 卡片布局)
             if (config.card_layout === true) document.documentElement.classList.add('card-layout');
+            // Servers per page (自定义设置 → 分页); 0 is one list
+            document.documentElement.dataset.pageSize = String(Number(config.page_size) || 0);
             
             // Inject CSS if exists
             if (config.custom_css && config.custom_css.trim()) {
