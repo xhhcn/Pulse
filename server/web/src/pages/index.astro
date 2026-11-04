@@ -229,6 +229,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
               if (config.card_layout === true) document.documentElement.classList.add('card-layout');
               // Servers per page (自定义设置 → 分页); 0 is one list
               document.documentElement.dataset.pageSize = String(Number(config.page_size) || 0);
+              // The loss band under the TCPing chart (自定义设置 → 丢包时间线), off by default
+              document.documentElement.classList.toggle('loss-timeline', config.loss_timeline === true);
               // Dispatch event when config is ready
               window.dispatchEvent(new CustomEvent('navbarconfigready', { detail: config }));
             }
@@ -262,6 +264,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
             if (config.card_layout === true) document.documentElement.classList.add('card-layout');
             // Servers per page (自定义设置 → 分页); 0 is one list
             document.documentElement.dataset.pageSize = String(Number(config.page_size) || 0);
+            // The loss band under the TCPing chart (自定义设置 → 丢包时间线), off by default
+            document.documentElement.classList.toggle('loss-timeline', config.loss_timeline === true);
             
             // Inject CSS if exists
             if (config.custom_css && config.custom_css.trim()) {
@@ -461,6 +465,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
         
         // No valid token, redirect to login with redirect parameter (and
         // say so when it was a share link that no longer works)
+        // A link to one server (?server=id) opens it after the login.
+        try { if (urlParams.get('server')) sessionStorage.setItem('pulse-open-server', urlParams.get('server')); } catch (_) {}
         window.location.href = shareToken ? '/login?redirect=/&reason=link' : '/login?redirect=/';
       } else {
         // Privacy config check failed, allow access (fail open)

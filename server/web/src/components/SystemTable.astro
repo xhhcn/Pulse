@@ -191,31 +191,51 @@ const apiBase = apiBaseProp ?? '';
     return [];
   };
 
+  // A copied name or link: the check for a second, and the tooltip saying
+  // so (data-tooltip, which the tooltip prefers, and the tooltip shown again
+  // while the pointer is on the button: a click hides it). The button's own
+  // name is left alone: changing the title made "Copied!" its lasting
+  // aria-label when the tooltip took the title within that second.
+  const confirmCopied = (btn, key) => {
+    const copyIcon = btn.querySelector('.copy-icon');
+    const checkIcon = btn.querySelector('.check-icon');
+    if (!copyIcon || !checkIcon) return;
+    copyIcon.style.display = 'none';
+    checkIcon.style.display = 'block';
+    btn.dataset.tooltip = translations[key][getCurrentLanguage()];
+    if (btn.matches(':hover') && typeof PointerEvent === 'function') {
+      btn.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+    }
+    clearTimeout(btn._copiedTimer);
+    btn._copiedTimer = setTimeout(() => {
+      copyIcon.style.display = 'block';
+      checkIcon.style.display = 'none';
+      delete btn.dataset.tooltip;
+    }, 1000);
+  };
+  // A link that opens this server (?server=id: its page, opened, in view),
+  // keeping a share link's token so it opens a private dashboard too.
+  function serverLink(id) {
+    const url = new URL(window.location.pathname || '/', window.location.origin);
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (token) url.searchParams.set('token', token);
+    url.searchParams.set('server', id);
+    return url.toString();
+  }
   const setupCopyButtons = (container) => {
     if (!container || container.dataset.copySetup) return;
     container.addEventListener('click', async (e) => {
+      const linkBtn = e.target.closest('.link-btn');
+      if (linkBtn) {
+        e.stopPropagation();
+        if (linkBtn.dataset.linkId && await copyToClipboard(serverLink(linkBtn.dataset.linkId))) confirmCopied(linkBtn, 'linkCopied');
+        return;
+      }
       const copyBtn = e.target.closest('.copy-btn');
       if (!copyBtn) return;
       e.stopPropagation();
       const systemName = copyBtn.dataset.systemName;
-      if (systemName) {
-        const success = await copyToClipboard(systemName);
-        if (success) {
-          const copyIcon = copyBtn.querySelector('.copy-icon');
-          const checkIcon = copyBtn.querySelector('.check-icon');
-          const originalTitle = copyBtn.title;
-          if (copyIcon && checkIcon) {
-            copyIcon.style.display = 'none';
-            checkIcon.style.display = 'block';
-            copyBtn.title = translations.copied[getCurrentLanguage()];
-            setTimeout(() => {
-              copyIcon.style.display = 'block';
-              checkIcon.style.display = 'none';
-              copyBtn.title = originalTitle;
-            }, 1000);
-          }
-        }
-      }
+      if (systemName && await copyToClipboard(systemName)) confirmCopied(copyBtn, 'copied');
     });
     container.dataset.copySetup = 'true';
   };
@@ -904,6 +924,7 @@ const apiBase = apiBaseProp ?? '';
   // stay in the list, hidden: their updates cost no layout, and the name
   // column keeps one width across the pages.
   let pageIndex = 0;
+  let nameRoomFrame = 0; // scheduleNameRoom (below)
   const currentPageSize = () => Math.min(200, Math.max(0, parseInt(document.documentElement.dataset.pageSize || '0', 10) || 0));
   const pagedRows = () => [...(document.getElementById('systems-body')?.children || [])].filter((r) => r.classList.contains('system-row'));
   function applyPagination() {
@@ -934,6 +955,49 @@ const apiBase = apiBaseProp ?? '';
         btn.disabled = back ? pageIndex === 0 : pageIndex >= pages - 1;
       });
     }
+    scheduleNameRoom();
+  }
+  // A link to one server (?server=id, from the link button beside a name;
+  // or the server a private dashboard was asked for before the login sent
+  // the visitor away, kept for the visit): its page, the server opened and
+  // brought into view, once. An id not in the list is let go.
+  let linkedServerHandled = false;
+  function openLinkedServer() {
+    if (linkedServerHandled) return;
+    linkedServerHandled = true;
+    let id = new URLSearchParams(window.location.search).get('server');
+    try {
+      if (!id) id = sessionStorage.getItem('pulse-open-server');
+      sessionStorage.removeItem('pulse-open-server');
+    } catch (_) {}
+    if (!id) return;
+    const rows = pagedRows();
+    const index = rows.findIndex((r) => r.dataset.systemId === id);
+    if (index < 0) return;
+    const size = currentPageSize();
+    if (size) {
+      pageIndex = Math.floor(index / size);
+      applyPagination();
+    }
+    const row = rows[index];
+    const head = row.querySelector(':scope > [data-system-id]');
+    if (head && head.getAttribute('aria-expanded') !== 'true') head.click();
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(() => row.scrollIntoView({ block: 'start', behavior: calm ? 'auto' : 'smooth' }));
+  }
+
+  // Turned at the footer, the new page starts above the window (on a phone
+  // some 1400 px up), so the view goes back to where the list begins: the
+  // filter row above it, as when the page opened. Only when the list's top
+  // is out of sight; smooth unless the visitor asks for less motion. (Beszel
+  // leaves the view where it was.)
+  function revealListTop() {
+    const anchor = document.getElementById('system-filter-input');
+    const list = document.getElementById('systems-body');
+    if (!anchor || !list || list.getBoundingClientRect().top >= 0) return;
+    const top = Math.max(0, anchor.getBoundingClientRect().top + window.scrollY - 16);
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
   }
   document.querySelectorAll('#systems-pagination .pagination-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -941,8 +1005,10 @@ const apiBase = apiBaseProp ?? '';
       if (!size) return;
       const last = Math.max(0, Math.ceil(pagedRows().length / size) - 1);
       const to = { first: 0, prev: pageIndex - 1, next: pageIndex + 1, last }[btn.dataset.page];
+      const before = pageIndex;
       pageIndex = Math.min(Math.max(0, to), last);
       applyPagination();
+      if (pageIndex !== before) revealListTop();
     });
   });
   window.addEventListener('navbarconfigready', () => applyPagination());
@@ -1127,8 +1193,9 @@ const apiBase = apiBaseProp ?? '';
       // - Gap before button: 6px (gap-1.5)
       // - Copy button: ~14px (w-2.5 sm:w-3)
       // - Extra buffer for font rendering variations: ~16px
-      // From 1280 px the dot is 8 px and both gaps 8 px: 58 px.
-      const uiElementsWidth = isSmallScreen ? 44 : isWide ? 58 : 50; // Mobile: 44px, Desktop: 50px
+      // From 1280 px the dot is 8 px and both gaps 8 px: 58 px. The link
+      // button after the copy button: its 10 or 12 px and the gap.
+      const uiElementsWidth = (isSmallScreen ? 44 : isWide ? 58 : 50) + (isSmallScreen ? 14 : isWide ? 20 : 18);
       const estimatedCellWidth = textWidth + uiElementsWidth + (item.alert ? (awaitingClient(item) ? awaitingWidth : chipWidth) : 0);
       maxWidth = Math.max(maxWidth, estimatedCellWidth);
     });
@@ -1170,6 +1237,26 @@ const apiBase = apiBaseProp ?? '';
     const items = Array.from(currentData.values());
     const width = calculateServerNameColumnWidth(items);
     applyServerNameColumnWidth(width);
+    scheduleNameRoom();
+  }
+
+  // Where the table is at its narrowest (about 1024 px: the other columns'
+  // minimums leave the names less than the width worked out for them), the
+  // link button gives its room back to the names, so no name is cut for it;
+  // wherever the names fit it stays. The column's width does not depend on
+  // what is in it, so one measurement, once a frame, settles it.
+  function scheduleNameRoom() {
+    if (nameRoomFrame) return;
+    nameRoomFrame = requestAnimationFrame(() => {
+      nameRoomFrame = 0;
+      const root = document.getElementById('monitor-root');
+      const cell = document.querySelector('#systems-body > .system-row:not([hidden]) .cell-name');
+      if (!root || !cell) return;
+      const want = parseFloat(root.style.getPropertyValue('--first-col-width')) || 0;
+      const tight = !root.classList.contains('layout-grid') && window.innerWidth >= 768 && want > 0
+        && cell.getBoundingClientRect().width < want - 1;
+      root.classList.toggle('names-tight', tight);
+    });
   }
 
   // The names change size at 1280 px (12 ↔ 14 px), and their width changes
@@ -1179,6 +1266,7 @@ const apiBase = apiBaseProp ?? '';
     const root = document.getElementById('monitor-root');
     if (!root || currentData.size === 0) return;
     root.style.setProperty('--first-col-width', `${calculateServerNameColumnWidth(Array.from(currentData.values()))}px`);
+    scheduleNameRoom();
   }
   window.matchMedia('(min-width: 1280px)').addEventListener('change', remeasureNameColumn);
   if (document.fonts) document.fonts.addEventListener('loadingdone', remeasureNameColumn);
@@ -1191,13 +1279,37 @@ const apiBase = apiBaseProp ?? '';
   // yellow-500, orange-500 and red-500. The status dots use the same green
   // and red.
   const OFFLINE_BAR = 'bg-[#a3a3a3] dark:bg-[#525252]';
-  const offlineChip = () => `<span class="offline-chip shrink-0 rounded-full px-1.5 text-[11px] font-semibold leading-4 bg-red-500/10 text-red-700 dark:bg-red-400/15 dark:text-red-300" data-translate-detail="offlineChip">${translations.offlineChip[getCurrentLanguage()]}</span>`;
+  // 最后在线 (Last seen) of an offline server: its last report (updated_at),
+  // as HH:mm today and MM-DD HH:mm before, with how long ago. The time is
+  // kept on the element (data-last-seen) and the text written again every
+  // minute (refreshLastSeen); a server never heard from has none.
+  function lastSeenText(iso, lang = getCurrentLanguage()) {
+    const ms = Date.parse(iso || '');
+    if (!Number.isFinite(ms) || ms <= 0) return '';
+    const at = new Date(ms);
+    const p2 = (n) => String(n).padStart(2, '0');
+    const hm = `${p2(at.getHours())}:${p2(at.getMinutes())}`;
+    const when = at.toDateString() === new Date().toDateString() ? hm : `${p2(at.getMonth() + 1)}-${p2(at.getDate())} ${hm}`;
+    const min = Math.floor(Math.max(0, Date.now() - ms) / 60000);
+    const ago = min < 1 ? translations.justNow[lang]
+      : min < 60 ? translations.minutesAgo[lang].replace('{n}', min)
+      : min < 1440 ? translations.hoursAgo[lang].replace('{n}', Math.floor(min / 60))
+      : translations.daysAgo[lang].replace('{n}', Math.floor(min / 1440));
+    return lang === 'zh' ? `${when}（${ago}）` : `${when} (${ago})`;
+  }
+  const lastSeenTip = (iso, lang = getCurrentLanguage()) => `${translations.lastSeen[lang]} ${lastSeenText(iso, lang)}`;
+  const offlineChip = (item) => {
+    const seen = item && lastSeenText(item.updated_at) ? ` data-last-seen="${escapeHtmlAttr(item.updated_at)}" data-tooltip="${escapeHtmlAttr(lastSeenTip(item.updated_at))}"` : '';
+    return `<span class="offline-chip shrink-0 rounded-full px-1.5 text-[11px] font-semibold leading-4 bg-red-500/10 text-red-700 dark:bg-red-400/15 dark:text-red-300" data-translate-detail="offlineChip"${seen}>${translations.offlineChip[getCurrentLanguage()]}</span>`;
+  };
   // A server added in the admin page whose client has never reported (no
   // OS, CPU or memory yet) is waiting for it, not down: grey, not red, and
   // not counted as offline (Beszel's pending systems).
   const awaitingClient = (item) => !!(item && item.alert && !item.os && !item.cpu_model && !item.memory_info);
   const awaitingChip = () => `<span class="offline-chip awaiting-chip shrink-0 rounded-full px-1.5 text-[11px] font-semibold leading-4 bg-black/5 text-[#595959] dark:bg-white/[0.06] dark:text-[#ababab]" data-translate-detail="awaitingChip">${translations.awaitingChip[getCurrentLanguage()]}</span>`;
-  const statusChip = (item) => (awaitingClient(item) ? awaitingChip() : offlineChip());
+  const statusChip = (item) => (awaitingClient(item) ? awaitingChip() : offlineChip(item));
+  // The details' 最后在线 line: an offline server heard from before, not one waiting for its client.
+  const showLastSeen = (item) => !!(item && item.alert && !awaitingClient(item) && lastSeenText(item.updated_at));
   const statusDotColor = (item) => (awaitingClient(item) ? 'bg-[#a3a3a3]' : item.alert ? 'bg-[#fb2c36]' : 'bg-[#3db866]');
   const getProgressColor = (value, isOffline = false) => {
     if (isOffline) return OFFLINE_BAR;
@@ -1513,6 +1625,10 @@ const apiBase = apiBaseProp ?? '';
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
+          <button class="link-btn text-[#595959] dark:text-[#ababab] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" tabindex="-1" aria-hidden="true" data-link-id="${safeId}" title="${translations.copyServerLink[getCurrentLanguage()]}" data-translate-title="copyServerLink">
+            <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
+          </button>
     </div>
         <div class="cell-location text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center min-w-0" title="${escapeHtmlAttr(locationTitle(item.location))}">${locationCellHTML(item)}</div>
         <div class="cell-cpu h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.cpu || 0, false, isOffline, cardLabel('cpu'))}</div>
@@ -1528,6 +1644,12 @@ const apiBase = apiBaseProp ?? '';
           <div class="detail-list">
             <!-- Tags (first row) -->
             ${renderTagStrip(item)}
+            <!-- 最后在线 (Last seen), first, while the server is offline -->
+            <div class="detail-item detail-last-seen"${showLastSeen(item) ? '' : ' hidden'}>
+              <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></g></svg>
+              <div class="detail-label shrink-0" data-translate-detail="lastSeenInfo">${translations.lastSeenInfo[getCurrentLanguage()]}</div>
+              <div class="detail-value" data-detail="last_seen" data-last-seen="${escapeHtmlAttr(item.updated_at || '')}">${escapeHtml(lastSeenText(item.updated_at))}</div>
+            </div>
             <!-- Location and OS with the kind of machine, as Beszel's info bar
                  carries the OS, only where the row doesn't show them (the
                  styles leave them out where it does): the table at 768-1023 px
@@ -1678,10 +1800,18 @@ const apiBase = apiBaseProp ?? '';
     'systemsWillAppear': { en: 'Servers will appear here once their clients start reporting', zh: '客户端开始上报后，服务器将显示在这里' },
     'copySystemName': { en: 'Copy server name', zh: '复制服务器名称' },
     'copied': { en: 'Copied!', zh: '已复制！' },
+    'copyServerLink': { en: 'Copy a link to this server', zh: '复制这台服务器的链接' },
+    'linkCopied': { en: 'Link copied', zh: '已复制链接' },
     // Empty state of a filter that matches nothing (the services exist).
     'noMatchingServices': { en: 'No matching servers', zh: '没有匹配的服务器' },
     'tryAnotherFilter': { en: 'Try a different filter', zh: '换个筛选条件试试' },
     'locationInfo': { en: 'Location:', zh: '位置:' },
+    'lastSeenInfo': { en: 'Last seen:', zh: '最后在线:' },
+    'lastSeen': { en: 'Last seen', zh: '最后在线' },
+    'justNow': { en: 'just now', zh: '刚刚' },
+    'minutesAgo': { en: '{n} min ago', zh: '{n} 分钟前' },
+    'hoursAgo': { en: '{n} h ago', zh: '{n} 小时前' },
+    'daysAgo': { en: '{n} d ago', zh: '{n} 天前' },
     'osInfo': { en: 'OS:', zh: '系统:' },
     'cpuInformation': { en: 'CPU:', zh: 'CPU:' },
     'memoryInfo': { en: 'Memory:', zh: '内存:' },
@@ -1715,6 +1845,7 @@ const apiBase = apiBaseProp ?? '';
     'notApplicable': { en: 'N/A', zh: '不适用' },
     // Tooltip line of a target whose probe failed at the hovered time.
     'tcpingTimeout': { en: 'Timeout', zh: '超时' },
+    'tcpingLossLane': { en: 'Loss', zh: '丢包' },
     // Offline row chip and the summary beside the title.
     'offlineChip': { en: 'Offline', zh: '离线' },
     'awaitingChip': { en: 'Pending', zh: '等待接入' },
@@ -1747,11 +1878,34 @@ const apiBase = apiBaseProp ?? '';
   let lastStreamMessageAt = Date.now();
   let connectionLost = false;
 
+  // The 最后在线 texts (chip tooltips, details lines) from the kept times:
+  // "x minutes ago" moves on while nothing else about an offline server does.
+  function refreshLastSeen() {
+    const lang = getCurrentLanguage();
+    document.querySelectorAll('#systems-body [data-last-seen]').forEach((el) => {
+      const iso = el.dataset.lastSeen;
+      if (el.classList.contains('offline-chip')) {
+        const tip = lastSeenTip(iso, lang);
+        if (el.dataset.tooltip !== tip) el.dataset.tooltip = tip;
+      } else {
+        const text = lastSeenText(iso, lang);
+        if (el.textContent !== text) el.textContent = text;
+      }
+    });
+  }
+  setInterval(() => { if (!document.hidden) refreshLastSeen(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshLastSeen(); });
+
   function updateTranslations() {
     const lang = getCurrentLanguage();
     renderSystemsSummary();
     // The pages' footer texts
     applyPagination();
+    refreshLastSeen();
+    // The loss band's label is drawn in the chart
+    if (document.documentElement.classList.contains('loss-timeline')) {
+      tcpingCharts.forEach((entry) => { try { entry.chart.draw(); } catch (_) {} });
+    }
     
     // Update empty state - fix null check
     if (body) {
@@ -1856,6 +2010,35 @@ const apiBase = apiBaseProp ?? '';
     const ticks = [];
     for (; t <= max; t += step * 60000) ticks.push({ value: t });
     if (ticks.length >= 2) scale.ticks = ticks;
+  }
+
+  // Latency-axis ticks: round steps (1, 2 or 5 × 10ⁿ ms, and 25, 250…), at
+  // most six labels, fitted to the lines (Beszel's ["auto", "auto"] domain
+  // for response times) and never below 0 ms. Above the highest point the
+  // axis keeps a quarter of the lines' height free: the lines stay in the
+  // lower four-fifths of the chart, clear of the top edge and its label
+  // (lines up to 87 ms reach 120 ms, not 100 ms). Chart.js's own grace was
+  // added after the 0 ms floor, so a target under a millisecond beside a slow
+  // one took the axis to −50 ms.
+  function latencyTicks(scale) {
+    const lo = scale.$dataMin;
+    const hi = scale.$dataMax;
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return;
+    const span = Math.max(hi - lo, 0.1);
+    for (let exp = Math.floor(Math.log10(span / 5)); exp < 12; exp++) {
+      for (const m of exp >= 1 ? [1, 2, 2.5, 5] : [1, 2, 5]) {
+        const step = m * 10 ** exp;
+        const bottom = Math.max(0, Math.floor((lo - span * 0.025) / step) * step);
+        const top = Math.ceil((bottom + (hi - bottom) / 0.8) / step - 1e-9) * step;
+        const spaces = Math.round((top - bottom) / step);
+        if (spaces > 5) continue;
+        const round = (v) => Number(v.toFixed(Math.max(0, -exp)));
+        scale.ticks = Array.from({ length: spaces + 1 }, (_, i) => ({ value: round(bottom + i * step) }));
+        scale.min = round(bottom);
+        scale.max = round(top);
+        return;
+      }
+    }
   }
 
   // Function to update tooltip and axis label colours for all charts
@@ -2134,6 +2317,16 @@ const apiBase = apiBaseProp ?? '';
         if (item.alert) {
           const nameSpan = systemCell.querySelector('.row-name');
           if (nameSpan) nameSpan.insertAdjacentHTML('afterend', statusChip(item));
+        }
+        // The details' 最后在线 line follows (shown while offline).
+        const seenItem = rowEl && rowEl.querySelector('.detail-last-seen');
+        if (seenItem) {
+          seenItem.hidden = !showLastSeen(item);
+          const value = seenItem.querySelector('[data-last-seen]');
+          if (value) {
+            value.dataset.lastSeen = item.updated_at || '';
+            value.textContent = lastSeenText(item.updated_at);
+          }
         }
         // The chip widens the name cell (the column only ever grows).
         if (item.alert) recalculateColumnWidthFromCurrentData();
@@ -2544,24 +2737,89 @@ const apiBase = apiBaseProp ?? '';
   let tcpingConfigLoading = null; // Promise to prevent duplicate fetches
 
   // Cleanup function to destroy tcping chart for a system
-  // A stretch with no samples at all (the agent was offline) is left as a
-  // gap instead of a straight line across it: the piece of line between two
-  // neighbouring samples more than 2.5 sampling intervals apart (the median
-  // spacing) is not drawn. Lost samples are points with y=null and stay
-  // bridged by spanGaps, as before. (A numeric spanGaps would break the line
-  // at every lost sample too.)
-  function tcpingGapSegment(points) {
+  // The loss band (自定义设置 → 丢包时间线): 14 px under the plot (clear of
+  // the lowest value label, which is centred on the plot's edge), 6 px high,
+  // the time labels 8 px below it.
+  const LOSS_LANE_GAP = 14;
+  const LOSS_LANE_HEIGHT = 6;
+  const LOSS_LANE_LABEL_PADDING = 28;
+  // One target's lost probes as [from, to] time spans, neighbours joined;
+  // each lost probe stands for one probe interval (the median spacing), so a
+  // probe lost just before the agent went offline is not drawn across the
+  // stretch without samples. Kept per data array (live updates replace it).
+  const lossRunCache = new WeakMap();
+  function lossRuns(points) {
+    let runs = lossRunCache.get(points);
+    if (runs) return runs;
+    runs = [];
     const d = [];
     for (let i = 1; i < points.length; i++) {
+      const v = points[i].x - points[i - 1].x;
+      if (v > 0) d.push(v);
+    }
+    d.sort((a, b) => a - b);
+    const step = d.length ? d[d.length >> 1] : 60000;
+    for (let i = 0; i < points.length; i++) {
+      if (points[i].y !== null) continue;
+      const t0 = points[i].x;
+      const t1 = Math.min(i + 1 < points.length ? points[i + 1].x : t0 + step, t0 + step);
+      const last = runs[runs.length - 1];
+      if (last && t0 <= last[1] + step / 2) last[1] = Math.max(last[1], t1);
+      else runs.push([t0, t1]);
+    }
+    lossRunCache.set(points, runs);
+    return runs;
+  }
+
+  // A stretch without answers is left as a gap instead of a straight line
+  // across it: one with no samples at all (the agent was offline: a step of
+  // more than 2.5 sampling intervals, the median spacing), or two or more
+  // lost probes in a row (points with y=null). A single lost probe stays
+  // bridged by spanGaps, so the line does not break at every one (a numeric
+  // spanGaps would). Chart.js draws a bridged piece from the sample with a
+  // value before to the one after, so that whole piece is judged: judging
+  // only neighbouring samples drew a straight line across every run of lost
+  // probes, and across a stretch without samples whose first probe after it
+  // was lost (Chart.js drops a hidden piece that ends on a lost sample).
+  function tcpingGapSegment(points) {
+    const n = points.length;
+    const d = [];
+    for (let i = 1; i < n; i++) {
       const v = points[i].x - points[i - 1].x;
       if (v > 0) d.push(v);
     }
     if (d.length === 0) return undefined;
     d.sort((a, b) => a - b);
     const limit = d[d.length >> 1] * 2.5;
+    // long[i] / lost[i]: long steps / lost samples up to sample i; prev[i] /
+    // next[i]: the nearest sample with a value at or before / at or after i.
+    const long = new Int32Array(n);
+    const lost = new Int32Array(n);
+    const prev = new Int32Array(n);
+    const next = new Int32Array(n);
+    let run = false;
+    for (let i = 0, last = -1; i < n; i++) {
+      const isLost = points[i].y === null;
+      long[i] = i === 0 ? 0 : long[i - 1] + (points[i].x - points[i - 1].x > limit ? 1 : 0);
+      lost[i] = (i === 0 ? 0 : lost[i - 1]) + (isLost ? 1 : 0);
+      if (isLost && i > 0 && points[i - 1].y === null) run = true;
+      if (!isLost) last = i;
+      prev[i] = last < 0 ? i : last;
+    }
     // Without such a stretch: no per-piece styling, which costs ~20 ms per chart.
-    if (d[d.length - 1] <= limit) return undefined;
-    const hide = (ctx) => (ctx.p1.parsed.x - ctx.p0.parsed.x > limit ? 'transparent' : undefined);
+    if (long[n - 1] === 0 && !run) return undefined;
+    for (let i = n - 1, first = -1; i >= 0; i--) {
+      if (points[i].y !== null) first = i;
+      next[i] = first < 0 ? i : first;
+    }
+    const hide = (ctx) => {
+      const a = ctx.p0DataIndex;
+      const b = ctx.p1DataIndex;
+      if (!(a >= 0 && b > a && b < n)) return ctx.p1.parsed.x - ctx.p0.parsed.x > limit ? 'transparent' : undefined;
+      const from = prev[a];
+      const to = next[b];
+      return long[to] > long[from] || lost[to] - lost[from] >= 2 ? 'transparent' : undefined;
+    };
     return { borderColor: hide, backgroundColor: hide };
   }
 
@@ -3993,6 +4251,47 @@ const apiBase = apiBaseProp ?? '';
       }
     }
     
+    // 自定义设置 → 丢包时间线: a band under the plot, red where a shown target
+    // lost a probe (the selected target alone while one is picked), each mark
+    // as long as one probe interval; "丢包" in the axis column beside it. A
+    // gap in the lines reads as lost probes or as no data at a glance.
+    if (!window.__pulseLossLaneRegistered && ChartClass.register) {
+      ChartClass.register({
+        id: 'lossLane',
+        afterDraw(chart) {
+          const area = chart.chartArea;
+          const xs = chart.scales.x;
+          const ys = chart.scales.y;
+          if (!area || !xs || !ys) return;
+          const dark = document.documentElement.classList.contains('dark');
+          const top = area.bottom + LOSS_LANE_GAP;
+          const c = chart.ctx;
+          c.save();
+          c.fillStyle = gridLineColor(dark);
+          c.fillRect(area.left, top, area.right - area.left, LOSS_LANE_HEIGHT);
+          c.fillStyle = '#fb2c36';
+          const selected = chart.data.datasets.some((d) => d.role === 'selected');
+          chart.data.datasets.forEach((d, i) => {
+            if ((selected && d.role !== 'selected') || !chart.isDatasetVisible(i)) return;
+            lossRuns(d.data).forEach(([t0, t1]) => {
+              const x0 = Math.max(area.left, xs.getPixelForValue(t0));
+              const x1 = Math.min(area.right, xs.getPixelForValue(t1));
+              if (x1 >= area.left && x0 <= area.right) c.fillRect(x0, top, Math.max(1.5, x1 - x0), LOSS_LANE_HEIGHT);
+            });
+          });
+          const item = ys.getLabelItems ? ys.getLabelItems()[0] : null;
+          const right = item && item.options && item.options.translation ? item.options.translation[0] : ys.right - 8;
+          c.fillStyle = axisLabelColor(dark);
+          c.font = `11px ${ChartClass.defaults.font.family}`;
+          c.textAlign = 'right';
+          c.textBaseline = 'middle';
+          c.fillText(translations.tcpingLossLane[getCurrentLanguage()], right, top + LOSS_LANE_HEIGHT / 2);
+          c.restore();
+        },
+      });
+      window.__pulseLossLaneRegistered = true;
+    }
+
     const platform = presize ? class extends ChartClass.DomPlatform {
       getMaximumSize(element, width, height, aspectRatio) {
         if (presize && width === undefined && height === undefined) {
@@ -4002,6 +4301,7 @@ const apiBase = apiBaseProp ?? '';
       }
     } : undefined;
 
+    const lossLaneOn = document.documentElement.classList.contains('loss-timeline');
     const builtAt = performance.now();
     const chart = new ChartClass(ctx, {
       type: 'line',
@@ -4024,6 +4324,7 @@ const apiBase = apiBaseProp ?? '';
         // between points as before; updates use chart.update('none').
         animation: false,
         plugins: {
+          lossLane: lossLaneOn ? {} : false,
           legend: {
             display: false
           },
@@ -4190,15 +4491,18 @@ const apiBase = apiBaseProp ?? '';
               minRotation: 0,
               maxTicksLimit: 12,
               autoSkip: true,
-              autoSkipPadding: 12
+              autoSkipPadding: 12,
+              // Below the loss band when it is shown
+              padding: lossLaneOn ? LOSS_LANE_LABEL_PADDING : 3
             },
             // No vertical grid lines; a short mark under each time, as
             // recharts draws them in Beszel's charts (6 px, #666 in either
-            // theme), and no axis line.
+            // theme), and no axis line. With the loss band the band is the
+            // baseline, without the marks.
             grid: {
               display: true,
               drawOnChartArea: false,
-              drawTicks: true,
+              drawTicks: !lossLaneOn,
               tickLength: 6,
               tickColor: '#666666',
               tickWidth: 1
@@ -4209,12 +4513,12 @@ const apiBase = apiBaseProp ?? '';
             bounds: 'ticks', // Use 'ticks' instead of 'data' to ensure proper tooltip positioning
             afterBuildTicks: roundTimeTicks
           },
-          // Fitted to the lines (Beszel's ["auto", "auto"] domain for
-          // response times), never below 0 ms.
+          // Fitted to the lines with room above them, never below 0 ms
+          // (latencyTicks, from the visible lines' own range).
           y: {
             beginAtZero: false,
-            grace: '5%',
-            afterDataLimits: (scale) => { if (scale.min < 0) scale.min = 0; },
+            afterDataLimits: (scale) => { scale.$dataMin = scale.min; scale.$dataMax = scale.max; },
+            afterBuildTicks: latencyTicks,
             ticks: {
               color: axisLabelColor(isDarkMode),
               font: {
@@ -4223,7 +4527,9 @@ const apiBase = apiBaseProp ?? '';
               callback: function(value) {
                 return value + ' ms';
               },
-              maxTicksLimit: 5
+              // latencyTicks gives at most six; a lower limit would make
+              // Chart.js skip every other label.
+              maxTicksLimit: 6
             },
             grid: {
               color: gridLineColor(isDarkMode),
@@ -5037,6 +5343,7 @@ const apiBase = apiBaseProp ?? '';
 
       setupCopyButtons(body);
       setupRowClickHandlers(body);
+      openLinkedServer();
       // Icons fill in on their own. Waiting for them here held the click
       // handlers and every later update (renderData stays locked while this
       // runs) until the slowest icon arrived; the largest flags come from
@@ -6004,6 +6311,7 @@ const apiBase = apiBaseProp ?? '';
     }
     resizeTimeout = setTimeout(() => {
       recalculateColumnWidthFromCurrentData();
+      scheduleNameRoom();
       // Rotating the phone / resizing the browser changes the chart's CSS
       // box width (inside horizontally-scrollable table). Chart.js does not
       // always observe that layout shift reliably on mobile Safari — give it
@@ -6112,7 +6420,12 @@ const apiBase = apiBaseProp ?? '';
     }
     #monitor-root:not(.layout-grid) .system-row > [data-system-id] > div { height: auto; min-height: 0; }
     #monitor-root:not(.layout-grid) .cell-name { grid-area: name; min-width: 0; align-items: flex-start; }
-    #monitor-root:not(.layout-grid) .cell-name > .rounded-full { margin-top: 5.5px; }
+    /* The status dot, the chip and the copy button centred on the name's
+       first line (13 px × 1.3 = 16.9 px). The chip is rounded-full too:
+       the dot's 5.5 px once took it 5 px below the name. */
+    #monitor-root:not(.layout-grid) .cell-name > .rounded-full:first-child { margin-top: 5.5px; }
+    #monitor-root:not(.layout-grid) .cell-name > .offline-chip { margin-top: 0.5px; }
+    #monitor-root:not(.layout-grid) .cell-name > :is(.copy-btn, .link-btn) { height: 16.9px; display: inline-flex; align-items: center; }
     #monitor-root:not(.layout-grid) .row-name {
       white-space: normal;
       overflow-wrap: anywhere;
@@ -6518,6 +6831,10 @@ const apiBase = apiBaseProp ?? '';
   #monitor-root .detail-list { display: grid; grid-template-columns: 14px max-content minmax(0, 1fr); align-items: start; column-gap: 8px; row-gap: 8px; font-size: 12px; line-height: 18px; }
   #monitor-root .detail-list > [data-tag-strip] { grid-column: 1 / -1; }
   #monitor-root .detail-item { display: contents; }
+  #monitor-root .detail-last-seen[hidden] { display: none; }
+  #systems-body > .system-row { scroll-margin-top: 16px; }
+  #monitor-root.names-tight:not(.layout-grid) .cell-name > .link-btn { display: none; }
+  html.sticky-table-header #systems-body > .system-row { scroll-margin-top: 72px; }
   #monitor-root .detail-icon { width: 14px; height: 14px; margin-top: 2px; flex: none; color: #595959; }
   html.dark #monitor-root .detail-icon { color: #ababab; }
   #monitor-root .detail-label { color: #595959; white-space: nowrap; }

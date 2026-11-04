@@ -568,6 +568,17 @@ const customCodePlaceholder = [
               <span class="text-xs text-[#595959] dark:text-[#ababab]">1–200</span>
             </div>
           </div>
+          <!-- Loss timeline: a band under the TCPing chart, red where probes were lost (off by default) -->
+          <div class="flex items-center justify-between gap-3 p-4">
+            <div class="flex-1">
+              <label for="loss-timeline-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="lossTimelineLabel">Loss Timeline</label>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="lossTimelineDesc">A thin band under the TCPing chart, red where probes were lost, so a gap in the lines reads as lost probes or as no data</p>
+            </div>
+            <label class="relative inline-flex shrink-0 items-center cursor-pointer">
+              <input type="checkbox" id="loss-timeline-toggle" name="loss_timeline" class="sr-only peer">
+              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+            </label>
+          </div>
           </div>
         </section>
 
@@ -3754,6 +3765,10 @@ const customCodePlaceholder = [
         if (cardLayoutToggle) {
           cardLayoutToggle.checked = config.card_layout === true;
         }
+        const lossTimelineToggle = document.getElementById('loss-timeline-toggle');
+        if (lossTimelineToggle) {
+          lossTimelineToggle.checked = config.loss_timeline === true;
+        }
         showPageSize(Number(config.page_size) || 0);
         return true;
       }
@@ -4382,6 +4397,7 @@ const customCodePlaceholder = [
     const cardLayoutToggle = document.getElementById('card-layout-toggle');
     const pageSizeToggle = document.getElementById('page-size-toggle');
     const pageSizeInput = document.getElementById('page-size-input');
+    const lossTimelineToggle = document.getElementById('loss-timeline-toggle');
     const data = {
       text: formData.get('text')?.trim() || 'Pulse',
       logo: formData.get('logo')?.trim() || '',
@@ -4393,6 +4409,7 @@ const customCodePlaceholder = [
       sticky_header: stickyHeaderToggle?.checked || false,
       card_layout: cardLayoutToggle?.checked || false,
       page_size: pageSizeToggle?.checked ? Math.min(200, Math.max(1, parseInt(pageSizeInput?.value || '', 10) || 20)) : 0,
+      loss_timeline: lossTimelineToggle?.checked || false,
     };
 
     // Set button to saving state
@@ -4959,6 +4976,8 @@ const customCodePlaceholder = [
     'pagesLabel': { en: 'Pages', zh: '分页显示' },
     'pagesDesc': { en: 'Show the servers a page at a time, in the table and the cards alike, with a footer to turn the pages (as Beszel)', zh: '服务器按页显示，表格与卡片布局都适用，页脚可翻页（同 Beszel）' },
     'pageSizeLabel': { en: 'Servers per page', zh: '每页显示' },
+    'lossTimelineLabel': { en: 'Loss Timeline', zh: '丢包时间线' },
+    'lossTimelineDesc': { en: 'A thin band under the TCPing chart, red where probes were lost, so a gap in the lines reads as lost probes or as no data', zh: '在 TCPing 图表下方加一条细带，红色处为丢包；图上断开的地方是丢包还是没有数据，一眼分清' },
     'cardLayoutDesc': { en: 'Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu for their visit', zh: '用卡片代替表格显示每台服务器，电脑和手机都一样；访客仍可在视图菜单中临时切换' },
   };
 

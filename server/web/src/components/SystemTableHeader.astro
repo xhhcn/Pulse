@@ -30,6 +30,7 @@ import Icon from './Icon.astro';
         data-placeholder-en="Filter..."
         data-placeholder-zh="筛选..."
       />
+      <span id="system-filter-kbd" aria-hidden="true"><kbd data-kbd-mod>Ctrl</kbd><kbd>K</kbd></span>
       <button id="system-filter-clear" type="button" class="hidden absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 items-center justify-center rounded-[10.8px] text-[#595959] dark:text-[#ababab] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#f5f5f5]" aria-label="Clear" title="Clear">
         <Icon name="x" size={16} class="w-4 h-4" />
       </button>
@@ -81,6 +82,20 @@ import Icon from './Icon.astro';
 
 <style is:global>
   #system-filter-clear:not(.hidden) { display: inline-flex; }
+  /* The shortcut that focuses the filter (Ctrl K, ⌘K on a Mac, or /), as
+     Beszel's search button shows it: in the empty filter on a desktop (a
+     pointer that hovers), gone while the filter has focus or text. */
+  #system-filter-kbd { display: none; }
+  @media (hover: hover) and (pointer: fine) {
+    #system-filter-input:placeholder-shown:not(:focus) ~ #system-filter-kbd {
+      display: inline-flex; gap: 4px; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none;
+    }
+  }
+  #system-filter-kbd kbd {
+    display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid #e2dfdc; border-radius: 4px;
+    background: #f5f3f1; color: #595959; font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  html.dark #system-filter-kbd kbd { border-color: #333333; background: #262626; color: #ababab; }
 
   /* The menu: Beszel's popover (card ground, hairline border, soft shadow),
      sort and status side by side from 640 px. */
@@ -183,6 +198,12 @@ import Icon from './Icon.astro';
   import { getLanguage, initI18n } from '../utils/i18n.ts';
 
   initI18n();
+
+  // The filter's shortcut hint names the Mac's Command key there.
+  if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) {
+    const mod = document.querySelector('#system-filter-kbd [data-kbd-mod]');
+    if (mod) mod.textContent = '⌘';
+  }
   
   // Translation map for this component
   const translations = {
