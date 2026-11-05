@@ -146,11 +146,13 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} fixes a server opened again showing empty Resources charts. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} follows a Beszel re-check of v1.3.63: a roomier toolbar on phones, Beszel's line when nothing matches the filter, and shorter setting descriptions. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: a server closed while its Resources tab was shown, then opened again, showed four empty cards (and clicking Resources did not draw them). Each opening now starts on the Latency tab, as the first one does, and Resources draws its charts again — also after opening another server or switching to the Latency view.
+            - Web: on phones with the Latency view on, the Resources | Latency switch takes a row of its own (two equal halves) and the filter keeps its width (109 → 284 px in English).
+            - Web: when no server matches the filter or status, the list shows Beszel's single line in a 96 px row instead of an icon and two lines; a site with no servers keeps its hint.
+            - Web: the Resource History and Latency View descriptions in Customization Settings are shorter.
 
             ### Compatibility
 
@@ -158,7 +160,7 @@ jobs:
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: opening again after closing on Resources, after opening another server and after the Latency view (on Latency with its chart, then Resources with four charts), a server without TCPing on every opening (v1.3.62 failed the first six of these checks); and the suites for details, opening and closing, the chart, the time range, the Resources tab, the Latency view and the chart's features.
+            - Chromium, Firefox and WebKit: the phone toolbar with and without the switch, in English and Chinese, and unchanged from 640 px; the no-match line in the table, the cards, on phones and in dark mode, the language switch, and the empty-site hint; the setting descriptions in both languages; and the suites for public pages, empty states, alignment, headers, phones, details, the Resources tab, the Latency view and reopening.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
