@@ -146,55 +146,42 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows a review of the server, the agent data and the web frontend. It brings:
-
-            - a login limit that holds against concurrent guesses
-            - a third of the disk writes
-            - open charts that read only new probes
-            - a lighter live list
-            - background tabs that pause the live stream
-            - Beszel's keys in the view menu
-            - an SVG logo as the browser tab's icon
-
-            Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} is an agent update (1.3.67). It follows a review of how the agent measures disks, traffic and memory, checked against df, /proc and the physical links in containers. Agents installed with auto-update move to it within a day. The server and web app are the same as v1.3.66.
 
             ### Highlights
 
-            - Security: the login limit (five wrong passwords, then fifteen minutes locked) counted an attempt only after checking it, so wrong passwords sent at the same moment were all checked (40 of 40 in a test). Each attempt now takes its place before the check.
-            - Server: agent pushes that arrive within 100 ms share one database commit. With 131 agents, disk writes fell from 0.76 MB/s (about 65 GB a day) to 0.26 MB/s. A push is still answered only after it is on disk.
-            - Server: GET /api/tcping/history takes `since` (unix ms) and reads only from that moment on. Requests that miss the cache for the same history at the same time share one read.
-            - Server: the live stream now sends percentages with 2 decimals, speeds with 4 significant digits and latencies to the microsecond. They went out with 17 digits; this is a fifth to a third less compressed data. Stored values are unchanged.
-            - Server: resource history no longer lets a report that finishes after its minute was written replace that minute's average. Minutes not yet written are saved at shutdown. Its pages are filled, about half the size on disk.
-            - Web: the usage bars are scaled instead of resized, and only a step of five points or more glides (150 ms). Smaller steps, a few pixels, are set at once. On xhh.li's data at 20 servers a page, main-thread work on a live list fell by about two thirds on desktop (1.35 → 0.46 s a minute) and by two fifths on a phone emulated at a quarter speed (4.5 → 2.7 s).
-            - Web: an open TCPing chart adds new probes from a `since` read instead of downloading the whole day every minute (about 1 KB instead of 45 KB compressed).
-            - Web: a page hidden for a minute closes its live stream and reopens it as soon as it is shown again. Before, every open page received about 27 MB an hour with 130 servers.
-            - Web: closed server details no longer keep their charts' data in memory (opening and closing 20 servers left 11 MB behind).
-            - Web: a list sorted by a live column moves only the rows that changed place on each update; it used to move every row.
-            - Web: the view menu works with the keyboard as Beszel's does:
-              - Enter or ↓ opens it on its first item;
-              - the arrow keys, Home and End move between items;
-              - Escape and Tab close it back on its button.
-            - Web: a logo given as SVG code is also the browser tab's icon; an image logo already was.
+            - Disk: the percentage is now df's Use% (used / (used + available)). On ext4 it reads 2–5 points higher than before, because the space kept for root is no longer counted as free; a full disk now reads 100 % instead of 95 %.
+            - Disk: ZFS pools are counted, each pool's free space once. A ZFS root used to show only its EFI partition.
+            - Network: only the machine's own NICs are counted, physical or a VM's virtual NIC. Bridges, bonds, VLANs, veth/tap pairs, tunnels and Proxmox firewall bridges are not. A Proxmox VM's download used to count twice, and as upload too.
+            - Network: speeds are taken per interface, so a link that disappears (a PPP reconnect) no longer drops the whole reading to zero.
+            - Memory: in a container, file cache is no longer counted as used; reading a large file used to fill the bar. On a ZFS host, the ARC is not counted as used either.
+            - A hung network mount no longer delays pushes. It made one push in ten arrive 13 s late, close to the 15 s offline limit.
+            - The first push after an agent start or update reports measured CPU and traffic, not 0.
+            - TCPing: a lost probe is stamped with its round instead of 3 s later. At most eight targets are dialled at once.
 
             ### Compatibility
 
-            - Server changes are shared with Pulse-Hotaru.
-            - Existing clients continue to work.
-            - The new web app also works with an older server, which answers `since` with the whole day.
+            - Agent 1.3.67 uses the same push format and works with every v1.3 server.
+            - After the update, ext4 hosts show their disk 2–5 points higher, the same figure as df.
 
             ### Verified
 
-            - Go, with the race detector: concurrent login guesses, batched pushes, `since` reads (privacy mode, unknown servers, unconfigured targets), shared history reads, late resource reports and the shutdown flush. go vet and staticcheck are clean.
-            - Disk writes measured on a 131-server QA server before and after.
-            - Chromium, Firefox and WebKit:
-              - the view menu's keys;
-              - the bars' length and easing, with a pixel comparison against v1.3.65 on frozen data (only the end pixel of a bar is now anti-aliased), and small steps set at once;
-              - rows moved when sorting;
-              - `since` reads of open charts;
-              - tab icons;
-              - rounded stream values;
-              - the regression suites.
-            - Chromium: memory after opening 20 servers, and the paused stream of a hidden page.
+            - Go, with the race detector:
+              - df tables: a full ext4 disk, a ZFS root, btrfs with NFS, snap and overlay mounts;
+              - sysfs interface sets;
+              - meminfo with arcstats;
+              - cgroup v1 and v2 memory.stat;
+              - TCPing stamps;
+              - background disk refresh.
+            - Builds and go vet on Linux amd64/arm64, macOS amd64/arm64 and Windows amd64.
+            - In containers, against /proc, df and the physical link:
+              - CPU within 0.5 points;
+              - memory exact;
+              - disk equal to df;
+              - a Proxmox-like topology reads the uplink's traffic;
+              - a 512 MiB container reads 4 % with a file in cache (was 53 %);
+              - a hung df keeps pushes 3 s apart;
+              - end to end with the v1.3.66 server.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
