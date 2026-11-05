@@ -146,16 +146,17 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows v1.3.57 in use on a site of 129 servers: the TCPing chart gets Beszel's time range picker, the page does much less work, and the filter row fits tablets. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} follows a Beszel re-check of v1.3.58 on a site of 129 servers: a roomier TCPing chart with the loss band, fixes to card, phone and header spacing, and a few Beszel touches. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: the TCPing chart has Beszel's time range picker (1 / 6 / 12 / 24 hours) at the top right of its card. Phones open on 1 hour, wider screens on 24 hours; a pick holds for the visit. Every probe of the day stays on the chart and the axis narrows to the newest probe's last hours, so switching needs no new request; the legend's averages, the loss band and the latency axis follow the span.
-            - Web: no summary over the chart: the legend gives each target's average and the loss band the losses. Where the loss band is off, a target that lost probes shows its loss in the legend.
-            - Web: a server's details are built the first time it is opened: half the page's elements (25,900 → 11,700 with 129 servers), a first-load task about 30 % shorter on a phone-speed CPU, faster opening.
-            - Web: live updates no longer search the whole page for every server's details; on a phone-speed CPU their work fell from about 22 % to under 10 % of the main thread.
-            - Web: from 768 to 899 px (tablets in portrait) the filter and the view button take a full row under the title, as on phones.
-            - Web: an admin's tag change reaches open dashboards again.
+            - Web: with the loss band on, the TCPing chart no longer leaves 24 px of blank space under the time labels; the plot gets it (119 → 144 px tall).
+            - Web: cards at 640–1279 px: the Net and Uptime lines are as tall as the others. Phones: a CPU name's "1 Virtual Core" stays on one line, and icons sit 4 px from their labels.
+            - Web: English at 1024–1360 px: the "Location" header no longer runs into "CPU" (a slightly wider location column).
+            - Web: a server with no swap (0 B / 0 B) shows no swap line, as in Beszel.
+            - Web: an opened table row shares its details' background, without a line between them.
+            - Web: from 1024 to 1279 px the table uses 13 px regular figures and 50 px rows (12 px and 45 px before); from 1280 px it stays at Beszel's 14 px.
+            - Web: the chart tooltip follows Beszel's (rounder, no shadow), and the sign-in page shows the site's own logo when one is set.
 
             ### Compatibility
 
@@ -163,7 +164,7 @@ jobs:
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: the time range picker (24 hours on desktops and 1 hour on phones, 1 / 6 / 12 / 24 by mouse and keyboard, Escape, the span kept for the visit, English), a live probe sliding the hour along, no summary over the chart and the legend's loss where the band is off, the filter row from 768 to 1024 px, details built on first open (the same info bar as before, last seen, tags changed by the admin on open dashboards), and the suites for public pages, last seen and links, phones and cards, layout, motion, the latency axis, the chart's theme and palette, sorting under live updates, alignment and the chart's features.
+            - Chromium, Firefox and WebKit: the chart with the loss band (axis height, plot height, space under the labels) and without it, the tooltip, card lines at 640–1279 px, phone label gaps and the CPU name, the location header at 1024–1360 px in English, no swap line for 0 B / 0 B, the opened row on its details' ground, the 1024–1279 px table at 13 px with 50 px rows, the sign-in mark with and without a site logo; no cut names at any of 153 widths in English and Chinese, phones from 320 px, and the suites for the time range, public pages, last seen and links, details, cards, the latency axis, the chart's theme, headers, alignment and the chart's features.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
