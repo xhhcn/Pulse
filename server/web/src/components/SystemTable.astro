@@ -1884,8 +1884,7 @@ const apiBase = apiBaseProp ?? '';
     'copyServerLink': { en: 'Copy a link to this server', zh: '复制这台服务器的链接' },
     'linkCopied': { en: 'Link copied', zh: '已复制链接' },
     // Empty state of a filter that matches nothing (the services exist).
-    'noMatchingServices': { en: 'No matching servers', zh: '没有匹配的服务器' },
-    'tryAnotherFilter': { en: 'Try a different filter', zh: '换个筛选条件试试' },
+    'noMatchingLine': { en: 'No matching servers.', zh: '没有匹配的服务器。' },
     'locationInfo': { en: 'Location:', zh: '位置:' },
     'lastSeenInfo': { en: 'Last seen:', zh: '最后在线:' },
     'lastSeen': { en: 'Last seen', zh: '最后在线' },
@@ -1964,7 +1963,7 @@ const apiBase = apiBaseProp ?? '';
   };
 
   // [title, hint] of the empty table: no services at all / none match the filter.
-  const emptyMessageKeys = [['noSystemsFound', 'systemsWillAppear'], ['noMatchingServices', 'tryAnotherFilter']];
+  const emptyMessageKeys = [['noSystemsFound', 'systemsWillAppear']];
 
   function getCurrentLanguage() {
     return getLanguage();
@@ -2014,6 +2013,7 @@ const apiBase = apiBaseProp ?? '';
     }
     
     // Update empty state - fix null check
+    if (body) body.querySelectorAll('[data-empty-key]').forEach((el) => { el.textContent = translations[el.dataset.emptyKey][lang]; });
     if (body) {
       const emptyState = body.querySelector('.text-sm.font-medium');
       const emptyKeys = emptyState && emptyMessageKeys.find(([titleKey]) =>
@@ -2240,11 +2240,14 @@ const apiBase = apiBaseProp ?? '';
       void root.offsetHeight; // Force reflow to apply the reset immediately
     }
     
-    if (body) {
-      const lang = getCurrentLanguage();
+    if (body && filtered) {
       // A filter (the text or the status) that matches nothing is not an
-      // empty deployment.
-      const [titleKey, hintKey] = emptyMessageKeys[currentFilter.trim() || statusFilter !== 'all' ? 1 : 0];
+      // empty deployment: Beszel's one line in a 96 px row (its table's
+      // "No systems found.")
+      body.innerHTML = `<div class="systems-none" data-empty-key="noMatchingLine">${translations.noMatchingLine[getCurrentLanguage()]}</div>`;
+    } else if (body) {
+      const lang = getCurrentLanguage();
+      const [titleKey, hintKey] = emptyMessageKeys[0];
       body.innerHTML = `
         <div class="flex flex-col items-center justify-center py-12 text-center">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-[#595959] dark:text-[#ababab] mb-3">
@@ -7839,6 +7842,10 @@ const apiBase = apiBaseProp ?? '';
      put the targets on the line under the name (--lat-areas), each with its
      colour and name over its value; cards give each target a row of their
      grid (the colour where the icons are, the name, the value). */
+  /* No server matches the filter: Beszel's line in a 96 px row (across the
+     cards' grid as well) */
+  #systems-body .systems-none { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; height: 96px; padding: 0 16px; font-size: 14px; line-height: 20px; text-align: center; color: #1d1d20; }
+  html.dark #systems-body .systems-none { color: #f5f5f5; }
   .cell-latency { display: none; }
   /* 延迟's rows don't open: no pointer and no hover */
   html #monitor-root.view-latency #systems-body .system-row > [data-system-id] { cursor: default; }

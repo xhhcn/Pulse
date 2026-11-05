@@ -20,7 +20,7 @@ import Icon from './Icon.astro';
        take a full row of their own under the title (Beszel's narrow layout):
        beside the title and its summary they no longer fit, and a short box
        under it left most of the row empty. -->
-  <div class="flex items-center gap-2 w-full min-[900px]:w-auto">
+  <div class="list-toolbar flex items-center gap-2 w-full min-[900px]:w-auto">
     <!-- 自定义设置 → 延迟视图: the servers by resources or by each TCPing
          target's last-hour latency (SystemTable) -->
     <div id="list-view-switch" class="list-view-switch" role="tablist">
@@ -119,6 +119,14 @@ import Icon from './Icon.astro';
   html.latency-none .list-view-switch { display: none !important; }
   @media (max-width: 767.98px) {
     .list-view-tab { padding: 0 10px; font-size: 13px; }
+  }
+  /* Phones: the switch on a row of its own, its two halves equal (Beszel's
+     tab bar); the filter and the menu under it, the filter as wide as on a
+     phone without the switch (beside it, English left the filter 109 px) */
+  @media (max-width: 639.98px) {
+    html.latency-view:not(.latency-none) .list-toolbar { flex-wrap: wrap; }
+    html.latency-view .list-view-switch { flex: 1 1 100%; }
+    html.latency-view .list-view-tab { flex: 1 1 0; }
   }
 
   /* The menu: Beszel's popover (card ground, hairline border, soft shadow),

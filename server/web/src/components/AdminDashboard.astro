@@ -583,7 +583,7 @@ const customCodePlaceholder = [
           <div class="flex items-center justify-between gap-3 p-4">
             <div class="flex-1">
               <label for="resource-history-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="resourceHistoryLabel">Resource History</label>
-              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="resourceHistoryDesc">An opened server's chart card gets a Resources tab: its CPU, memory, disk and network, a sample a minute. The server always keeps the last 24 hours (older minutes are removed); the switch only shows them</p>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="resourceHistoryDesc">A Resources tab on opened servers: CPU, memory, disk and network. The last 24 hours are always kept; this shows them</p>
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="resource-history-toggle" name="resource_history" class="sr-only peer">
@@ -594,7 +594,7 @@ const customCodePlaceholder = [
           <div class="flex items-center justify-between gap-3 p-4">
             <div class="flex-1">
               <label for="latency-view-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="latencyViewLabel">Latency View</label>
-              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="latencyViewDesc">A Resources | Latency switch beside the dashboard's filter: the servers side by side by each TCPing target's average latency and loss over the last hour</p>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="latencyViewDesc">A Resources | Latency switch beside the filter: the servers by each TCPing target's last-hour latency and loss</p>
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="latency-view-toggle" name="latency_view" class="sr-only peer">
@@ -5009,9 +5009,9 @@ const customCodePlaceholder = [
     'lossTimelineLabel': { en: 'Loss Timeline', zh: '丢包时间线' },
     'lossTimelineDesc': { en: 'A thin band under the TCPing chart, red where probes were lost, so a gap in the lines reads as lost probes or as no data', zh: '在 TCPing 图表下方加一条细带，红色处为丢包；图上断开的地方是丢包还是没有数据，一眼分清' },
     'resourceHistoryLabel': { en: 'Resource History', zh: '资源历史' },
-    'resourceHistoryDesc': { en: "An opened server's chart card gets a Resources tab: its CPU, memory, disk and network, a sample a minute. The server always keeps the last 24 hours (older minutes are removed); the switch only shows them", zh: '展开服务器时，图表卡片多一个「资源」页：CPU、内存、磁盘和网络的每分钟平均值。服务端始终只保留最近 24 小时（更早的自动清理），开关只管显示' },
+    'resourceHistoryDesc': { en: "A Resources tab on opened servers: CPU, memory, disk and network. The last 24 hours are always kept; this shows them", zh: '展开服务器时多一个「资源」页（CPU、内存、磁盘、网络）。服务端始终保留最近 24 小时，开关只管显示' },
     'latencyViewLabel': { en: 'Latency View', zh: '延迟视图' },
-    'latencyViewDesc': { en: "A Resources | Latency switch beside the dashboard's filter: the servers side by side by each TCPing target's average latency and loss over the last hour", zh: '首页筛选框旁出现「资源 | 延迟」切换：按各 TCPing 目标最近 1 小时的平均延迟和丢包，并排比较、排序服务器' },
+    'latencyViewDesc': { en: "A Resources | Latency switch beside the filter: the servers by each TCPing target's last-hour latency and loss", zh: '筛选框旁多一个「资源 | 延迟」切换，按各 TCPing 目标近 1 小时的平均延迟和丢包比较服务器' },
     'cardLayoutDesc': { en: 'Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu for their visit', zh: '用卡片代替表格显示每台服务器，电脑和手机都一样；访客仍可在视图菜单中临时切换' },
   };
 
