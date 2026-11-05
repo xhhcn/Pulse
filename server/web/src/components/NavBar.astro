@@ -379,6 +379,49 @@ const { isAdmin = false, bare = false } = Astro.props;
 
     // System theme listener removed - we use fixed defaults (English and Dark)
 
+    // The tab's icon is the site's logo when one is set, as Beszel's tab
+    // shows its own. A logo given as an address the page head already puts
+    // on the tab (every page does, for any URL); one given as SVG code had
+    // no icon until now: the tab gets a copy of the checked element in the
+    // navbar, its currentColor following the browser's light or dark tab
+    // strip. Without a logo the Pulse icon the page head links stays.
+    const shippedFavicon = (() => {
+      const link = document.querySelector('link[rel~="icon"]');
+      return link ? { href: link.getAttribute('href'), type: link.getAttribute('type') } : null;
+    })();
+    let svgFaviconShown = false;
+    function applySiteFavicon(custom) {
+      const link = document.querySelector('link[rel~="icon"]');
+      if (!link || !shippedFavicon) return;
+      if (!custom || custom.tagName === 'IMG') {
+        // (an SVG logo replaced later: its copy goes; an address logo is the
+        // page head's, set at load)
+        if (svgFaviconShown) {
+          svgFaviconShown = false;
+          if (custom) {
+            link.removeAttribute('type');
+            link.setAttribute('href', custom.getAttribute('src'));
+          } else {
+            link.setAttribute('href', shippedFavicon.href);
+            if (shippedFavicon.type) link.setAttribute('type', shippedFavicon.type);
+            else link.removeAttribute('type');
+          }
+        }
+        return;
+      }
+      svgFaviconShown = true;
+      const copy = custom.cloneNode(true);
+      copy.removeAttribute('class');
+      copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      copy.setAttribute('width', '32');
+      copy.setAttribute('height', '32');
+      const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      style.textContent = ':root{color:#18181b}@media (prefers-color-scheme:dark){:root{color:#e8eaed}}';
+      copy.insertBefore(style, copy.firstChild);
+      link.setAttribute('type', 'image/svg+xml');
+      link.setAttribute('href', `data:image/svg+xml,${encodeURIComponent(new XMLSerializer().serializeToString(copy))}`);
+    }
+
     // Apply navbar configuration and show content with smooth fade-in animation
     function applyNavbarConfig(config) {
       const navbarText = document.getElementById('navbar-text');
@@ -512,6 +555,9 @@ const { isAdmin = false, bare = false } = Astro.props;
           loginMark.innerHTML = loginMark._pulseMark;
         }
       }
+
+      // and the tab's icon (applySiteFavicon)
+      applySiteFavicon(logoContainer ? logoContainer.querySelector('img.custom-logo-img, svg:not(.default-logo)') : null);
 
       // Update monitor icon stroke color based on current theme
       const currentTheme = getCurrentTheme();

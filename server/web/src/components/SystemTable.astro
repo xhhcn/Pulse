@@ -898,9 +898,53 @@ const apiBase = apiBaseProp ?? '';
   }
   window.addEventListener('resize', placeViewMenu);
 
+  // Keys as in Beszel's menu (Radix): Enter, Space or ↓ on the button open
+  // it on its first item (↑ on its last); ↑ ↓ go from item to item, through
+  // every section in turn, Home and End to the ends; Escape (below) and Tab
+  // close it back on the button. Its items are one stop for Tab, reached
+  // with the arrows. The pointer works as before.
+  const viewMenuItems = () => (columnsDropdown
+    ? [...columnsDropdown.querySelectorAll('.view-menu-item')].filter((el) => el.offsetParent !== null && !el.disabled)
+    : []);
+  columnsDropdown?.querySelectorAll('.view-menu-item').forEach((el) => el.setAttribute('tabindex', '-1'));
+  // (the phone menu scrolls inside: the item is brought into view, the page
+  // moves only when the item is off screen)
+  const focusViewMenuItem = (item) => {
+    if (!item) return;
+    item.focus({ preventScroll: true });
+    item.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
+
   columnsBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
-    setViewMenuOpen(columnsDropdown?.classList.contains('hidden'));
+    const opening = columnsDropdown?.classList.contains('hidden');
+    setViewMenuOpen(opening);
+    // opened from the keyboard (a click without a pointer): onto the first item
+    if (opening && e.detail === 0) focusViewMenuItem(viewMenuItems()[0]);
+  });
+  columnsBtn?.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    if (columnsDropdown?.classList.contains('hidden')) setViewMenuOpen(true);
+    const items = viewMenuItems();
+    focusViewMenuItem(e.key === 'ArrowDown' ? items[0] : items[items.length - 1]);
+  });
+  columnsDropdown?.addEventListener('keydown', (e) => {
+    const items = viewMenuItems();
+    if (!items.length) return;
+    const at = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = at < 0 ? 0 : (at + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+      focusViewMenuItem(items[next]);
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      focusViewMenuItem(items[e.key === 'Home' ? 0 : items.length - 1]);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      setViewMenuOpen(false);
+      columnsBtn?.focus();
+    }
   });
 
   // Close the menu when clicking outside
@@ -1155,10 +1199,30 @@ const apiBase = apiBaseProp ?? '';
 
   const pct = (val) => Math.min(Math.max(val || 0, 0), 100);
   // Bars follow whole percents (the label keeps one decimal): a tenth of a
-  // percent is a sub-pixel step, yet each one restarted the bar's width
-  // transition on nearly every update. The bars ease to a new value in
-  // 150 ms (width only, a colour changes at once); Beszel's meters jump.
+  // percent is a sub-pixel step, yet each one restarted the bar's
+  // transition on nearly every update. A long step eases in 150 ms (the
+  // length only, a colour changes at once); Beszel's meters jump.
   const barWidth = (val) => `${Math.round(pct(val))}%`;
+  // The fill spans its track and is scaled from the left (the same length
+  // as a width), and only a step of five points or more eases: under that
+  // (under 6 px on a desktop bar, 4 px on a phone's) it is set at once. A
+  // live update mostly moves bars by such small steps; easing every one of
+  // them by its width, as before, laid the page out again on each frame of
+  // each move, most of the main thread's work on a live list. Measured on
+  // xhh.li's data, 20 a page, main thread per minute: desktop 1.35 s →
+  // 0.5 s, a phone at a quarter speed 4.5 s → 2.7 s (every step eased by
+  // scale: 0.9 s / 3.8 s; none eased: 0.48 s / 2.4 s).
+  const BAR_FILL = 'absolute inset-0 origin-left transition-transform duration-150 ease-out';
+  const barScale = (val) => `scaleX(${Math.round(pct(val)) / 100})`;
+  const BAR_EASE_MIN_POINTS = 5;
+  const setBarScale = (bar, val) => {
+    const scale = barScale(val);
+    if (bar.style.transform === scale) return;
+    // (in whole points: 0.43 - 0.38 is 0.04999… in floating point)
+    const from = Math.round(parseFloat(bar.style.transform.slice(7)) * 100);
+    bar.style.transition = Number.isFinite(from) && Math.abs(Math.round(pct(val)) - from) < BAR_EASE_MIN_POINTS ? 'none' : '';
+    bar.style.transform = scale;
+  };
   // Usage label, one decimal. "100.0%" is wider than the w-8 / sm:w-10
   // label slot and ran under the start of the bar; a full bar reads "100%".
   const pctLabel = (val) => {
@@ -1359,7 +1423,7 @@ const apiBase = apiBaseProp ?? '';
     <div class="flex items-center gap-0.5 pr-2 sm:pr-3 min-w-0 w-full">${label}
       <span class="text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] w-8 sm:w-10 shrink-0">${pctLabel(value)}</span>
       <div class="progress-track relative h-2.5 sm:h-3 flex-1 min-w-[60px] overflow-hidden rounded-full dark:bg-[#292929] bg-[#f0f0f0]">
-        <div class="absolute inset-y-0 left-0 h-full transition-[width] duration-150 ease-out ${getProgressColor(value, isOffline)}" style="width:${barWidth(value)}"></div>
+        <div class="${BAR_FILL} ${getProgressColor(value, isOffline)}" style="transform:${barScale(value)}"></div>
     </div>
     </div>
   `;
@@ -1975,6 +2039,8 @@ const apiBase = apiBaseProp ?? '';
   let systemsSummary = null;
   let lastStreamMessageAt = Date.now();
   let connectionLost = false;
+  // The stream is closed while the page is out of sight (pauseSSEWhileHidden).
+  let ssePaused = false;
 
   // The 最后在线 texts (chip tooltips, details lines) from the kept times:
   // "x minutes ago" moves on while nothing else about an offline server does.
@@ -2525,10 +2591,9 @@ const apiBase = apiBaseProp ?? '';
           textSpan.textContent = pctLabel(value);
         }
         if (progressBar) {
-          const width = barWidth(value);
-          if (progressBar.style.width !== width) progressBar.style.width = width;
+          setBarScale(progressBar, value);
           // Update color based on threshold
-          const barClass = `absolute inset-y-0 left-0 h-full transition-[width] duration-150 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          const barClass = `${BAR_FILL} ${getDynamicProgressColor(value, isOffline)}`;
           if (progressBar.className !== barClass) progressBar.className = barClass;
         }
       }
@@ -2548,10 +2613,9 @@ const apiBase = apiBaseProp ?? '';
           textSpan.textContent = pctLabel(value);
         }
         if (progressBar) {
-          const width = barWidth(value);
-          if (progressBar.style.width !== width) progressBar.style.width = width;
+          setBarScale(progressBar, value);
           // Update color based on threshold
-          const barClass = `absolute inset-y-0 left-0 h-full transition-[width] duration-150 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          const barClass = `${BAR_FILL} ${getDynamicProgressColor(value, isOffline)}`;
           if (progressBar.className !== barClass) progressBar.className = barClass;
         }
       }
@@ -2571,10 +2635,9 @@ const apiBase = apiBaseProp ?? '';
           textSpan.textContent = pctLabel(value);
         }
         if (progressBar) {
-          const width = barWidth(value);
-          if (progressBar.style.width !== width) progressBar.style.width = width;
+          setBarScale(progressBar, value);
           // Update color based on threshold
-          const barClass = `absolute inset-y-0 left-0 h-full transition-[width] duration-150 ease-out ${getDynamicProgressColor(value, isOffline)}`;
+          const barClass = `${BAR_FILL} ${getDynamicProgressColor(value, isOffline)}`;
           if (progressBar.className !== barClass) progressBar.className = barClass;
         }
       }
@@ -2768,6 +2831,8 @@ const apiBase = apiBaseProp ?? '';
   // gates the *incremental* path — the initial / non-incremental load still
   // runs unconditionally.
   const tcpingIncrementalInFlight = new Set();
+  // systemId -> the open chart's probes as fetched (see loadTCPingHistoryTail)
+  const tcpingRawHistory = new Map();
 
   // Map: systemId -> "target1@ts1|target2@ts2|..." signature of the last
   // tcping_data we rendered. Used by the SSE update handler to decide whether
@@ -2989,6 +3054,8 @@ const apiBase = apiBaseProp ?? '';
 
     // Drop any stale "in-flight" marker so the next expand can fetch.
     tcpingIncrementalInFlight.delete(systemId);
+    // and its probes: the next opening reads the whole day again
+    tcpingRawHistory.delete(systemId);
 
     // Clear tcping signature cache so the next time this row is expanded,
     // the first metric_updated event is recognized as a genuine change
@@ -3356,9 +3423,34 @@ const apiBase = apiBaseProp ?? '';
     }
     return fetchTCPingHistory(clientID, target);
   }
-  async function fetchTCPingHistory(clientID, target) {
+  // An open chart's probes as the server sent them (oldest first), kept
+  // while it is open (tcpingRawHistory, declared with the other chart
+  // state). Each new probe used to fetch the whole day again (some 45 KB
+  // compressed, 414 KB of JSON, every minute per open chart, for three new
+  // points); now the chart asks for what came after its newest probe, less
+  // a margin for probes that arrive late, and splices that in. The server
+  // answers a since older than ten minutes (a tab that slept) with the
+  // whole day, which splices the same way.
+  const TCPING_TAIL_MARGIN_MS = 2 * 60 * 1000;
+  async function loadTCPingHistoryTail(clientID, raw) {
+    const newest = raw.length ? Date.parse(raw[raw.length - 1].timestamp) : NaN;
+    if (!Number.isFinite(newest)) return loadTCPingHistory(clientID);
+    const cut = newest - TCPING_TAIL_MARGIN_MS;
+    const data = await fetchTCPingHistory(clientID, null, cut);
+    if (!data || data.__error || !Array.isArray(data.results)) return data;
+    // what is older than the cut stays (less what left the day), the
+    // server's answer from the cut on replaces the rest
+    let end = raw.length;
+    while (end > 0 && !(Date.parse(raw[end - 1].timestamp) <= cut)) end--;
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    let start = 0;
+    while (start < end && !(Date.parse(raw[start].timestamp) >= dayAgo)) start++;
+    const fresh = data.results.filter((r) => Date.parse(r.timestamp) > cut);
+    return { results: raw.slice(start, end).concat(fresh), stats: data.stats };
+  }
+  async function fetchTCPingHistory(clientID, target, since) {
     try {
-      let url = `${apiBase}/api/tcping/history?client_id=${encodeURIComponent(clientID)}${target ? `&target=${encodeURIComponent(target)}` : ''}`;
+      let url = `${apiBase}/api/tcping/history?client_id=${encodeURIComponent(clientID)}${target ? `&target=${encodeURIComponent(target)}` : ''}${since ? `&since=${Math.floor(since)}` : ''}`;
       const { res } = await authedFetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -3829,6 +3921,12 @@ const apiBase = apiBaseProp ?? '';
     }
   }
 
+  // The end of a new chart's draw-in (tcping-reveal): the class goes, so a
+  // redraw of the same chart does not play it again.
+  function tcpingRevealDone(e) {
+    if (e.animationName === 'tcping-reveal') e.currentTarget.classList.remove('tcping-new');
+  }
+
   async function _updateTCPingChartImpl(systemId, target, targetName, incremental) {
     const container = document.querySelector(`[data-tcping-chart-container="${cssEscape(String(systemId))}"]`);
     if (!container) return;
@@ -3876,13 +3974,21 @@ const apiBase = apiBaseProp ?? '';
     // Recorded with a new chart, so the first broadcast after opening does
     // not fetch the same history again.
     const sigAtFetch = incremental ? null : latestTCPingSignature(systemId);
-    const apiResponse = await loadTCPingHistory(clientID); // No target parameter = fetch all
+    // A live update of an open chart reads only the probes since its newest
+    // (loadTCPingHistoryTail); an opening reads the whole day.
+    const rawHistory = incremental ? tcpingRawHistory.get(systemId) : null;
+    const apiResponse = rawHistory
+      ? await loadTCPingHistoryTail(clientID, rawHistory)
+      : await loadTCPingHistory(clientID); // No target parameter = fetch all
 
     // Check if loading was cancelled after data fetch (the state object
     // captured above keeps its flag even after cleanupTCPingChart dropped
     // the map entry), and never build into a row that has been removed.
     if ((loadingState && loadingState.cancelled) || !container.isConnected) {
       return;
+    }
+    if (apiResponse && !apiResponse.__error && Array.isArray(apiResponse.results)) {
+      tcpingRawHistory.set(systemId, apiResponse.results);
     }
 
     // Transient fetch failure: keep whatever chart is already on screen
@@ -4764,13 +4870,12 @@ const apiBase = apiBaseProp ?? '';
         // chart shown again later, after a skipped target's notice, only
         // fades back in as before.
         canvas.classList.add('tcping-new');
-        if (!canvas._tcpingRevealDone) {
-          canvas._tcpingRevealDone = (e) => {
-            if (e.animationName === 'tcping-reveal') canvas.classList.remove('tcping-new');
-          };
-          canvas.addEventListener('animationend', canvas._tcpingRevealDone);
-          canvas.addEventListener('animationcancel', canvas._tcpingRevealDone);
-        }
+        // One shared handler (adding it again is a no-op). A function made
+        // here would share this call's scope, datasets included, and the
+        // canvas, which stays with the built details after the row closes,
+        // kept every opened server's day of probes alive (+11 MB for 20).
+        canvas.addEventListener('animationend', tcpingRevealDone);
+        canvas.addEventListener('animationcancel', tcpingRevealDone);
         canvas.classList.remove('opacity-0');
         
         // Hide "No data" state when chart is created
@@ -6037,6 +6142,27 @@ const apiBase = apiBaseProp ?? '';
     });
   };
   
+  // The indices of a longest strictly increasing run in seq (patience
+  // sorting, O(n log n)): render() keeps those rows where they are.
+  function longestIncreasingRun(seq) {
+    const tails = [];
+    const prev = new Array(seq.length);
+    for (let i = 0; i < seq.length; i++) {
+      let lo = 0;
+      let hi = tails.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (seq[tails[mid]] < seq[i]) lo = mid + 1;
+        else hi = mid;
+      }
+      prev[i] = lo > 0 ? tails[lo - 1] : -1;
+      tails[lo] = i;
+    }
+    const keep = new Set();
+    for (let i = tails.length ? tails[tails.length - 1] : -1; i >= 0; i = prev[i]) keep.add(i);
+    return keep;
+  }
+
   // Smart render with incremental updates
   const render = async (items) => {
     if (!body) return;
@@ -6315,23 +6441,28 @@ const apiBase = apiBaseProp ?? '';
     // service added or removed), the rows that stayed kept their old order.
     const finalOrder = Array.from(body.children).map((systemRow) => systemRow.querySelector('[data-system-id]')?.dataset.systemId).filter(Boolean);
     if (JSON.stringify(finalOrder) !== JSON.stringify(desiredOrder)) {
-      // Reorder rows without full re-render
-      const rowMap = new Map();
-      Array.from(body.children).forEach(systemRow => {
-        const rowElement = systemRow.querySelector('[data-system-id]');
-        const id = rowElement?.dataset.systemId;
+      // Move only the rows out of place: the rows whose present order already
+      // agrees with the wanted one (the longest increasing run of their
+      // present positions) stay, each other row goes before the row that
+      // must follow it. Re-appending every row moved all of them on each
+      // live update of a list sorted by CPU, memory or net (style and layout
+      // for the whole list every 3 s), and took the focus off a row.
+      const rowOf = new Map();
+      const position = new Map();
+      Array.from(body.children).forEach((systemRow) => {
+        const id = systemRow.querySelector('[data-system-id]')?.dataset.systemId;
         if (id) {
-          rowMap.set(id, systemRow);
+          rowOf.set(id, systemRow);
+          position.set(systemRow, position.size);
         }
       });
-      
-      // Re-append in correct order
-      items.forEach(item => {
-        const row = rowMap.get(item.id);
-        if (row && row.parentNode) {
-          body.appendChild(row); // appendChild moves existing element
-        }
-      });
+      const wanted = items.map((item) => rowOf.get(item.id)).filter(Boolean);
+      const keep = longestIncreasingRun(wanted.map((row) => position.get(row)));
+      let next = null;
+      for (let i = wanted.length - 1; i >= 0; i--) {
+        if (!keep.has(i)) body.insertBefore(wanted[i], next);
+        next = wanted[i];
+      }
     }
     
     // Cache already updated at the beginning of the function
@@ -6412,7 +6543,8 @@ const apiBase = apiBaseProp ?? '';
     }
   }
   setInterval(() => {
-    const lost = Date.now() - lastStreamMessageAt > 12_000;
+    // (a stream closed on purpose while the page is hidden is not lost)
+    const lost = !ssePaused && Date.now() - lastStreamMessageAt > 12_000;
     if (lost !== connectionLost) {
       connectionLost = lost;
       renderSystemsSummary();
@@ -6757,7 +6889,7 @@ const apiBase = apiBaseProp ?? '';
     // A flaky network fires `onerror` in bursts, and one timer per error
     // would have several `connectSSE()` calls land at once, each opening
     // an EventSource and claiming a subscriber slot on the server.
-    if (sseReconnectTimer) return;
+    if (sseReconnectTimer || ssePaused) return;
     // Exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s, + up to 1s jitter.
     const base = Math.min(30_000, 1000 * Math.pow(2, sseReconnectAttempt));
     const jitter = Math.floor(Math.random() * 1000);
@@ -6770,6 +6902,11 @@ const apiBase = apiBaseProp ?? '';
   }
 
   function connectSSE() {
+    // Not while the page is hidden with its stream paused; once it shows
+    // again, every way back here (visibility, the bfcache, the network)
+    // reopens the stream.
+    if (ssePaused && document.hidden) return;
+    ssePaused = false;
     // Close existing connection and remove all event listeners
     if (eventSource) {
       eventSource.close();
@@ -7146,9 +7283,46 @@ const apiBase = apiBaseProp ?? '';
     connectSSE();
   }
   window.addEventListener('online', () => reconnectIfQuiet(true));
+
+  // Out of sight for a minute (a background tab, a minimised window), the
+  // page closes its stream: it used to receive every snapshot all the same,
+  // about 27 MB an hour with 130 servers, and redraw rows nobody saw. Shown
+  // again, it reopens at once; the stream's first message is a whole
+  // snapshot, and an open chart then reads the probes it missed.
+  const SSE_HIDDEN_PAUSE_MS = 60_000;
+  let sseHiddenTimer = null;
+  function pauseSSEWhileHidden() {
+    sseHiddenTimer = null;
+    if (!document.hidden) return;
+    ssePaused = true;
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    if (sseWatchdogTimer) {
+      clearTimeout(sseWatchdogTimer);
+      sseWatchdogTimer = null;
+    }
+    if (sseReconnectTimer) {
+      clearTimeout(sseReconnectTimer);
+      sseReconnectTimer = null;
+    }
+  }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') reconnectIfQuiet(false);
+    if (document.visibilityState === 'visible') {
+      if (sseHiddenTimer) {
+        clearTimeout(sseHiddenTimer);
+        sseHiddenTimer = null;
+      }
+      // the pause was no outage: no connection notice while it reopens
+      if (ssePaused) lastStreamMessageAt = Date.now();
+      reconnectIfQuiet(false);
+    } else if (!sseHiddenTimer && !ssePaused) {
+      sseHiddenTimer = setTimeout(pauseSSEWhileHidden, SSE_HIDDEN_PAUSE_MS);
+    }
   });
+  // (a page opened in a background tab gets no visibilitychange until shown)
+  if (document.hidden) sseHiddenTimer = setTimeout(pauseSSEWhileHidden, SSE_HIDDEN_PAUSE_MS);
 
   window.addEventListener('beforeunload', () => {
     if (eventSource) {
