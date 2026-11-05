@@ -146,24 +146,55 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows a Beszel re-check of v1.3.64: a TCPing chart as wide with the loss band as without it, a phone chart card's line across the card, clearer loss figures, whole lines at 0 % and 100 %, gradient logos on the sign-in page and higher-contrast gradient tags. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} follows a review of the server, the agent data and the web frontend. It brings:
+
+            - a login limit that holds against concurrent guesses
+            - a third of the disk writes
+            - open charts that read only new probes
+            - a lighter live list
+            - background tabs that pause the live stream
+            - Beszel's keys in the view menu
+            - an SVG logo as the browser tab's icon
+
+            Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: with the loss band on, the TCPing chart no longer leaves up to 25 px of blank card at its ends (14 px measured on a phone); the plot is as wide as without the band.
-            - Web: on phones the chart card's line takes a row of its own across the card (it wrapped in English beside the time range picker); from 640 px as before.
-            - Web: loss figures in the Latency view use the offline chip's red (6.5:1 on white, was 3.8:1) and the chart legend's format (1.67%, 5.00%, 20.0%, 100%).
-            - Web: a memory or disk line at exactly 0 % or 100 % is drawn whole; it was half clipped, so a nearly empty disk looked like no data.
-            - Web: a custom SVG logo with a gradient, mask or clip path shows on the sign-in page; it was blank there.
-            - Web: the spy: and spr: gradient tags are one shade darker, so white text reaches 4.5:1 on every stop; spb: is unchanged.
+            - Security: the login limit (five wrong passwords, then fifteen minutes locked) counted an attempt only after checking it, so wrong passwords sent at the same moment were all checked (40 of 40 in a test). Each attempt now takes its place before the check.
+            - Server: agent pushes that arrive within 100 ms share one database commit. With 131 agents, disk writes fell from 0.76 MB/s (about 65 GB a day) to 0.26 MB/s. A push is still answered only after it is on disk.
+            - Server: GET /api/tcping/history takes `since` (unix ms) and reads only from that moment on. Requests that miss the cache for the same history at the same time share one read.
+            - Server: the live stream now sends percentages with 2 decimals, speeds with 4 significant digits and latencies to the microsecond. They went out with 17 digits; this is a fifth to a third less compressed data. Stored values are unchanged.
+            - Server: resource history no longer lets a report that finishes after its minute was written replace that minute's average. Minutes not yet written are saved at shutdown. Its pages are filled, about half the size on disk.
+            - Web: the usage bars are scaled instead of resized, and only a step of five points or more glides (150 ms). Smaller steps, a few pixels, are set at once. On xhh.li's data at 20 servers a page, main-thread work on a live list fell by about two thirds on desktop (1.35 → 0.46 s a minute) and by two fifths on a phone emulated at a quarter speed (4.5 → 2.7 s).
+            - Web: an open TCPing chart adds new probes from a `since` read instead of downloading the whole day every minute (about 1 KB instead of 45 KB compressed).
+            - Web: a page hidden for a minute closes its live stream and reopens it as soon as it is shown again. Before, every open page received about 27 MB an hour with 130 servers.
+            - Web: closed server details no longer keep their charts' data in memory (opening and closing 20 servers left 11 MB behind).
+            - Web: a list sorted by a live column moves only the rows that changed place on each update; it used to move every row.
+            - Web: the view menu works with the keyboard as Beszel's does:
+              - Enter or ↓ opens it on its first item;
+              - the arrow keys, Home and End move between items;
+              - Escape and Tab close it back on its button.
+            - Web: a logo given as SVG code is also the browser tab's icon; an image logo already was.
 
             ### Compatibility
 
-            - No server change; existing clients continue to work.
+            - Server changes are shared with Pulse-Hotaru.
+            - Existing clients continue to work.
+            - The new web app also works with an older server, which answers `since` with the whole day.
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: the chart's ends with and without the loss band on phones and desktop; the phone chart header in English and Chinese, with tabs or a title, the Resources-only card, and unchanged from 640 px; the loss format and colours in light and dark; whole lines at 0 % and 100 %; a gradient logo on the sign-in page and an id-free logo copied unchanged; the tag colours and their contrast; and the suites for public pages, alignment, headers, phones, the loss band, the time range, the sign-in mark, the Resources tab, the Latency view and reopening.
+            - Go, with the race detector: concurrent login guesses, batched pushes, `since` reads (privacy mode, unknown servers, unconfigured targets), shared history reads, late resource reports and the shutdown flush. go vet and staticcheck are clean.
+            - Disk writes measured on a 131-server QA server before and after.
+            - Chromium, Firefox and WebKit:
+              - the view menu's keys;
+              - the bars' length and easing, with a pixel comparison against v1.3.65 on frozen data (only the end pixel of a bar is now anti-aliased), and small steps set at once;
+              - rows moved when sorting;
+              - `since` reads of open charts;
+              - tab icons;
+              - rounded stream values;
+              - the regression suites.
+            - Chromium: memory after opening 20 servers, and the paused stream of a hidden page.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
