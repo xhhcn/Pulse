@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -179,16 +180,16 @@ var tcpingHostRegex = regexp.MustCompile(`^[a-zA-Z0-9.\-:]+$`)
 var (
 
 	// Cache for disk stats (changes slowly; refreshed every 30 s to avoid spawning
-	// external processes — df + awk — on every 3-second push cycle).
-	diskUsageCache     float64
-	diskUsageCacheTime time.Time
-	diskInfoCache      string
-	diskInfoCacheTime  time.Time
-	diskCacheMu        sync.RWMutex
-	diskCacheTTL       = 30 * time.Second
-	// Held while a refresh runs (see getDiskUsage).
-	diskUsageRefreshMu sync.Mutex
-	diskInfoRefreshMu  sync.Mutex
+	// df on every 3-second push cycle). One reading serves both the percentage
+	// and the "used / size" text.
+	diskTotalsCache     diskTotals
+	diskTotalsCacheTime time.Time
+	diskCacheMu         sync.RWMutex
+	diskCacheTTL        = 30 * time.Second
+	// Held while a refresh runs (see readDiskTotals).
+	diskRefreshMu sync.Mutex
+	// diskTotalsReader takes a reading; tests replace it.
+	diskTotalsReader = computeDiskTotals
 )
 
 // applyPushTCPingConfig centralises "update targets / interval and wake the TCPing
@@ -1290,6 +1291,14 @@ func getPushHTTPClient() *http.Client {
 // to make inbound connections.  Push is always active; pull (HTTP server) remains
 // available as a parallel path for directly reachable clients.
 func startPushLoop() {
+	// The CPU and network figures are the change since the last reading:
+	// take one now, so the first push reports the seconds since start
+	// instead of 0 (it reported 0 % and 0 B/s after every start or update).
+	getCPUUsage()
+	getNetworkStats()
+	// and read the disks now, so the first push need not wait for df
+	go readDiskTotals()
+
 	// Short initial delay so the first registration can complete before we push.
 	time.Sleep(4 * time.Second)
 
@@ -1436,18 +1445,30 @@ func currentPushTCPingConfig() ([]string, int) {
 	return targets, interval
 }
 
+// tcpingConcurrency bounds the dials of one round: 64 targets dialled at
+// once on one vCPU slowed each other (a loopback probe's p99 went from
+// under 1 ms to 38 ms).
+const tcpingConcurrency = 8
+
 // measureTCPingOnce runs a concurrent TCPing dial for every configured target
-// and stamps each result with the real MeasuredAt timestamp. Results are queued
-// for startPushLoop to deliver on the next 3-second push cycle.
+// (tcpingConcurrency at a time) and stamps each result with the time its dial
+// started. Results are queued for startPushLoop to deliver on the next
+// 3-second push cycle.
 func measureTCPingOnce(targets []string) {
 	if len(targets) == 0 {
 		return
 	}
 	var wg sync.WaitGroup
+	slots := make(chan struct{}, tcpingConcurrency)
 	for _, target := range targets {
 		wg.Add(1)
 		go func(tgt string) {
 			defer wg.Done()
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			// Stamped when the dial starts: a lost probe was stamped when its
+			// 3 s timeout ran out, after the rest of its round.
+			startedAt := time.Now().UTC()
 			latency, err := executeTCPing(tgt)
 			skipped := classifyDialError(err)
 			if skipped {
@@ -1460,7 +1481,7 @@ func measureTCPingOnce(targets []string) {
 				Target:     tgt,
 				Latency:    latency,
 				Success:    err == nil,
-				MeasuredAt: time.Now().UTC(),
+				MeasuredAt: startedAt,
 				Skipped:    skipped,
 			}
 			pendingTCPingResultsMu.Lock()
@@ -1616,7 +1637,7 @@ func collectSystemMetrics() metricPayload {
 		NetOutMBps:         netOut,
 		TotalNetInBytes:    totalNetInBytes,
 		TotalNetOutBytes:   totalNetOutBytes,
-		AgentVersion:       "1.3.46",
+		AgentVersion:       "1.3.67",
 		Alert:              false, // Can be enhanced with actual alert logic
 	}
 }
@@ -2539,198 +2560,331 @@ func getMemoryUsage() float64 {
 	}
 
 	// Step 2 — /proc/meminfo.
-	data, err := os.ReadFile("/proc/meminfo")
-	if err != nil {
-		if u, t, ok := resolveMemoryStats(); ok && t > 0 {
-			return clamp(float64(u) / float64(t) * 100.0)
-		}
-		return 0.0
-	}
-
-	// Parse /proc/meminfo
-	var memTotal, memAvailable, memFree, buffers, cached uint64
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-
-		key := strings.TrimSuffix(fields[0], ":")
-		value := fields[1]
-
-		switch key {
-		case "MemTotal":
-			fmt.Sscanf(value, "%d", &memTotal)
-		case "MemAvailable":
-			fmt.Sscanf(value, "%d", &memAvailable)
-		case "MemFree":
-			fmt.Sscanf(value, "%d", &memFree)
-		case "Buffers":
-			fmt.Sscanf(value, "%d", &buffers)
-		case "Cached":
-			fmt.Sscanf(value, "%d", &cached)
-		}
-	}
-
-	if memTotal == 0 {
-		// /proc/meminfo zeroed-out (lxcfs quirk) — use the cgroup + sysinfo
+	usedKB, totalKB, readable := procMeminfo()
+	if !readable || totalKB == 0 {
+		// unreadable, or zeroed out (lxcfs quirk) — use the cgroup + sysinfo
 		// resolver so the % bar in the UI still reflects real usage.
 		if u, t, ok := resolveMemoryStats(); ok && t > 0 {
 			return clamp(float64(u) / float64(t) * 100.0)
 		}
 		return 0.0
 	}
+	return clamp(float64(usedKB) / float64(totalKB) * 100.0)
+}
 
-	// Calculate used memory. Prefer MemAvailable (kernel 3.14+) which
-	// already accounts for reclaimable caches.
+// The memory counters and the ZFS module's ARC counters; whether this runs
+// in a container (tests replace all three).
+var (
+	procMeminfoPath  = "/proc/meminfo"
+	zfsARCStatsPath  = "/proc/spl/kstat/zfs/arcstats"
+	inLinuxContainer = isLinuxContainer
+)
+
+// zfsARCBytes is the ZFS ARC's size, 0 without ZFS.
+func zfsARCBytes() uint64 {
+	data, err := os.ReadFile(zfsARCStatsPath)
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		f := strings.Fields(line)
+		if len(f) == 3 && f[0] == "size" {
+			v, _ := strconv.ParseUint(f[2], 10, 64)
+			return v
+		}
+	}
+	return 0
+}
+
+// procMeminfo reads /proc/meminfo: the memory in use and the total, in KiB
+// (readable is false when the file cannot be read; the total is 0 when it is
+// empty, an lxcfs quirk). In use is MemTotal − MemAvailable (kernel 3.14+),
+// else MemTotal − MemFree − Buffers − Cached. On a ZFS host the ARC, the
+// kernel's file cache for ZFS, gives memory back under pressure as the page
+// cache does but is not in MemAvailable, so a Proxmox or TrueNAS host looked
+// nearly full: it is not counted (Beszel does the same). Never inside a
+// container, whose figures are its own while the ARC is the host's.
+func procMeminfo() (usedKB, totalKB uint64, readable bool) {
+	data, err := os.ReadFile(procMeminfoPath)
+	if err != nil {
+		return 0, 0, false
+	}
+	var memTotal, memAvailable, memFree, buffers, cached uint64
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		v, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		switch strings.TrimSuffix(fields[0], ":") {
+		case "MemTotal":
+			memTotal = v
+		case "MemAvailable":
+			memAvailable = v
+		case "MemFree":
+			memFree = v
+		case "Buffers":
+			buffers = v
+		case "Cached":
+			cached = v
+		}
+	}
+	if memTotal == 0 {
+		return 0, 0, true
+	}
 	var memUsed uint64
-	if memAvailable > 0 {
+	if memAvailable > 0 && memAvailable <= memTotal {
 		memUsed = memTotal - memAvailable
-	} else {
-		memUsed = memTotal - memFree - buffers - cached
+	} else if free := memFree + buffers + cached; free < memTotal {
+		memUsed = memTotal - free
 	}
-
-	return clamp(float64(memUsed) / float64(memTotal) * 100.0)
+	if arc := zfsARCBytes() / 1024; arc > 0 && arc < memUsed && !inLinuxContainer() {
+		memUsed -= arc
+	}
+	return memUsed, memTotal, true
 }
 
-func getDiskUsage() float64 {
-	// Check cache — disk usage changes slowly; spawning df+awk every 3 s wastes CPU.
+// diskTotals is one reading of the local filesystems: the bytes in use, the
+// bytes still free for ordinary users (df's Avail) and their size (df's Size,
+// which also counts the blocks ext4 keeps for root, about 5 %).
+type diskTotals struct{ used, avail, size uint64 }
+
+// percent is df's Use%: used / (used + avail). It reads 100 % when nothing is
+// left to write; used / size read 95 % on a full ext4 disk.
+func (d diskTotals) percent() float64 {
+	if d.used+d.avail == 0 {
+		return 0
+	}
+	p := float64(d.used) / float64(d.used+d.avail) * 100.0
+	if p < 0 {
+		return 0
+	}
+	if p > 100 {
+		return 100
+	}
+	return p
+}
+
+// info is the "used / size" text, as df's Used and Size columns.
+func (d diskTotals) info() string {
+	if d.size == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s / %s", formatBytes(d.used), formatBytes(d.size))
+}
+
+func getDiskUsage() float64 { return readDiskTotals().percent() }
+
+func getDiskInfo() string { return readDiskTotals().info() }
+
+// readDiskTotals serves the cached reading; a reading older than
+// diskCacheTTL is refreshed in the background, so a slow or hung filesystem
+// never holds up a push (a df stuck on a mount used to delay one push in ten
+// by up to its timeout). Only the very first reading is waited for. One
+// refresh runs at a time.
+func readDiskTotals() diskTotals {
 	diskCacheMu.RLock()
-	v, at := diskUsageCache, diskUsageCacheTime
+	v, at := diskTotalsCache, diskTotalsCacheTime
 	diskCacheMu.RUnlock()
 	if !at.IsZero() && time.Since(at) < diskCacheTTL {
 		return v
 	}
-
-	// One refresh at a time. df can take seconds, up to its timeout on a hung
-	// mount, and every caller that found the cache stale used to start its own;
-	// /metrics requests (unauthenticated when SECRET is unset) could pile them
-	// up. Others now get the last value, and only the first one is waited for.
 	if at.IsZero() {
-		diskUsageRefreshMu.Lock()
-	} else if !diskUsageRefreshMu.TryLock() {
-		return v
+		diskRefreshMu.Lock()
+		defer diskRefreshMu.Unlock()
+		diskCacheMu.RLock()
+		v, at = diskTotalsCache, diskTotalsCacheTime
+		diskCacheMu.RUnlock()
+		if !at.IsZero() {
+			return v // read while we waited
+		}
+		return storeDiskTotals(diskTotalsReader())
 	}
-	defer diskUsageRefreshMu.Unlock()
-	diskCacheMu.RLock()
-	v, at = diskUsageCache, diskUsageCacheTime
-	diskCacheMu.RUnlock()
-	if !at.IsZero() && time.Since(at) < diskCacheTTL {
-		return v // refreshed while we waited
+	if diskRefreshMu.TryLock() {
+		go func() {
+			defer diskRefreshMu.Unlock()
+			storeDiskTotals(diskTotalsReader())
+		}()
 	}
-
-	result := computeDiskUsage()
-
-	diskCacheMu.Lock()
-	diskUsageCache = result
-	diskUsageCacheTime = time.Now()
-	diskCacheMu.Unlock()
-
-	return result
+	return v
 }
 
-func computeDiskUsage() float64 {
-	// Use gopsutil for cross-platform support
+// storeDiskTotals keeps a reading. A failed one (all zero) keeps the last
+// good value and is tried again after diskCacheTTL.
+func storeDiskTotals(t diskTotals) diskTotals {
+	diskCacheMu.Lock()
+	defer diskCacheMu.Unlock()
+	if t.size > 0 || t.used+t.avail > 0 || diskTotalsCacheTime.IsZero() {
+		diskTotalsCache = t
+	}
+	diskTotalsCacheTime = time.Now()
+	return diskTotalsCache
+}
+
+// computeDiskTotals reads the local filesystems.
+func computeDiskTotals() diskTotals {
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		// Get all partitions and calculate weighted average
-		partitions, err := disk.Partitions(false)
-		if err == nil {
-			var totalSize, totalUsed uint64
-			seenBaseDisks := make(map[string]bool) // macOS: APFS deduplication
-			for _, partition := range partitions {
-				// Skip system reserved partitions on Windows
-				if runtime.GOOS == "windows" {
-					// Only include partitions with drive letters (C:, D:, etc.)
-					if len(partition.Mountpoint) >= 2 && partition.Mountpoint[1] == ':' {
-						usage, err := disk.Usage(partition.Mountpoint)
-						if err == nil && usage.Total > 0 {
-							totalSize += usage.Total
-							totalUsed += usage.Used
-						}
-					}
-				} else {
-					// macOS APFS: multiple volumes (System, Data, VM, Preboot…) share one
-					// physical container but each reports the full container capacity.
-					// Only count / and /Volumes/* and deduplicate by base disk (e.g. "disk3").
-					mp := partition.Mountpoint
-					if mp != "/" && !strings.HasPrefix(mp, "/Volumes/") {
-						continue
-					}
-					if !strings.HasPrefix(partition.Device, "/dev/disk") {
-						continue
-					}
-					baseDisk := macOSBaseDisk(partition.Device)
-					if seenBaseDisks[baseDisk] {
-						continue
-					}
-					seenBaseDisks[baseDisk] = true
-					usage, err := disk.Usage(mp)
-					if err == nil && usage.Total > 0 {
-						totalSize += usage.Total
-						totalUsed += usage.Used
-					}
-				}
-			}
-			if totalSize > 0 {
-				usage := (float64(totalUsed) / float64(totalSize)) * 100.0
-				if usage < 0 {
-					usage = 0
-				}
-				if usage > 100 {
-					usage = 100
-				}
-				return usage
-			}
-		}
-		return 0.0
+		return partitionDiskTotals()
 	}
+	// Local filesystems only (-l): a network mount (NFS, CIFS, sshfs) is not
+	// this machine's disk, and a hung one would hold df. -P keeps a long
+	// device name on its row. BusyBox's df has no -l: then without it.
+	for _, args := range [][]string{{"-P", "-B1", "-T", "-l"}, {"-P", "-B1", "-T"}} {
+		began := time.Now()
+		out, err := runCommandOutput(probeCommandTimeout, "df", args...)
+		// df exits 1 when one mount cannot be read, after listing the others
+		if t, ok := parseDfTotals(string(out)); ok {
+			return t
+		}
+		if err != nil && time.Since(began) >= probeCommandTimeout-500*time.Millisecond {
+			break // timed out: without -l it would stat more mounts, not fewer
+		}
+	}
+	// No local block device or ZFS pool (a container's overlay root): the
+	// root filesystem alone.
+	if out, err := runCommandOutput(probeCommandTimeout, "df", "-P", "-k", "/"); err == nil || len(out) > 0 {
+		if t, ok := parseDfRoot(string(out)); ok {
+			return t
+		}
+	}
+	return diskTotals{}
+}
 
-	// Get disk usage percentage for LOCAL physical filesystems only (Linux)
-	// Only include /dev/* devices, exclude virtual/network filesystems, track unique devices
-	output, err := runCommandOutput(probeCommandTimeout, "sh", "-c", `df -B1 -T 2>/dev/null | tail -n +2 | awk '
-		$1 ~ /^\/dev\// && 
-		$2 !~ /^(tmpfs|devtmpfs|squashfs|overlay|aufs|nfs|nfs4|cifs|smb|smbfs|fuse|sshfs|proc|sysfs|debugfs|securityfs|cgroup|cgroup2|pstore|bpf|tracefs|hugetlbfs|mqueue|configfs|fusectl|efivarfs|binfmt_misc|devpts|ramfs)$/ {
-			if (!seen[$1]++) {
-				total += $3
-				used += $4
-			}
-		}
-		END {
-			if (total > 0) printf "%.1f\n", (used/total)*100
-			else print "0"
-		}'`)
-	if err == nil {
-		outputStr := strings.TrimSpace(string(output))
-		if outputStr != "" && outputStr != "0" {
-			var usage float64
-			if _, err := fmt.Sscanf(outputStr, "%f", &usage); err == nil {
-				if usage < 0 {
-					usage = 0
-				}
-				if usage > 100 {
-					usage = 100
-				}
-				return usage
-			}
-		}
-	}
+// dfSkippedTypes are filesystems that are not a disk of this machine, or
+// that another row already counts.
+var dfSkippedTypes = map[string]bool{
+	"tmpfs": true, "devtmpfs": true, "squashfs": true, "overlay": true, "aufs": true,
+	"nfs": true, "nfs4": true, "cifs": true, "smb": true, "smbfs": true, "smb3": true,
+	"fuse": true, "sshfs": true, "fuse.sshfs": true,
+	"proc": true, "sysfs": true, "debugfs": true, "securityfs": true, "cgroup": true, "cgroup2": true,
+	"pstore": true, "bpf": true, "tracefs": true, "hugetlbfs": true, "mqueue": true, "configfs": true,
+	"fusectl": true, "efivarfs": true, "binfmt_misc": true, "devpts": true, "ramfs": true,
+}
 
-	// Fallback: use df -h for root partition only
-	output, err = runCommandOutput(probeCommandTimeout, "df", "-h", "/")
-	if err == nil {
-		lines := strings.Split(string(output), "\n")
-		if len(lines) > 1 {
-			fields := strings.Fields(lines[1])
-			if len(fields) >= 5 {
-				var used float64
-				if _, err := fmt.Sscanf(fields[4], "%f%%", &used); err == nil {
-					return used
-				}
-			}
+// parseDfTotals adds up `df -P -B1 -T` rows: every local block device
+// (/dev/...) once, however many places it is mounted (btrfs subvolumes, bind
+// mounts), and every ZFS pool once. A pool's datasets each show the pool's
+// free space, so a pool counts its datasets' used bytes plus that free space
+// once; their names are not /dev paths, so a ZFS root used to be left out
+// entirely (a host showed only its 512 MB EFI partition).
+func parseDfTotals(out string) (diskTotals, bool) {
+	var t diskTotals
+	seen := make(map[string]bool)
+	type pool struct{ used, avail uint64 }
+	pools := make(map[string]*pool)
+	for i, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if i == 0 || len(f) < 6 {
+			continue // the header, or not a row
 		}
+		dev, typ := f[0], f[1]
+		size, err1 := strconv.ParseUint(f[2], 10, 64)
+		used, err2 := strconv.ParseUint(f[3], 10, 64)
+		avail, err3 := strconv.ParseUint(f[4], 10, 64)
+		if err1 != nil || err2 != nil || err3 != nil {
+			continue
+		}
+		if typ == "zfs" {
+			name := dev
+			if j := strings.IndexByte(dev, '/'); j > 0 {
+				name = dev[:j]
+			}
+			p := pools[name]
+			if p == nil {
+				p = &pool{}
+				pools[name] = p
+			}
+			p.used += used
+			if avail > p.avail {
+				p.avail = avail
+			}
+			continue
+		}
+		if !strings.HasPrefix(dev, "/dev/") || dfSkippedTypes[typ] || seen[dev] {
+			continue
+		}
+		seen[dev] = true
+		t.used += used
+		t.avail += avail
+		t.size += size
 	}
-	return 0.0
+	for _, p := range pools {
+		t.used += p.used
+		t.avail += p.avail
+		t.size += p.used + p.avail
+	}
+	return t, t.used+t.avail > 0
+}
+
+// parseDfRoot reads `df -P -k /`: the root filesystem, in KiB.
+func parseDfRoot(out string) (diskTotals, bool) {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 {
+		return diskTotals{}, false
+	}
+	f := strings.Fields(lines[len(lines)-1])
+	if len(f) < 4 {
+		return diskTotals{}, false
+	}
+	size, err1 := strconv.ParseUint(f[1], 10, 64)
+	used, err2 := strconv.ParseUint(f[2], 10, 64)
+	avail, err3 := strconv.ParseUint(f[3], 10, 64)
+	if err1 != nil || err2 != nil || err3 != nil || used+avail == 0 {
+		return diskTotals{}, false
+	}
+	return diskTotals{used: used * 1024, avail: avail * 1024, size: size * 1024}, true
+}
+
+// partitionDiskTotals: Windows drive letters; on macOS / and /Volumes/*, one
+// volume per APFS container. An APFS volume reports its container's size and
+// free space but only its own use (the sealed system volume: ~10 GiB), so a
+// container's use is its size less what is free in it.
+func partitionDiskTotals() diskTotals {
+	partitions, err := disk.Partitions(false)
+	if err != nil {
+		return diskTotals{}
+	}
+	var t diskTotals
+	seenBaseDisks := make(map[string]bool) // macOS: APFS deduplication
+	for _, partition := range partitions {
+		if runtime.GOOS == "windows" {
+			// Only partitions with drive letters (C:, D:, etc.)
+			if len(partition.Mountpoint) < 2 || partition.Mountpoint[1] != ':' {
+				continue
+			}
+			usage, err := disk.Usage(partition.Mountpoint)
+			if err != nil || usage.Total == 0 {
+				continue
+			}
+			t.used += usage.Used
+			t.avail += usage.Free
+			t.size += usage.Total
+			continue
+		}
+		mp := partition.Mountpoint
+		if mp != "/" && !strings.HasPrefix(mp, "/Volumes/") {
+			continue
+		}
+		if !strings.HasPrefix(partition.Device, "/dev/disk") {
+			continue
+		}
+		baseDisk := macOSBaseDisk(partition.Device)
+		if seenBaseDisks[baseDisk] {
+			continue
+		}
+		seenBaseDisks[baseDisk] = true
+		usage, err := disk.Usage(mp)
+		if err != nil || usage.Total == 0 || usage.Free > usage.Total {
+			continue
+		}
+		t.used += usage.Total - usage.Free
+		t.avail += usage.Free
+		t.size += usage.Total
+	}
+	return t
 }
 
 // Get system uptime from /proc/uptime (system uptime, not process uptime)
@@ -2791,13 +2945,16 @@ type netInterfaceStats struct {
 }
 
 // virtualInterfacePrefixes name interfaces whose traffic is already counted
-// on a real one: container and VM bridges and their veth/tap ends, tunnels
-// and overlay networks (their packets cross the uplink as well), and ifb
-// shaping mirrors. Summing them counted a container's download three times
-// (veth, docker0, eth0) and made the totals drop when a container stopped.
+// on a real one: container and VM bridges and their veth/tap ends, bonds
+// (the sum of their member NICs), tunnels and overlay networks (their packets
+// cross the uplink as well), Proxmox's firewall bridges and ifb shaping
+// mirrors. Summing them counted a container's download three times (veth,
+// docker0, eth0) and made the totals drop when a container stopped. Used when
+// no interface is backed by a device (see countedInterfaces).
 var virtualInterfacePrefixes = []string{
 	"lo", "docker", "br-", "veth", "virbr", "vmbr", "vmnet", "vnet", "lxcbr", "tap", "tun",
 	"wg", "tailscale", "zt", "kube", "cni", "flannel", "cali", "cilium", "vxlan", "ifb",
+	"bond", "team", "fwbr", "fwpr", "fwln", "podman", "lxdbr", "incusbr", "macvtap", "dummy",
 }
 
 func isVirtualInterface(name string) bool {
@@ -2810,155 +2967,163 @@ func isVirtualInterface(name string) bool {
 	return false
 }
 
+// otherVirtualInterfacePrefixes: the same idea on macOS (VPN utun, AirDrop
+// awdl/llw, bridges, 6to4 tunnels) and Windows (loopback, Hyper-V's
+// vEthernet switches over a physical NIC, ISATAP and Teredo tunnels). Names
+// are compared in lower case; macOS's loopback (lo0) is matched on its own,
+// as "lo" would also take Windows' "Local Area Connection".
+var otherVirtualInterfacePrefixes = []string{
+	"utun", "awdl", "llw", "bridge", "gif", "stf", "anpi",
+	"loopback", "vethernet", "isatap", "teredo",
+}
+
+func isOtherVirtualInterface(name string) bool {
+	name = strings.ToLower(name)
+	if rest, ok := strings.CutPrefix(name, "lo"); ok && (rest == "" || (rest[0] >= '0' && rest[0] <= '9')) {
+		return true
+	}
+	for _, p := range otherVirtualInterfacePrefixes {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// Where Linux lists network interfaces and their counters (tests point them
+// at fixtures).
+var (
+	sysClassNetDir = "/sys/class/net"
+	procNetDevPath = "/proc/net/dev"
+)
+
+// countedInterfaces picks the Linux interfaces whose traffic is the
+// machine's. An interface backed by a device — a physical NIC, or a VM's
+// virtio, Xen, Hyper-V or ENA NIC — has a "device" link in sysfs; bridges,
+// bonds, VLANs, veth and tap pairs, tunnels and the other software
+// interfaces have none, and their packets cross a device-backed NIC anyway.
+// A container or OpenVZ guest sees no device at all: there the names decide.
+func countedInterfaces(names []string) map[string]bool {
+	counted := make(map[string]bool, len(names))
+	for _, name := range names {
+		if name == "lo" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(sysClassNetDir, name, "device")); err == nil {
+			counted[name] = true
+		}
+	}
+	if len(counted) > 0 {
+		return counted
+	}
+	for _, name := range names {
+		if !isVirtualInterface(name) {
+			counted[name] = true
+		}
+	}
+	return counted
+}
+
+// counterDelta is what a byte counter added since its last reading. A
+// counter that went back was reset (the interface came back) or wrapped
+// (32-bit counters): what it holds now is what it counted since.
+func counterDelta(prev, cur uint64) uint64 {
+	if cur >= prev {
+		return cur - prev
+	}
+	return cur
+}
+
+// netRates turns two readings into MB/s, interface by interface: an
+// interface that appeared counts from its next reading, one that went away
+// stops counting. The difference of the summed counters used to drop the
+// whole reading to zero when one interface went away (a PPP link that
+// reconnected) while traffic kept flowing on the others.
+func netRates(prev, cur map[string]netInterfaceStats, elapsed float64) (inMBps, outMBps float64) {
+	if prev == nil || elapsed <= 0 {
+		return 0, 0
+	}
+	var rx, tx uint64
+	for name, c := range cur {
+		p, ok := prev[name]
+		if !ok {
+			continue
+		}
+		rx += counterDelta(p.RxBytes, c.RxBytes)
+		tx += counterDelta(p.TxBytes, c.TxBytes)
+	}
+	return float64(rx) / elapsed / (1024 * 1024), float64(tx) / elapsed / (1024 * 1024)
+}
+
+// readLinuxInterfaces reads /proc/net/dev: each interface's received and
+// sent bytes.
+func readLinuxInterfaces() (map[string]netInterfaceStats, bool) {
+	data, err := os.ReadFile(procNetDevPath)
+	if err != nil {
+		return nil, false
+	}
+	all := make(map[string]netInterfaceStats)
+	for _, line := range strings.Split(string(data), "\n") {
+		// "  eth0: 123456 0 0 ..." — interface: rx_bytes rx_packets ... tx_bytes ...
+		name, rest, found := strings.Cut(line, ":")
+		if !found {
+			continue
+		}
+		fields := strings.Fields(rest)
+		if len(fields) < 16 {
+			continue
+		}
+		rxBytes, err1 := strconv.ParseUint(fields[0], 10, 64)
+		txBytes, err2 := strconv.ParseUint(fields[8], 10, 64)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		all[strings.TrimSpace(name)] = netInterfaceStats{RxBytes: rxBytes, TxBytes: txBytes}
+	}
+	return all, true
+}
+
+// getNetworkStats: the machine's download and upload since the last call
+// (MB/s, 1024-based), and its interfaces' byte counters since boot.
 func getNetworkStats() (inMBps, outMBps float64, totalRxBytes, totalTxBytes uint64) {
 	netStatsMutex.Lock()
 	defer netStatsMutex.Unlock()
 
-	// Use gopsutil for cross-platform support
+	currentStats := make(map[string]netInterfaceStats)
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		// Get network I/O statistics
 		ioStats, err := netutil.IOCounters(true)
 		if err != nil {
-			return 0.0, 0.0, 0, 0
+			return 0, 0, 0, 0
 		}
-
-		// Sum up all interfaces (excluding loopback)
 		for _, stat := range ioStats {
-			if stat.Name != "lo" && !strings.HasPrefix(stat.Name, "Loopback") {
-				totalRxBytes += stat.BytesRecv
-				totalTxBytes += stat.BytesSent
+			if isOtherVirtualInterface(stat.Name) {
+				continue
 			}
+			currentStats[stat.Name] = netInterfaceStats{RxBytes: stat.BytesRecv, TxBytes: stat.BytesSent}
 		}
-
-		now := time.Now()
-
-		// Calculate rate if we have previous stats
-		if lastNetStats != nil && !lastNetStatsTime.IsZero() {
-			elapsed := now.Sub(lastNetStatsTime).Seconds()
-			if elapsed > 0 {
-				var prevRxBytes, prevTxBytes uint64
-				for _, stats := range lastNetStats {
-					prevRxBytes += stats.RxBytes
-					prevTxBytes += stats.TxBytes
-				}
-
-				rxDiff := float64(totalRxBytes) - float64(prevRxBytes)
-				txDiff := float64(totalTxBytes) - float64(prevTxBytes)
-
-				// A negative delta means an interface disappeared, its
-				// counters were reset, or a 32-bit kernel counter wrapped;
-				// report a zero rate for this sample instead of dividing the
-				// machine's lifetime byte count by three seconds.
-				if rxDiff < 0 {
-					rxDiff = 0
-				}
-				if txDiff < 0 {
-					txDiff = 0
-				}
-
-				inMBps = (rxDiff / elapsed) / (1024 * 1024)
-				outMBps = (txDiff / elapsed) / (1024 * 1024)
-			}
+	} else {
+		all, ok := readLinuxInterfaces()
+		if !ok {
+			return 0, 0, 0, 0
 		}
-
-		// Update last stats (convert to our format)
-		currentStats := make(map[string]netInterfaceStats)
-		for _, stat := range ioStats {
-			if stat.Name != "lo" && !strings.HasPrefix(stat.Name, "Loopback") {
-				currentStats[stat.Name] = netInterfaceStats{
-					RxBytes: stat.BytesRecv,
-					TxBytes: stat.BytesSent,
-				}
-			}
+		names := make([]string, 0, len(all))
+		for name := range all {
+			names = append(names, name)
 		}
-		lastNetStats = currentStats
-		lastNetStatsTime = now
-
-		return inMBps, outMBps, totalRxBytes, totalTxBytes
-	}
-
-	// Read current network stats from /proc/net/dev (Linux)
-	currentStats := make(map[string]netInterfaceStats)
-	data, err := os.ReadFile("/proc/net/dev")
-	if err != nil {
-		return 0.0, 0.0, 0, 0
-	}
-
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		// Skip header lines
-		if !strings.Contains(line, ":") {
-			continue
-		}
-
-		// Parse line: "eth0: 123456 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
-		// Format: interface: rx_bytes rx_packets ... tx_bytes tx_packets ...
-		parts := strings.Split(line, ":")
-		if len(parts) != 2 {
-			continue
-		}
-
-		interfaceName := strings.TrimSpace(parts[0])
-		// Skip loopback and virtual interfaces
-		if isVirtualInterface(interfaceName) {
-			continue
-		}
-
-		fields := strings.Fields(parts[1])
-		if len(fields) < 16 {
-			continue
-		}
-
-		// Use strconv.ParseUint for faster integer parsing (avoids fmt.Sscanf overhead)
-		rxBytes, _ := strconv.ParseUint(fields[0], 10, 64) // Receive bytes
-		txBytes, _ := strconv.ParseUint(fields[8], 10, 64) // Transmit bytes
-
-		currentStats[interfaceName] = netInterfaceStats{
-			RxBytes: rxBytes,
-			TxBytes: txBytes,
+		for name := range countedInterfaces(names) {
+			currentStats[name] = all[name]
 		}
 	}
 
-	// Calculate total bytes across all interfaces
-	// Note: totalRxBytes and totalTxBytes are already declared as named return values
 	for _, stats := range currentStats {
 		totalRxBytes += stats.RxBytes
 		totalTxBytes += stats.TxBytes
 	}
 
 	now := time.Now()
-
-	// If we have previous stats, calculate rate
 	if lastNetStats != nil && !lastNetStatsTime.IsZero() {
-		elapsed := now.Sub(lastNetStatsTime).Seconds()
-		if elapsed > 0 {
-			// Calculate previous total
-			var prevRxBytes, prevTxBytes uint64
-			for _, stats := range lastNetStats {
-				prevRxBytes += stats.RxBytes
-				prevTxBytes += stats.TxBytes
-			}
-
-			// Calculate rate (bytes per second to MB per second)
-			rxDiff := float64(totalRxBytes) - float64(prevRxBytes)
-			txDiff := float64(totalTxBytes) - float64(prevTxBytes)
-
-			// A negative delta means an interface disappeared, its counters
-			// were reset, or a 32-bit kernel counter wrapped; report a zero
-			// rate for this sample instead of a spike of the lifetime count.
-			if rxDiff < 0 {
-				rxDiff = 0
-			}
-			if txDiff < 0 {
-				txDiff = 0
-			}
-
-			inMBps = (rxDiff / elapsed) / (1024 * 1024)  // Convert bytes/s to MB/s
-			outMBps = (txDiff / elapsed) / (1024 * 1024) // Convert bytes/s to MB/s
-		}
+		inMBps, outMBps = netRates(lastNetStats, currentStats, now.Sub(lastNetStatsTime).Seconds())
 	}
-
-	// Update last stats
 	lastNetStats = currentStats
 	lastNetStatsTime = now
 
@@ -3234,21 +3399,21 @@ func cgroupMemoryReclaimable(statPath string) uint64 {
 	if err != nil {
 		return 0
 	}
-	// cgroup v1 hierarchical accounting exposes BOTH the per-cgroup field
-	// ("inactive_file") AND the recursive hierarchy sum ("total_inactive_file").
-	// In a leaf cgroup (every container) they are identical, so a naive
-	// sum double-counts and subtracts ~2× from the "used" figure.
-	//
-	// Prefer the hierarchical (total_*) value when present — it already
-	// covers the current cgroup and any future descendants, matching the
-	// kernel's MemAvailable definition. Fall back to the plain name only
-	// when the total_* variant isn't in the file (older cgroup v1 kernels
-	// without hierarchical accounting, or cgroup v2 which uses the plain
-	// names only).
-	var inactiveFile, totalInactiveFile uint64
-	var slabReclaim, totalSlabReclaim uint64
-	var haveInactiveTotal, haveSlabTotal bool
-	for _, line := range strings.Split(string(data), "\n") {
+	return memoryStatReclaimable(string(data))
+}
+
+// memoryStatReclaimable reads a cgroup's memory.stat: the page cache it can
+// give back — all of it, less shmem/tmpfs, which the cache counts but cannot
+// drop — plus reclaimable slab. Only the inactive part of the cache used to
+// count, so reading a 250 MiB file in a 512 MiB container took its memory
+// from 4 % to 53 % although its processes used 20 MiB (the host path, and
+// `free` in an LXC guest, count all of the cache as available). Beszel takes
+// the cache less shmem too. Keys: cgroup v2 "file" and "shmem"; v1 "cache"
+// and "shmem", or their hierarchical "total_" sums when present (in a leaf
+// cgroup, every container, the two are the same: never add both).
+func memoryStatReclaimable(stat string) uint64 {
+	vals := make(map[string]uint64)
+	for _, line := range strings.Split(stat, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) != 2 {
 			continue
@@ -3257,31 +3422,35 @@ func cgroupMemoryReclaimable(statPath string) uint64 {
 		if err != nil {
 			continue
 		}
-		switch fields[0] {
-		case "inactive_file":
-			inactiveFile = v
-		case "total_inactive_file":
-			totalInactiveFile = v
-			haveInactiveTotal = true
-		case "slab_reclaimable":
-			slabReclaim = v
-		case "total_slab_reclaimable":
-			totalSlabReclaim = v
-			haveSlabTotal = true
+		vals[fields[0]] = v
+	}
+	pick := func(keys ...string) (uint64, bool) {
+		for _, k := range keys {
+			if v, ok := vals[k]; ok {
+				return v, true
+			}
 		}
+		return 0, false
+	}
+	var cache, shmem uint64
+	var haveCache bool
+	if v, ok := vals["file"]; ok { // v2
+		cache, shmem, haveCache = v, vals["shmem"], true
+	} else if v, ok := vals["total_cache"]; ok { // v1, hierarchical
+		cache, shmem, haveCache = v, vals["total_shmem"], true
+	} else if v, ok := vals["cache"]; ok { // v1
+		cache, shmem, haveCache = v, vals["shmem"], true
 	}
 	var reclaimable uint64
-	if haveInactiveTotal {
-		reclaimable += totalInactiveFile
+	if haveCache {
+		if cache > shmem {
+			reclaimable = cache - shmem
+		}
 	} else {
-		reclaimable += inactiveFile
+		reclaimable, _ = pick("total_inactive_file", "inactive_file")
 	}
-	if haveSlabTotal {
-		reclaimable += totalSlabReclaim
-	} else {
-		reclaimable += slabReclaim
-	}
-	return reclaimable
+	slab, _ := pick("total_slab_reclaimable", "slab_reclaimable")
+	return reclaimable + slab
 }
 
 func getCgroupMemoryStats() (used, total uint64, ok bool) {
@@ -4630,66 +4799,18 @@ func getMemoryInfo() string {
 
 	// Step 2 — /proc/meminfo. Works for bare metal and for containers
 	// where lxcfs is alive and properly virtualising meminfo.
-	data, err := os.ReadFile("/proc/meminfo")
-	if err != nil {
-		// Step 3a — /proc/meminfo unreadable (lxcfs ENOTCONN). Fall back
-		// to cgroup.current + sysinfo host total. This is the best we
-		// can do for an unlimited container with a broken lxcfs.
+	usedKB, totalKB, readable := procMeminfo()
+	if !readable || totalKB == 0 {
+		// Step 3 — /proc/meminfo unreadable (lxcfs ENOTCONN), or readable
+		// with MemTotal 0 (lxcfs quirk on unprivileged LXC, or an
+		// intentionally empty bind mount): resolveMemoryStats walks every
+		// alternative source (cgroup.current + sysinfo host total).
 		if u, t, ok := resolveMemoryStats(); ok && t > 0 {
 			return fmt.Sprintf("%s / %s", formatBytes(u), formatBytes(t))
 		}
 		return ""
 	}
-
-	// Parse /proc/meminfo
-	var memTotal, memAvailable, memFree, buffers, cached uint64
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-
-		key := strings.TrimSuffix(fields[0], ":")
-		value := fields[1]
-
-		switch key {
-		case "MemTotal":
-			fmt.Sscanf(value, "%d", &memTotal)
-		case "MemAvailable":
-			fmt.Sscanf(value, "%d", &memAvailable)
-		case "MemFree":
-			fmt.Sscanf(value, "%d", &memFree)
-		case "Buffers":
-			fmt.Sscanf(value, "%d", &buffers)
-		case "Cached":
-			fmt.Sscanf(value, "%d", &cached)
-		}
-	}
-
-	if memTotal == 0 {
-		// Step 3b — /proc/meminfo was readable but MemTotal is 0 (lxcfs
-		// quirk on unprivileged LXC, or an intentionally empty bind
-		// mount). resolveMemoryStats walks every alternative source.
-		if u, t, ok := resolveMemoryStats(); ok && t > 0 {
-			return fmt.Sprintf("%s / %s", formatBytes(u), formatBytes(t))
-		}
-		return ""
-	}
-
-	// Calculate used memory (same logic as getMemoryUsage)
-	var memUsed uint64
-	if memAvailable > 0 {
-		memUsed = memTotal - memAvailable
-	} else {
-		memUsed = memTotal - memFree - buffers - cached
-	}
-
-	// Convert to human-readable format
-	usedStr := formatBytes(memUsed * 1024) // /proc/meminfo is in KB, convert to bytes
-	totalStr := formatBytes(memTotal * 1024)
-
-	return fmt.Sprintf("%s / %s", usedStr, totalStr)
+	return fmt.Sprintf("%s / %s", formatBytes(usedKB*1024), formatBytes(totalKB*1024))
 }
 
 // Get swap information in format "used / total" (e.g., "75.12 MiB / 975.00 MiB")
@@ -4773,151 +4894,6 @@ func getSwapInfo() string {
 
 // Get disk information in format "used / total" (e.g., "9.86 GiB / 18.58 GiB")
 // This function aggregates all mounted filesystems (excluding tmpfs, devtmpfs, squashfs)
-func getDiskInfo() string {
-	// Check cache — same reason as getDiskUsage: df+awk is expensive to run every 3 s.
-	diskCacheMu.RLock()
-	v, at := diskInfoCache, diskInfoCacheTime
-	diskCacheMu.RUnlock()
-	if !at.IsZero() && time.Since(at) < diskCacheTTL {
-		return v
-	}
-
-	// One refresh at a time, as in getDiskUsage.
-	if at.IsZero() {
-		diskInfoRefreshMu.Lock()
-	} else if !diskInfoRefreshMu.TryLock() {
-		return v
-	}
-	defer diskInfoRefreshMu.Unlock()
-	diskCacheMu.RLock()
-	v, at = diskInfoCache, diskInfoCacheTime
-	diskCacheMu.RUnlock()
-	if !at.IsZero() && time.Since(at) < diskCacheTTL {
-		return v // refreshed while we waited
-	}
-
-	result := computeDiskInfo()
-
-	diskCacheMu.Lock()
-	diskInfoCache = result
-	diskInfoCacheTime = time.Now()
-	diskCacheMu.Unlock()
-
-	return result
-}
-
-func computeDiskInfo() string {
-	// Use gopsutil for cross-platform support
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		// Get all partitions and sum up
-		partitions, err := disk.Partitions(false)
-		if err == nil {
-			var totalSize, totalUsed uint64
-			seenBaseDisks := make(map[string]bool) // macOS: APFS deduplication
-			for _, partition := range partitions {
-				// Skip system reserved partitions on Windows
-				if runtime.GOOS == "windows" {
-					// Only include partitions with drive letters (C:, D:, etc.)
-					if len(partition.Mountpoint) >= 2 && partition.Mountpoint[1] == ':' {
-						usage, err := disk.Usage(partition.Mountpoint)
-						if err == nil && usage.Total > 0 {
-							totalSize += usage.Total
-							totalUsed += usage.Used
-						}
-					}
-				} else {
-					// macOS APFS: same deduplication logic as computeDiskUsage
-					mp := partition.Mountpoint
-					if mp != "/" && !strings.HasPrefix(mp, "/Volumes/") {
-						continue
-					}
-					if !strings.HasPrefix(partition.Device, "/dev/disk") {
-						continue
-					}
-					baseDisk := macOSBaseDisk(partition.Device)
-					if seenBaseDisks[baseDisk] {
-						continue
-					}
-					seenBaseDisks[baseDisk] = true
-					usage, err := disk.Usage(mp)
-					if err == nil && usage.Total > 0 {
-						totalSize += usage.Total
-						totalUsed += usage.Used
-					}
-				}
-			}
-			if totalSize > 0 {
-				usedStr := formatBytes(totalUsed)
-				totalStr := formatBytes(totalSize)
-				return fmt.Sprintf("%s / %s", usedStr, totalStr)
-			}
-		}
-		return ""
-	}
-
-	// Get total disk size and used space from LOCAL physical filesystems only (Linux)
-	// Exclude: tmpfs, devtmpfs, squashfs, overlay, aufs (containers)
-	// Exclude: nfs, nfs4, cifs, smb, smbfs, fuse, sshfs (network)
-	// Exclude: proc, sysfs, debugfs, securityfs, cgroup, etc. (virtual)
-	// Also filter to only include /dev/* devices to avoid duplicates
-	output, err := runCommandOutput(probeCommandTimeout, "sh", "-c", `df -B1 -T 2>/dev/null | tail -n +2 | awk '
-		$1 ~ /^\/dev\// && 
-		$2 !~ /^(tmpfs|devtmpfs|squashfs|overlay|aufs|nfs|nfs4|cifs|smb|smbfs|fuse|sshfs|proc|sysfs|debugfs|securityfs|cgroup|cgroup2|pstore|bpf|tracefs|hugetlbfs|mqueue|configfs|fusectl|efivarfs|binfmt_misc|devpts|ramfs)$/ {
-			# Track unique devices to avoid double counting
-			if (!seen[$1]++) {
-				total += $3
-				used += $4
-			}
-		}
-		END {
-			if (total > 0) printf "%.0f %.0f\n", used+0.0, total+0.0
-			else print "0 0"
-		}'`)
-	if err == nil {
-		outputStr := strings.TrimSpace(string(output))
-		if outputStr != "" && outputStr != "0 0" {
-			var usedBytes, totalBytes uint64
-			fields := strings.Fields(outputStr)
-			if len(fields) >= 2 {
-				// Parse as uint64 to handle large numbers
-				var usedFloat, totalFloat float64
-				_, err1 := fmt.Sscanf(fields[0], "%f", &usedFloat)
-				_, err2 := fmt.Sscanf(fields[1], "%f", &totalFloat)
-
-				if err1 == nil && err2 == nil {
-					usedBytes = uint64(usedFloat)
-					totalBytes = uint64(totalFloat)
-
-					if totalBytes > 0 && usedBytes <= totalBytes {
-						usedStr := formatBytes(usedBytes)
-						totalStr := formatBytes(totalBytes)
-						return fmt.Sprintf("%s / %s", usedStr, totalStr)
-					}
-				}
-			}
-		}
-	}
-
-	// Fallback: use df -h for root partition only
-	output, err = runCommandOutput(probeCommandTimeout, "sh", "-c", "df -h / | tail -1 | awk '{print $3 \"/\" $2}'")
-	if err == nil {
-		info := strings.TrimSpace(string(output))
-		if info != "" {
-			parts := strings.Split(info, "/")
-			if len(parts) == 2 {
-				used := strings.TrimSpace(parts[0])
-				total := strings.TrimSpace(parts[1])
-				// Add space before unit if missing
-				used = addSpaceBeforeUnit(used)
-				total = addSpaceBeforeUnit(total)
-				return fmt.Sprintf("%s / %s", used, total)
-			}
-			return info
-		}
-	}
-	return ""
-}
-
 // formatBytes converts bytes to human-readable format (B, KiB, MiB, GiB, TiB)
 func formatBytes(bytes uint64) string {
 	const unit = 1024
@@ -4939,76 +4915,6 @@ func formatBytes(bytes uint64) string {
 		return fmt.Sprintf("%s %s", formatted, units[exp])
 	}
 	return fmt.Sprintf("%.2f EiB", float64(bytes)/float64(div*unit))
-}
-
-// Helper function to add space before unit and normalize to MiB/GiB format
-func addSpaceBeforeUnit(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return s
-	}
-
-	// If already has space, normalize units only
-	if strings.Contains(s, " ") {
-		// Normalize: Gi -> GiB, Mi -> MiB, etc. (but avoid double conversion)
-		if strings.HasSuffix(s, " Gi") {
-			return strings.TrimSuffix(s, " Gi") + " GiB"
-		}
-		if strings.HasSuffix(s, " Mi") {
-			return strings.TrimSuffix(s, " Mi") + " MiB"
-		}
-		if strings.HasSuffix(s, " Ki") {
-			return strings.TrimSuffix(s, " Ki") + " KiB"
-		}
-		if strings.HasSuffix(s, " Ti") {
-			return strings.TrimSuffix(s, " Ti") + " TiB"
-		}
-		if strings.HasSuffix(s, " G") && !strings.HasSuffix(s, " GiB") {
-			return strings.TrimSuffix(s, " G") + " GiB"
-		}
-		if strings.HasSuffix(s, " M") && !strings.HasSuffix(s, " MiB") {
-			return strings.TrimSuffix(s, " M") + " MiB"
-		}
-		if strings.HasSuffix(s, " K") && !strings.HasSuffix(s, " KiB") {
-			return strings.TrimSuffix(s, " K") + " KiB"
-		}
-		if strings.HasSuffix(s, " T") && !strings.HasSuffix(s, " TiB") {
-			return strings.TrimSuffix(s, " T") + " TiB"
-		}
-		return s
-	}
-
-	// No space: find unit and add space, then normalize
-	// Try longer units first (GiB before Gi, Gi before G)
-	units := []struct {
-		old string
-		new string
-	}{
-		{"TiB", " TiB"},
-		{"GiB", " GiB"},
-		{"MiB", " MiB"},
-		{"KiB", " KiB"},
-		{"TB", " TiB"},
-		{"GB", " GiB"},
-		{"MB", " MiB"},
-		{"KB", " KiB"},
-		{"Ti", " TiB"},
-		{"Gi", " GiB"},
-		{"Mi", " MiB"},
-		{"Ki", " KiB"},
-		{"T", " TiB"},
-		{"G", " GiB"},
-		{"M", " MiB"},
-		{"K", " KiB"},
-	}
-
-	for _, unit := range units {
-		if idx := strings.Index(s, unit.old); idx > 0 {
-			// Insert space before unit and normalize
-			return s[:idx] + unit.new
-		}
-	}
-	return s
 }
 
 // macOSBaseDisk extracts the base APFS container name from a macOS device path.

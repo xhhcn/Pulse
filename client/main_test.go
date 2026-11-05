@@ -1348,48 +1348,83 @@ func TestGetIPAddressesColdStartDetectsOnce(t *testing.T) {
 	}
 }
 
-// TestGetDiskUsageSingleFlight: while a refresh holds diskUsageRefreshMu, a
-// caller with a stale value gets it back at once instead of running df, and a
-// caller with no value yet waits for the refresh's result.
+// TestGetDiskUsageSingleFlight: a reading that has gone stale is served at
+// once and refreshed in the background, one refresh at a time; only the very
+// first reading is waited for.
 func TestGetDiskUsageSingleFlight(t *testing.T) {
 	diskCacheMu.Lock()
-	origV, origAt := diskUsageCache, diskUsageCacheTime
+	origV, origAt, origReader := diskTotalsCache, diskTotalsCacheTime, diskTotalsReader
 	diskCacheMu.Unlock()
 	t.Cleanup(func() {
 		diskCacheMu.Lock()
-		diskUsageCache, diskUsageCacheTime = origV, origAt
+		diskTotalsCache, diskTotalsCacheTime, diskTotalsReader = origV, origAt, origReader
 		diskCacheMu.Unlock()
 	})
 
-	const stale = 12.345 // no real df result has three decimals
-	diskCacheMu.Lock()
-	diskUsageCache, diskUsageCacheTime = stale, time.Now().Add(-2*diskCacheTTL)
-	diskCacheMu.Unlock()
-
-	diskUsageRefreshMu.Lock() // a refresh is in flight
-	if got := getDiskUsage(); got != stale {
-		diskUsageRefreshMu.Unlock()
-		t.Fatalf("getDiskUsage() = %v during a refresh, want the stale %v without running df", got, stale)
+	stale := diskTotals{used: 25, avail: 75, size: 100} // 25 %
+	fresh := diskTotals{used: 60, avail: 40, size: 100} // 60 %
+	release := make(chan struct{})
+	var reads int32
+	diskTotalsReader = func() diskTotals {
+		atomic.AddInt32(&reads, 1)
+		<-release
+		return fresh
 	}
 
-	// Cold start: nothing cached, so the caller waits for the refresh.
+	// Stale: served at once while one refresh runs in the background.
 	diskCacheMu.Lock()
-	diskUsageCache, diskUsageCacheTime = 0, time.Time{}
+	diskTotalsCache, diskTotalsCacheTime = stale, time.Now().Add(-2*diskCacheTTL)
 	diskCacheMu.Unlock()
-	const refreshed = 67.891
+	start := time.Now()
+	for i := 0; i < 5; i++ {
+		if got := getDiskUsage(); got != 25 {
+			t.Fatalf("getDiskUsage() = %v while refreshing, want the stale 25", got)
+		}
+	}
+	if d := time.Since(start); d > 200*time.Millisecond {
+		t.Fatalf("stale readings took %v; they must not wait for the refresh", d)
+	}
+	close(release)
+	deadline := time.Now().Add(2 * time.Second)
+	for getDiskUsage() != 60 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := getDiskUsage(); got != 60 {
+		t.Fatalf("getDiskUsage() = %v after the refresh, want 60", got)
+	}
+	if n := atomic.LoadInt32(&reads); n != 1 {
+		t.Fatalf("%d refreshes ran for one stale reading, want 1", n)
+	}
+	if got := getDiskInfo(); got != "60 B / 100 B" {
+		t.Fatalf("getDiskInfo() = %q, want the same reading's text", got)
+	}
+
+	// Cold start: the caller waits for the first reading.
+	release2 := make(chan struct{})
+	diskTotalsReader = func() diskTotals { <-release2; return stale }
+	diskCacheMu.Lock()
+	diskTotalsCache, diskTotalsCacheTime = diskTotals{}, time.Time{}
+	diskCacheMu.Unlock()
 	got := make(chan float64, 1)
 	go func() { got <- getDiskUsage() }()
 	select {
 	case v := <-got:
-		diskUsageRefreshMu.Unlock()
-		t.Fatalf("getDiskUsage() returned %v before the first refresh finished, want it to wait", v)
+		t.Fatalf("getDiskUsage() returned %v before the first reading finished, want it to wait", v)
 	case <-time.After(100 * time.Millisecond):
 	}
+	close(release2)
+	if v := <-got; v != 25 {
+		t.Errorf("getDiskUsage() = %v after waiting, want the first reading's 25", v)
+	}
+
+	// A failed reading keeps the last good one.
+	diskTotalsReader = func() diskTotals { return diskTotals{} }
 	diskCacheMu.Lock()
-	diskUsageCache, diskUsageCacheTime = refreshed, time.Now()
+	diskTotalsCacheTime = time.Now().Add(-2 * diskCacheTTL)
 	diskCacheMu.Unlock()
-	diskUsageRefreshMu.Unlock()
-	if v := <-got; v != refreshed {
-		t.Errorf("getDiskUsage() = %v after waiting, want the refresh's %v", v, refreshed)
+	getDiskUsage()
+	time.Sleep(50 * time.Millisecond)
+	if v := getDiskUsage(); v != 25 {
+		t.Errorf("getDiskUsage() = %v after a failed reading, want the last good 25", v)
 	}
 }
