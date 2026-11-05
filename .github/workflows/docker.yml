@@ -146,13 +146,16 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows a Beszel re-check of v1.3.63: a roomier toolbar on phones, Beszel's line when nothing matches the filter, and shorter setting descriptions. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} follows a Beszel re-check of v1.3.64: a TCPing chart as wide with the loss band as without it, a phone chart card's line across the card, clearer loss figures, whole lines at 0 % and 100 %, gradient logos on the sign-in page and higher-contrast gradient tags. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: on phones with the Latency view on, the Resources | Latency switch takes a row of its own (two equal halves) and the filter keeps its width (109 → 284 px in English).
-            - Web: when no server matches the filter or status, the list shows Beszel's single line in a 96 px row instead of an icon and two lines; a site with no servers keeps its hint.
-            - Web: the Resource History and Latency View descriptions in Customization Settings are shorter.
+            - Web: with the loss band on, the TCPing chart no longer leaves up to 25 px of blank card at its ends (14 px measured on a phone); the plot is as wide as without the band.
+            - Web: on phones the chart card's line takes a row of its own across the card (it wrapped in English beside the time range picker); from 640 px as before.
+            - Web: loss figures in the Latency view use the offline chip's red (6.5:1 on white, was 3.8:1) and the chart legend's format (1.67%, 5.00%, 20.0%, 100%).
+            - Web: a memory or disk line at exactly 0 % or 100 % is drawn whole; it was half clipped, so a nearly empty disk looked like no data.
+            - Web: a custom SVG logo with a gradient, mask or clip path shows on the sign-in page; it was blank there.
+            - Web: the spy: and spr: gradient tags are one shade darker, so white text reaches 4.5:1 on every stop; spb: is unchanged.
 
             ### Compatibility
 
@@ -160,7 +163,7 @@ jobs:
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: the phone toolbar with and without the switch, in English and Chinese, and unchanged from 640 px; the no-match line in the table, the cards, on phones and in dark mode, the language switch, and the empty-site hint; the setting descriptions in both languages; and the suites for public pages, empty states, alignment, headers, phones, details, the Resources tab, the Latency view and reopening.
+            - Chromium, Firefox and WebKit: the chart's ends with and without the loss band on phones and desktop; the phone chart header in English and Chinese, with tabs or a title, the Resources-only card, and unchanged from 640 px; the loss format and colours in light and dark; whole lines at 0 % and 100 %; a gradient logo on the sign-in page and an id-free logo copied unchanged; the tag colours and their contrast; and the suites for public pages, alignment, headers, phones, the loss band, the time range, the sign-in mark, the Resources tab, the Latency view and reopening.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
