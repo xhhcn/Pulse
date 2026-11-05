@@ -146,25 +146,22 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows a Beszel re-check of v1.3.58 on a site of 129 servers: a roomier TCPing chart with the loss band, fixes to card, phone and header spacing, and a few Beszel touches. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} adds two dashboard views, both off until an admin switches them on in Customization Settings: a Resources tab with each server's last 24 hours, and a Latency view that compares every server's TCPing targets side by side. With both off the dashboard is the same as v1.3.59. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: with the loss band on, the TCPing chart no longer leaves 24 px of blank space under the time labels; the plot gets it (119 → 144 px tall).
-            - Web: cards at 640–1279 px: the Net and Uptime lines are as tall as the others. Phones: a CPU name's "1 Virtual Core" stays on one line, and icons sit 4 px from their labels.
-            - Web: English at 1024–1360 px: the "Location" header no longer runs into "CPU" (a slightly wider location column).
-            - Web: a server with no swap (0 B / 0 B) shows no swap line, as in Beszel.
-            - Web: an opened table row shares its details' background, without a line between them.
-            - Web: from 1024 to 1279 px the table uses 13 px regular figures and 50 px rows (12 px and 45 px before); from 1280 px it stays at Beszel's 14 px.
-            - Web: the chart tooltip follows Beszel's (rounder, no shadow), and the sign-in page shows the site's own logo when one is set.
+            - Resource History (自定义设置 → 资源历史, off by default): the server keeps each server's CPU, memory, disk and network averaged per minute for 24 hours. An opened server's chart card gets Latency | Resources tabs in place of its title; Resources shows four small charts that follow the chart's time range picker. A server whose TCPing card is hidden gets a Resources card of its own. Nothing is recorded while the switch is off.
+            - Latency View (自定义设置 → 延迟视图, off by default): a Resources | Latency switch beside the filter. In Latency the resource columns give way to one column per TCPing target, named as the admin named it and coloured as in the chart, with each server's average latency and loss over the last hour; a target's header sorts by it. Phones show the targets under each name, and cards give each target a row. The rows, pages, filter and opened details stay the same.
+            - Web: an opened row and its details stay one colour while they open and close. The details' ground no longer fades in lighter than the row, and a closing row keeps its colour, without the divider, until the details are gone; only their content fades (the table, light and dark; cards and the glass theme as before).
+            - Server: one write a minute while Resource History is on (about 8 MB for 136 servers over 24 hours); the Latency view reads one summary a minute, computed once a minute for every visitor. Both answer only for servers the homepage shows (the summary only for the targets configured now) and follow privacy mode.
 
             ### Compatibility
 
-            - No server change; existing clients continue to work.
+            - New settings resource_history and latency_view (false unless switched on); new read-only endpoints GET /api/resource/history and GET /api/tcping/summary, which answer 404 while their switch is off. Existing clients continue to work.
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: the chart with the loss band (axis height, plot height, space under the labels) and without it, the tooltip, card lines at 640–1279 px, phone label gaps and the CPU name, the location header at 1024–1360 px in English, no swap line for 0 B / 0 B, the opened row on its details' ground, the 1024–1279 px table at 13 px with 50 px rows, the sign-in mark with and without a site logo; no cut names at any of 153 widths in English and Chinese, phones from 320 px, and the suites for the time range, public pages, last seen and links, details, cards, the latency axis, the chart's theme, headers, alignment and the chart's features.
+            - Chromium, Firefox and WebKit: the row and its details one colour at every sampled moment of opening and closing (table and phones, light and dark; cards and glass unchanged); with both switches off, no switch, no tabs, the chart card as before, both endpoints 404 and never requested; the two switches in Customization Settings, off by default, saved and shown again; the Latency view's columns named as configured, its values equal to the last hour's probes, loss in the loss band's red, the values under their headers at 1440, 1100 and 820 px, sorting by a target, the view menu, a hidden field, phones, cards, dark and English; the Resources tab's four charts drawn from the stored minutes, the time range, the tooltip, phones, dark and a server without TCPing; and the suites for the chart, the time range, public pages, details, cards, column widths, headers, pages, alignment and the chart's features.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
