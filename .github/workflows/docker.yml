@@ -146,22 +146,22 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows a Beszel re-check of v1.3.60's Resources tab and Latency view: Beszel-style resource charts, a fixed network axis, and tabs as Beszel's. Existing clients and databases stay compatible; agents need no update.
+            v${{ steps.version.outputs.version }} records the resource history from the server's start, keeps the Latency view a table to compare by, and fixes the view menu running off the window. Existing clients and databases stay compatible; agents need no update.
 
             ### Highlights
 
-            - Web: the Resources charts follow Beszel's system page — a 1 px line over a 40 % area (the network's two at 20 %), 160 px charts, the TCPing chart's time axis (12 px labels with short marks), and the four plots lined up.
-            - Web: the network chart's axis steps in round numbers of its unit (B/s, KB/s or MB/s), named in the card next to the download and upload colours. Before, a server under about 8 KB/s showed only "0 B/s" and "10.2 KB/s".
-            - Web: on phones the four charts span the card between hairlines (wider plots), and an hour shows quarter hours (two times before). Wider time axes are unchanged.
-            - Web: the Resources | Latency switches use Beszel's tab style (medium labels, the chosen tab on the page's ground), and a target sorted in the Latency view keeps its colour square.
+            - Server: each server's CPU, memory, disk and network minutes are recorded from the start and kept for 24 hours (older minutes are removed), as Beszel does; the Resource History switch only shows them, so turning it on shows the last day at once. About 45 bytes a server-minute (some 8 MB for 131 servers), one write a minute.
+            - Web: in the Latency view the rows and cards no longer open (no pointer or hover there); the details are in the Resources view.
+            - Web: the view menu stays inside the window where the toolbar wraps onto its own line (900–1280 px, depending on the language and view).
+            - Web: in dark mode the resource charts' memory and download colours are one step deeper, as the dark palette's other colours.
 
             ### Compatibility
 
-            - No server change; existing clients continue to work.
+            - Recording no longer depends on the Resource History switch; the endpoint still answers only while it is on. Existing clients continue to work.
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: the four charts' axes, marks, areas, heights and alignment in light and dark; the network axis's round steps for a busy and a quiet server, its colour keys, unit and tooltip; phones without the small frames, wider plots and quarter-hour times; desktop time axes unchanged; both switches' weight and colours; the sorted target's colour and arrow; and the suites for the chart, the time range, the latency axis, details, opening and closing, alignment, phones and the chart's features.
+            - Chromium, Firefox and WebKit: minutes recorded while the switch is off are there when it is turned on; the view menu inside the window at every width where it ran off before; Latency-view rows and cards that do not open (and open again in Resources), a row opened in Resources closing on the switch; the dark resource colours; and the suites for the resource charts, the Latency view, public pages, details, opening and closing, alignment and the chart's features.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
