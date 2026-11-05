@@ -19,6 +19,9 @@ import (
 // variable is set.
 func TestMain(m *testing.M) {
 	runDBOpenProbeIfRequested()
+	// Pushes commit at once in tests (a lone push would otherwise wait for
+	// its batch); the batching itself is tested with its own delay.
+	pushBatchDelay = 0
 	os.Exit(m.Run())
 }
 

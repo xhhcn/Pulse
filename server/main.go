@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -1900,6 +1901,11 @@ func main() {
 		log.Printf("⚠️  HTTP shutdown returned: %v", err)
 	}
 
+	// No report can arrive any more: write the resource minutes the exit
+	// would lose (the last finished one may not be written yet, and the
+	// current one never would be).
+	flushResourceHistoryAtExit(store, time.Now())
+
 	// Now that no handler can be issuing new db.Update calls, it is safe to
 	// close the bbolt DB. Closing bbolt flushes in-flight writes and releases
 	// the file lock.
@@ -2283,6 +2289,42 @@ func broadcastMetricsSnapshot(store *Store, registry *ClientRegistry, broker *SS
 	broadcastMetricsSnapshotLocked(store, registry, broker)
 }
 
+// roundForStream shortens a snapshot's live numbers to what a dashboard can
+// show: percentages to 2 decimals, speeds (MB/s) to 4 significant digits,
+// latencies to 3 decimals (a microsecond). They went out with 17 digits
+// ("cpu": 0.33333333333333337), a fifth of every snapshot's compressed
+// size; the stored values keep their precision.
+func roundForStream(metrics []SystemMetric) {
+	for i := range metrics {
+		m := &metrics[i]
+		m.CPU = round(m.CPU, 2)
+		m.Memory = round(m.Memory, 2)
+		m.Disk = round(m.Disk, 2)
+		m.NetInMBps = roundSignificant(m.NetInMBps, 4)
+		m.NetOutMBps = roundSignificant(m.NetOutMBps, 4)
+		for target, d := range m.TCPingData {
+			d.Latency = round(d.Latency, 3)
+			m.TCPingData[target] = d
+		}
+	}
+}
+
+// roundSignificant rounds v to the given number of significant digits.
+func roundSignificant(v float64, digits int) float64 {
+	if v == 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+		return v
+	}
+	places := digits - 1 - int(math.Floor(math.Log10(math.Abs(v))))
+	if places > 15 {
+		return v // far below anything shown; 10^places would overflow
+	}
+	if places >= 0 {
+		return round(v, places)
+	}
+	p := math.Pow(10, float64(-places))
+	return math.Round(v/p) * p
+}
+
 // refreshSnapshotForPrime is called by a connecting stream that found no
 // payload published within sseSnapshotMaxAge (cold start, or a stalled
 // broadcaster). It publishes a fresh snapshot to every subscriber through
@@ -2313,13 +2355,16 @@ func broadcastMetricsSnapshotLocked(store *Store, registry *ClientRegistry, brok
 	// registry.GetAll that used to run every 3 s. Shallow copy is safe
 	// because:
 	//   * IPv4 / IPv6 / Secret are plain strings (value copy)
-	//   * TCPingData (map) and Tags (slice) are NOT mutated here; they are
-	//     read-only for the marshaller, and we never touch them.
+	//   * TCPingData (map) and Tags (slice) are NOT mutated after the copy;
+	//     roundForStream rounds the map's latencies before it, for both
+	//     views (the records, maps included, are decoded afresh for every
+	//     snapshot, so nothing else holds them).
 	adminMetrics, err := buildMetricsSnapshot(store, registry, true)
 	if err != nil {
 		log.Printf("⚠️  broadcastMetricsSnapshot: snapshot failed: %v", err)
 		return
 	}
+	roundForStream(adminMetrics)
 
 	publicMetrics := make([]SystemMetric, len(adminMetrics))
 	copy(publicMetrics, adminMetrics)
@@ -4859,7 +4904,23 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var results []TCPingResult
+	// An open chart asks only for what came after its newest probes
+	// (since=, unix ms): read from that second on, which is a few hundred
+	// records of every client instead of the day's. Not cached; an older
+	// since gets the whole day below, which a chart merges the same way.
+	if since, ok := tcpingHistorySince(r); ok {
+		if sys, getErr := store.Get(clientID); getErr != nil || sys == nil {
+			http.Error(w, "client not found", http.StatusNotFound)
+			return
+		}
+		results, err := store.GetTCPingResultsSince(clientID, target, since)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to get history: %v", err), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, TCPingHistoryResponse{Results: results, Stats: calculateTCPingStats(results)})
+		return
+	}
 
 	// Try to get the exact client+target history response from cache first.
 	// Cache stores the already-encoded JSON body, so a hit can be served
@@ -4872,44 +4933,127 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 	// Taken before the database read: see tcpingCacheStamp.
 	stamp := tcpingCacheStampFor(clientID)
 
-	// Unknown ids are answered before touching the history bucket. It is
-	// keyed by time, so a lookup for a non-existent client would otherwise
-	// scan the whole 24 h window on every anonymous request. (Cache hits
-	// above are for ids that existed when the entry was built.)
-	if sys, getErr := store.Get(clientID); getErr != nil || sys == nil {
+	// Requests missing the cache for the same history and stamp at the same
+	// time share one read (see loadTCPingHistoryShared).
+	got := loadTCPingHistoryShared(tcpingHistoryFlightKey{tcpingCacheKey{clientID, target}, stamp}, func() tcpingHistoryLoad {
+		// Unknown ids are answered before touching the history bucket. It
+		// is keyed by time, so a lookup for a non-existent client would
+		// otherwise scan the whole 24 h window on every anonymous request.
+		// (Cache hits above are for ids that existed when the entry was
+		// built.)
+		if sys, getErr := store.Get(clientID); getErr != nil || sys == nil {
+			return tcpingHistoryLoad{notFound: true}
+		}
+		var results []TCPingResult
+		var err error
+		if target != "" {
+			results, err = store.GetTCPingResults(clientID, target)
+		} else {
+			results, err = store.GetTCPingResults(clientID)
+		}
+		if err != nil {
+			return tcpingHistoryLoad{err: err}
+		}
+		response := TCPingHistoryResponse{
+			Results: results,
+			Stats:   calculateTCPingStats(results),
+		}
+		entry := buildTCPingCacheEntry(response)
+		if entry != nil {
+			// Served from the entry (and its gzip copy) whether or not it
+			// could be stored: a push since the read only makes it too old
+			// to keep.
+			storeTCPingCacheEntry(clientID, target, entry, stamp)
+		}
+		return tcpingHistoryLoad{entry: entry, response: &response}
+	})
+	switch {
+	case got.notFound:
 		http.Error(w, "client not found", http.StatusNotFound)
-		return
+	case got.err != nil:
+		http.Error(w, fmt.Sprintf("failed to get history: %v", got.err), http.StatusInternalServerError)
+	case got.entry != nil:
+		writeCachedTCPingEntry(w, r, got.entry)
+	case got.response != nil:
+		writeJSON(w, http.StatusOK, *got.response)
+	default:
+		http.Error(w, "failed to get history", http.StatusInternalServerError)
 	}
+}
 
-	// Cache miss - query database
-	if target != "" {
-		results, err = store.GetTCPingResults(clientID, target)
-	} else {
-		results, err = store.GetTCPingResults(clientID)
+// tcpingHistorySinceMaxAge: how far back a since= is read from its own
+// second. An open chart asks for its last two minutes each minute; a since
+// older than this (a tab that slept) gets the cached whole day instead, so
+// no request walks hours of every client's probes uncached.
+const tcpingHistorySinceMaxAge = 10 * time.Minute
+
+// tcpingHistorySince reads since= (unix ms) when it is recent enough.
+func tcpingHistorySince(r *http.Request) (time.Time, bool) {
+	v := r.URL.Query().Get("since")
+	if v == "" {
+		return time.Time{}, false
 	}
-
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get history: %v", err), http.StatusInternalServerError)
-		return
+	ms, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || ms <= 0 {
+		return time.Time{}, false
 	}
-
-	// Calculate statistics from results
-	stats := calculateTCPingStats(results)
-
-	// Build response with statistics
-	response := TCPingHistoryResponse{
-		Results: results,
-		Stats:   stats,
+	since := time.UnixMilli(ms)
+	now := time.Now()
+	if since.Before(now.Add(-tcpingHistorySinceMaxAge)) || since.After(now.Add(time.Minute)) {
+		return time.Time{}, false
 	}
+	return since, true
+}
 
-	if entry := buildTCPingCacheEntry(response); entry != nil {
-		// Served from the entry (and its gzip copy) whether or not it could
-		// be stored: a push since the read only makes it too old to keep.
-		storeTCPingCacheEntry(clientID, target, entry, stamp)
-		writeCachedTCPingEntry(w, r, entry)
-		return
+// tcpingHistoryLoad is one read of a history and what it answers.
+type tcpingHistoryLoad struct {
+	entry    *tcpingCacheEntry
+	response *TCPingHistoryResponse
+	notFound bool
+	err      error
+}
+
+// tcpingHistoryFlightKey: requests share a read only when they want the
+// same history at the same cache stamp, so a request that arrives after a
+// push never takes a read that started before it.
+type tcpingHistoryFlightKey struct {
+	key   tcpingCacheKey
+	stamp tcpingCacheStamp
+}
+
+type tcpingHistoryFlight struct {
+	done chan struct{}
+	load tcpingHistoryLoad
+}
+
+var (
+	tcpingHistoryFlightsMu sync.Mutex
+	tcpingHistoryFlights   = make(map[tcpingHistoryFlightKey]*tcpingHistoryFlight)
+)
+
+// loadTCPingHistoryShared runs load once for all the requests that missed
+// the cache for one history at the same time. A push invalidates a client's
+// cached day about once a minute, and every viewer with that chart open then
+// asks again within the same moment: each used to walk the whole day of
+// every client's probes on its own (40–70 ms for 131 servers).
+func loadTCPingHistoryShared(key tcpingHistoryFlightKey, load func() tcpingHistoryLoad) tcpingHistoryLoad {
+	tcpingHistoryFlightsMu.Lock()
+	if f, ok := tcpingHistoryFlights[key]; ok {
+		tcpingHistoryFlightsMu.Unlock()
+		<-f.done
+		return f.load
 	}
-	writeJSON(w, http.StatusOK, response)
+	f := &tcpingHistoryFlight{done: make(chan struct{}), load: tcpingHistoryLoad{err: errors.New("history read failed")}}
+	tcpingHistoryFlights[key] = f
+	tcpingHistoryFlightsMu.Unlock()
+	defer func() {
+		tcpingHistoryFlightsMu.Lock()
+		delete(tcpingHistoryFlights, key)
+		tcpingHistoryFlightsMu.Unlock()
+		close(f.done)
+	}()
+	f.load = load()
+	return f.load
 }
 
 // writeCachedTCPingEntry ships a cached history body.
@@ -6180,30 +6324,95 @@ func getClientIP(r *http.Request) string {
 	return remoteIP
 }
 
+// Login limit: an address (an IPv6 /64 counts as one, see rateLimitKey) may
+// try loginMaxAttempts passwords; when they have all failed it is locked for
+// loginLockout. A quiet loginLockout clears the count.
+const (
+	loginMaxAttempts = 5
+	loginLockout     = 15 * time.Minute
+)
+
+// loginVerify checks a password; tests replace it to watch the limiter.
+var loginVerify = func(store *Store, password string) (bool, error) {
+	return store.VerifyPassword(password)
+}
+
+// loginLocked reports whether the address is in its lockout.
+func loginLocked(key string) bool {
+	loginAttemptsMu.Lock()
+	defer loginAttemptsMu.Unlock()
+	attempt := loginAttempts[key]
+	return attempt != nil && time.Now().Before(attempt.lockedUntil)
+}
+
+// reserveLoginAttempt counts an attempt before its password is checked, so
+// guesses sent at the same moment each take one of the address's
+// loginMaxAttempts: counting only after the slow bcrypt check let a burst
+// of concurrent requests all pass the limit together. It reports false
+// when the address is locked or has no attempt left.
+func reserveLoginAttempt(key string) bool {
+	loginAttemptsMu.Lock()
+	defer loginAttemptsMu.Unlock()
+	now := time.Now()
+	attempt := loginAttempts[key]
+	if attempt == nil {
+		attempt = &loginAttempt{lastAttempt: now}
+		loginAttempts[key] = attempt
+	}
+	if now.Before(attempt.lockedUntil) {
+		return false
+	}
+	if now.Sub(attempt.lastAttempt) > loginLockout {
+		attempt.count = 0
+	}
+	if attempt.count >= loginMaxAttempts {
+		return false
+	}
+	attempt.count++
+	attempt.lastAttempt = now
+	return true
+}
+
+// finishLoginAttempt settles a reserved attempt: a right password clears the
+// address, a wrong one keeps its count and locks the address once none is
+// left.
+func finishLoginAttempt(key string, valid bool) {
+	loginAttemptsMu.Lock()
+	defer loginAttemptsMu.Unlock()
+	attempt := loginAttempts[key]
+	if attempt == nil {
+		return
+	}
+	if valid {
+		attempt.count = 0
+		attempt.lockedUntil = time.Time{}
+		return
+	}
+	if attempt.count >= loginMaxAttempts {
+		attempt.lockedUntil = time.Now().Add(loginLockout)
+	}
+}
+
+// releaseLoginAttempt gives a reserved attempt back when the password could
+// not be checked at all (a storage error is not a wrong guess).
+func releaseLoginAttempt(key string) {
+	loginAttemptsMu.Lock()
+	defer loginAttemptsMu.Unlock()
+	if attempt := loginAttempts[key]; attempt != nil && attempt.count > 0 {
+		attempt.count--
+	}
+}
+
 // handleAuthLogin authenticates and returns a token
 func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
-	// SECURITY: Rate limiting to prevent brute force attacks
+	// SECURITY: Rate limiting to prevent brute force attacks. A locked
+	// address is answered before its body is read, with the message a wrong
+	// password gets, so the lockout is not disclosed.
 	limitKey := rateLimitKey(getClientIP(r))
-	loginAttemptsMu.Lock()
-	attempt, exists := loginAttempts[limitKey]
-	if !exists {
-		attempt = &loginAttempt{count: 0, lastAttempt: time.Now()}
-		loginAttempts[limitKey] = attempt
-	}
-
-	// Check if IP is locked due to too many failed attempts
-	if time.Now().Before(attempt.lockedUntil) {
-		loginAttemptsMu.Unlock()
-		// Return same error message to avoid information disclosure
+	if loginLocked(limitKey) {
 		http.Error(w, "invalid password", http.StatusUnauthorized)
 		return
 	}
-
-	// Reset count if last attempt was more than 15 minutes ago
-	if time.Since(attempt.lastAttempt) > 15*time.Minute {
-		attempt.count = 0
-	}
-	loginAttemptsMu.Unlock()
 
 	defer r.Body.Close()
 	// Cap body before decoding: prevents an attacker from forcing the server
@@ -6229,30 +6438,22 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	valid, err := store.VerifyPassword(payload.Password)
+	if !reserveLoginAttempt(limitKey) {
+		http.Error(w, "invalid password", http.StatusUnauthorized)
+		return
+	}
+	valid, err := loginVerify(store, payload.Password)
 	if err != nil {
+		releaseLoginAttempt(limitKey)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-
-	// Update attempt tracking
-	loginAttemptsMu.Lock()
-	attempt.lastAttempt = time.Now()
+	finishLoginAttempt(limitKey, valid)
 	if !valid {
-		attempt.count++
-		// Lock IP after 5 failed attempts for 15 minutes
-		if attempt.count >= 5 {
-			attempt.lockedUntil = time.Now().Add(15 * time.Minute)
-		}
-		loginAttemptsMu.Unlock()
 		// Return same error message to avoid information disclosure
 		http.Error(w, "invalid password", http.StatusUnauthorized)
 		return
 	}
-	// Reset count on successful login
-	attempt.count = 0
-	attempt.lockedUntil = time.Time{}
-	loginAttemptsMu.Unlock()
 
 	// Generate token
 	token, err := GenerateAuthToken()

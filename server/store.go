@@ -52,12 +52,25 @@ type Store struct {
 // removes the persisted freelist page, the structure behind the historical
 // "invalid freelist page" corruption after unclean shutdowns.
 func openBolt(dbPath string) (*bolt.DB, error) {
-	return bolt.Open(dbPath, 0600, &bolt.Options{
+	db, err := bolt.Open(dbPath, 0600, &bolt.Options{
 		Timeout:        5 * time.Second,
 		FreelistType:   bolt.FreelistMapType,
 		NoFreelistSync: true,
 	})
+	if err != nil {
+		return nil, err
+	}
+	db.MaxBatchDelay = pushBatchDelay
+	return db, nil
 }
+
+// pushBatchDelay: agent pushes are written in batches (SaveClientPushBatch
+// uses bbolt's Batch), each commit carrying the pushes that arrived within
+// this long of the first. A commit costs two fsyncs whatever it carries, so
+// with ~40 pushes a second (130 agents every 3 s) one commit per push was
+// most of the disk writes: 0.76 MB/s, about 65 GB a day. A push is still
+// answered only after its batch is on disk. Tests set it to 0.
+var pushBatchDelay = 100 * time.Millisecond
 
 // isDBCorruptionError returns true when the error returned from bolt.Open
 // looks like on-disk corruption that cannot be recovered by re-opening.
@@ -1046,8 +1059,15 @@ func (s *Store) SaveTCPingResult(result TCPingResult) error {
 // SaveClientPushBatch atomically writes the system metric and all tcping
 // results from a single push in one bbolt transaction. Admin-owned fields
 // are taken from the stored record inside the transaction (putAgentMetric).
+//
+// The transaction is shared with the other pushes arriving within
+// pushBatchDelay (bbolt Batch); it returns once that commit is on disk. When
+// one push of a batch fails, bbolt runs the others again in a new
+// transaction and the failed one alone, so this function may run more than
+// once: it only reads and writes inside tx, and the map it merges into
+// (metric.TCPingData) ends the same however often it runs.
 func (s *Store) SaveClientPushBatch(metric SystemMetric, tcpingResults []TCPingResult) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	return s.db.Batch(func(tx *bolt.Tx) error {
 		systems := tx.Bucket([]byte(bucketName))
 		if systems == nil {
 			return fmt.Errorf("systems bucket not found")
@@ -1102,13 +1122,30 @@ func (s *Store) SaveClientPushBatch(metric SystemMetric, tcpingResults []TCPingR
 // timestamp but differ in client / target — which keeps callers free to
 // assume the result slice is sorted.
 func (s *Store) GetTCPingResults(clientID string, target ...string) ([]TCPingResult, error) {
-	results := make([]TCPingResult, 0, 256)
-	cutoffTime := time.Now().Add(-24 * time.Hour)
-	cutoffPrefix := []byte(fmt.Sprintf("%d_", cutoffTime.Unix()))
 	filterTarget := ""
 	if len(target) > 0 {
 		filterTarget = target[0]
 	}
+	return s.tcpingResultsAfter(clientID, filterTarget, time.Now().Add(-24*time.Hour))
+}
+
+// GetTCPingResultsSince returns a client's results stamped after since (at
+// most the last 24 hours), oldest first; target "" means every target. Keys
+// start with the second, so the walk begins at since: an open chart asking
+// for its last minutes reads those minutes of every client, not the day.
+func (s *Store) GetTCPingResultsSince(clientID, target string, since time.Time) ([]TCPingResult, error) {
+	if dayAgo := time.Now().Add(-24 * time.Hour); since.Before(dayAgo) {
+		since = dayAgo
+	}
+	return s.tcpingResultsAfter(clientID, target, since)
+}
+
+// tcpingResultsAfter walks the history from the second of cutoffTime and
+// keeps the client's (and target's, when one is given) results stamped
+// strictly after it.
+func (s *Store) tcpingResultsAfter(clientID, filterTarget string, cutoffTime time.Time) ([]TCPingResult, error) {
+	results := make([]TCPingResult, 0, 256)
+	cutoffPrefix := []byte(fmt.Sprintf("%d_", cutoffTime.Unix()))
 
 	clientPrefix := []byte(clientID + "_")
 	var targetSuffix []byte

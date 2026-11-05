@@ -59,6 +59,12 @@ type resourceKey struct {
 type resourceRecorder struct {
 	mu   sync.Mutex
 	sums map[resourceKey]*resourceSums
+	// takenBefore: the minutes before it have been taken (written). A report
+	// for one of them counts toward this minute instead: a push stamped
+	// 12:00:59 whose save ended after 12:01:02 would otherwise start that
+	// minute's sums again, and its one sample would overwrite the minute's
+	// stored average.
+	takenBefore int64
 }
 
 var resourceRec = &resourceRecorder{sums: make(map[resourceKey]*resourceSums)}
@@ -66,16 +72,21 @@ var resourceRec = &resourceRecorder{sums: make(map[resourceKey]*resourceSums)}
 func (rr *resourceRecorder) reset() {
 	rr.mu.Lock()
 	rr.sums = make(map[resourceKey]*resourceSums)
+	rr.takenBefore = 0
 	rr.mu.Unlock()
 }
 
-// add counts one report of a server into its minute.
+// add counts one report of a server into its minute (or, when that minute
+// was already written, into the first one not yet written).
 func (rr *resourceRecorder) add(m SystemMetric, at time.Time) {
 	if m.ID == "" {
 		return
 	}
-	k := resourceKey{id: m.ID, minute: at.Unix() / 60}
 	rr.mu.Lock()
+	k := resourceKey{id: m.ID, minute: at.Unix() / 60}
+	if k.minute < rr.takenBefore {
+		k.minute = rr.takenBefore
+	}
 	s := rr.sums[k]
 	if s == nil {
 		s = &resourceSums{}
@@ -105,6 +116,9 @@ func (rr *resourceRecorder) forget(id string) {
 func (rr *resourceRecorder) take(before int64) []resourceSample {
 	rr.mu.Lock()
 	defer rr.mu.Unlock()
+	if before > rr.takenBefore {
+		rr.takenBefore = before
+	}
 	out := make([]resourceSample, 0, len(rr.sums))
 	for k, s := range rr.sums {
 		if k.minute >= before {
@@ -177,6 +191,9 @@ func (s *Store) SaveResourceSamples(samples []resourceSample) error {
 			if err != nil {
 				return err
 			}
+			// Each server's minutes only ever grow at the end: full pages
+			// (bbolt splits at half by default, which left them half empty)
+			b.FillPercent = 1
 			if err := b.Put(resourceKeyBytes(sm.Minute), encodeResourceValue(sm)); err != nil {
 				return err
 			}
@@ -281,6 +298,20 @@ func flushResourceHistory(store *Store, now time.Time) {
 		if err := store.PruneResourceHistory(now.Add(-resourceHistoryWindow)); err != nil {
 			log.Printf("⚠️ resource history prune: %v", err)
 		}
+	}
+}
+
+// flushResourceHistoryAtExit writes what the shutdown would lose: the
+// finished minutes not written yet and the current minute's average so far
+// (after a quick restart the minute's later reports replace it). Called
+// once no request can add a report and before the database closes.
+func flushResourceHistoryAtExit(store *Store, now time.Time) {
+	samples := resourceRec.take(now.Unix()/60 + 1)
+	if len(samples) == 0 {
+		return
+	}
+	if err := store.SaveResourceSamples(samples); err != nil {
+		log.Printf("⚠️ resource history at exit: %v", err)
 	}
 }
 
