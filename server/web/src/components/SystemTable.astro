@@ -881,7 +881,22 @@ const apiBase = apiBaseProp ?? '';
     if (!columnsDropdown) return;
     columnsDropdown.classList.toggle('hidden', !open);
     columnsBtn?.setAttribute('aria-expanded', open ? 'true' : 'false');
+    placeViewMenu();
   }
+  // The menu opens leftwards from its button and moves right by as much as it
+  // must to stay in the window (as Beszel's dropdown shifts): where the
+  // toolbar wraps to a line of its own from 900 px (a long line under the
+  // title), the room left of the button is less than the menu's 640 px.
+  function placeViewMenu() {
+    if (!columnsDropdown) return;
+    columnsDropdown.style.right = '';
+    if (columnsDropdown.classList.contains('hidden') || !columnsContainer) return;
+    // from the layout box (the opening zoom scales the drawn one): the menu's
+    // right edge sits on its container's
+    const left = columnsContainer.getBoundingClientRect().right - columnsDropdown.offsetWidth;
+    if (left < 8) columnsDropdown.style.right = `${Math.round(left - 8)}px`;
+  }
+  window.addEventListener('resize', placeViewMenu);
 
   columnsBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1903,7 +1918,7 @@ const apiBase = apiBaseProp ?? '';
     'resNet': { en: 'Network', zh: '网络' },
     'resNetIn': { en: '↓ In', zh: '↓ 下载' },
     'resNetOut': { en: '↑ Out', zh: '↑ 上传' },
-    'resEmpty': { en: 'Nothing recorded yet: the server keeps a sample each minute from when Resource History was switched on.', zh: '还没有记录：服务端从开启「资源历史」起每分钟记录一次，稍后这里就会出现曲线。' },
+    'resEmpty': { en: 'Nothing recorded yet: the server keeps a sample of each server every minute; check back in a minute or two.', zh: '还没有记录：服务端每分钟记录一次，过一两分钟再看。' },
     'latHeadTitle': { en: '{name}: average latency and loss over the last hour', zh: '{name}：近 1 小时平均延迟与丢包' },
     'resUnavailable': { en: 'The resource history could not be loaded; trying again in a minute.', zh: '资源历史暂时读取不到，一分钟后再试。' },
     'tcpingTabLoss': { en: '· {pct} lost', zh: '· 丢包 {pct}' },
@@ -5116,7 +5131,9 @@ const apiBase = apiBaseProp ?? '';
   function resourceHistoryShown() { return document.documentElement.classList.contains('resource-history'); }
   const RESOURCE_COLORS = {
     light: { cpu: '#2563eb', mem: '#0d9488', disk: '#7c3aed', in: '#16a34a', out: '#2563eb' },
-    dark: { cpu: '#3b82f6', mem: '#14b8a6', disk: '#8b5cf6', in: '#22c55e', out: '#3b82f6' },
+    // (the dark band's lightness, 0.48-0.67: teal and green one step deeper
+    // than the 500s, which glare on the dark card; the TCPing chart's teal)
+    dark: { cpu: '#3b82f6', mem: '#0d9488', disk: '#8b5cf6', in: '#16a34a', out: '#3b82f6' },
   };
   // (the network's line is its colours and unit, see openResourcePane)
   const RESOURCE_KINDS = [['cpu', 'resCpu', 'resCpuDesc'], ['mem', 'resMem', 'resMemDesc'], ['disk', 'resDisk', 'resDiskDesc'], ['net', 'resNet', null]];
@@ -5421,6 +5438,7 @@ const apiBase = apiBaseProp ?? '';
     document.documentElement.classList.toggle('list-latency', view === 'latency');
     window.dispatchEvent(new CustomEvent('listviewchange', { detail: { view } }));
     clearInterval(latencyTimer);
+    latencyRowsInert(view === 'latency');
     if (view === 'latency') {
       if (!cachedTCPingConfig) await loadTCPingConfig();
       if (listView !== 'latency') return;
@@ -5438,6 +5456,35 @@ const apiBase = apiBaseProp ?? '';
       if (currentSort.field && currentSort.field.startsWith('lat:')) setSort(null);
     }
   }
+  // In 延迟 the rows are no buttons: an opened one closes (at once), and none
+  // takes the keyboard's focus or says it expands; back in 资源 they are
+  // buttons again.
+  function latencyRowsInert(inert) {
+    document.querySelectorAll('#systems-body > .system-row').forEach((systemRow) => {
+      const head = systemRow.querySelector(':scope > [data-system-id]');
+      if (!head) return;
+      if (!inert) {
+        if (head.getAttribute('role') === 'button') return;
+        head.setAttribute('role', 'button');
+        head.tabIndex = 0;
+        head.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      const details = systemRow.querySelector(':scope > .system-details');
+      if (details && !details.classList.contains('hidden')) {
+        if (details._closeTimer) { clearTimeout(details._closeTimer); details._closeTimer = null; }
+        details.classList.add('hidden');
+        [details, ...details.children].forEach((el) => { el.style.opacity = ''; el.style.transition = ''; });
+        details.style.maxHeight = '';
+        systemRow.classList.remove('is-closing');
+        cleanupTCPingChart(head.dataset.systemId);
+      }
+      if (head.getAttribute('role') !== 'button') return;
+      head.removeAttribute('role');
+      head.removeAttribute('aria-expanded');
+      head.tabIndex = -1;
+    });
+  }
   // After each render: the switch only where there are targets; the view's
   // columns follow a change of the targets (added, removed, renamed).
   function syncLatencyView() {
@@ -5450,6 +5497,7 @@ const apiBase = apiBaseProp ?? '';
       applyLatencyTemplate();
       ensureLatencyHeader();
     }
+    latencyRowsInert(true);
     fillLatencyCells();
   }
   document.addEventListener('click', (e) => {
@@ -5579,6 +5627,9 @@ const apiBase = apiBaseProp ?? '';
     
     // Handle both click and touch events for mobile compatibility
     const handleRowToggle = async (e) => {
+      // 延迟 is a table to compare by: its rows don't open (the details,
+      // their charts included, are in 资源)
+      if (listView === 'latency') return;
       // Don't expand if clicking on copy button or other interactive elements
       if (e.target.closest('.copy-btn') || e.target.closest('button')) {
         return;
@@ -5788,6 +5839,7 @@ const apiBase = apiBaseProp ?? '';
     let hoverPrefetchTimer = 0;
     let hoverPrefetchRow = null;
     const collapsedRowId = (target) => {
+      if (listView === 'latency') return null;
       if (!target || !target.closest || target.closest('button') || target.closest('.system-details')) return null;
       const rowElement = target.closest('[data-system-id]');
       const systemRow = rowElement && rowElement.closest('.system-row');
@@ -7780,6 +7832,10 @@ const apiBase = apiBaseProp ?? '';
      colour and name over its value; cards give each target a row of their
      grid (the colour where the icons are, the name, the value). */
   .cell-latency { display: none; }
+  /* 延迟's rows don't open: no pointer and no hover */
+  html #monitor-root.view-latency #systems-body .system-row > [data-system-id] { cursor: default; }
+  html #monitor-root.view-latency:not(.layout-grid) #systems-body .system-row > [data-system-id]:hover { background-color: transparent; }
+  html #monitor-root.view-latency.layout-grid #systems-body .system-row > [data-system-id]:hover { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
   html #monitor-root.view-latency.view-latency #systems-body .system-row > [data-system-id] > :is(.cell-cpu, .cell-memory, .cell-disk, .cell-net, .cell-uptime),
   html #monitor-root.view-latency.view-latency #system-table-header-row > :is([data-col="cpu"], [data-col="memory"], [data-col="disk"], [data-col="net"], [data-col="uptime"]) { display: none !important; }
   .lat-key { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--lat-key); }
