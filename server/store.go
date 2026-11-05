@@ -1569,8 +1569,15 @@ type NavbarConfig struct {
 	CardLayout   bool   `json:"card_layout"`   // Pulse: cards instead of the table at every width, unless a visitor picks a layout
 	PageSize     int    `json:"page_size"`     // Pulse: servers per page on the dashboard; 0 shows them all in one list
 	LossTimeline bool   `json:"loss_timeline"` // Pulse: a band under the TCPing chart marking the lost probes
-	HideTags     bool   `json:"hide_tags"`     // Hotaru-compatible: hide tag row on homepage
-	HideCards    bool   `json:"hide_cards"`    // Hotaru-compatible: hide homepage card grid
+	// Pulse: record each server's per-minute CPU, memory, disk and network for
+	// 24 h, shown on a 资源 tab of the opened server's chart card (history.go).
+	// Off by default: nothing is recorded while it is off.
+	ResourceHistory bool `json:"resource_history"`
+	// Pulse: the dashboard's 资源 | 延迟 switch, a table of each TCPing
+	// target's average latency and loss over the last hour. Off by default.
+	LatencyView bool `json:"latency_view"`
+	HideTags    bool `json:"hide_tags"`  // Hotaru-compatible: hide tag row on homepage
+	HideCards   bool `json:"hide_cards"` // Hotaru-compatible: hide homepage card grid
 }
 
 // GetNavbarConfig retrieves the navbar configuration

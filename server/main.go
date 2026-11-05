@@ -1702,6 +1702,21 @@ func main() {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
+	// 自定义设置 → 延迟视图 / 资源历史 (history.go): 404 while switched off.
+	mux.HandleFunc("/api/tcping/summary", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleGetLatencySummary(store, w, r)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/resource/history", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleGetResourceHistory(store, w, r)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 
 	// Auth endpoints
 	mux.HandleFunc("/api/auth/status", func(w http.ResponseWriter, r *http.Request) {
@@ -1805,6 +1820,11 @@ func main() {
 	go startClientPolling(rootCtx, store, broker, clientRegistry, ipCache)
 	go startTCPingPolling(rootCtx, clientRegistry, store)
 	go startTCPingCleanup(rootCtx, store)
+	// Resource history (自定义设置 → 资源历史): recorded only while switched on.
+	if cfg, err := store.GetNavbarConfig(); err == nil && cfg != nil {
+		setResourceHistoryEnabled(cfg.ResourceHistory)
+	}
+	go startResourceHistory(rootCtx, store)
 	go startIPCacheCleanup(rootCtx, ipCache)
 	go startTCPingCacheCleanup(rootCtx)
 
@@ -2710,6 +2730,10 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	if isFromClient {
+		// an older agent's report: this minute's resource sums, as a push's
+		resourceRec.add(metric, time.Now().UTC())
+	}
 
 	// Only broadcast immediately if this is from admin page (manual add/edit).
 	// Client data updates are already covered by the 3 s polling-loop
@@ -2772,6 +2796,12 @@ func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistr
 	// so remove it in the background: scanning a day of history for a
 	// hundred systems takes seconds and used to keep the admin waiting (and
 	// the write lock busy) for the whole time.
+	// Its resource history goes too (a small nested bucket), and any minute
+	// not yet written.
+	resourceRec.forget(id)
+	if err := store.DeleteResourceHistory(id); err != nil {
+		log.Printf("⚠️  resource history cleanup for deleted system %s failed: %v", id, err)
+	}
 	go func(id string) {
 		start := time.Now()
 		if err := store.DeleteTCPingResultsByClient(id); err != nil {
@@ -3371,6 +3401,8 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	if len(batchedResults) > 0 {
 		invalidateTCPingCache(clientID)
 	}
+	// This minute's resource sums (no-op while resource history is off).
+	resourceRec.add(metric, nowUTC)
 
 	// NOTE: Do NOT broadcast immediately here.
 	// The polling loop broadcasts every 3 s for all clients (including push-mode ones).
@@ -4006,6 +4038,8 @@ func pollClient(store *Store, client *ClientInfo, ipCache *IPCountryCache) bool 
 	if err := store.UpsertFromAgent(metric); err != nil {
 		return false
 	}
+	// This minute's resource sums (no-op while resource history is off).
+	resourceRec.add(metric, time.Now().UTC())
 
 	// Keep the registry's cached secret in sync with the DB value so pollClient
 	// never uses a stale secret.  UpdateSecret holds the write lock, avoiding the
@@ -4924,8 +4958,11 @@ func handleGetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 			CardLayout:   config.CardLayout,   // Public: Pulse's default layout (cards or the table)
 			PageSize:     config.PageSize,     // Public: Pulse's servers per page (0: one list)
 			LossTimeline: config.LossTimeline, // Public: Pulse's loss band under the TCPing chart
-			HideTags:     config.HideTags,     // Public: Hotaru-compatible display flag
-			HideCards:    config.HideCards,    // Public: Hotaru-compatible display flag
+			// Public: Pulse's 资源 tab and 资源 | 延迟 switch (the page shows them only when on)
+			ResourceHistory: config.ResourceHistory,
+			LatencyView:     config.LatencyView,
+			HideTags:        config.HideTags,  // Public: Hotaru-compatible display flag
+			HideCards:       config.HideCards, // Public: Hotaru-compatible display flag
 			// SharedSecret is intentionally omitted for security
 		}
 		writeJSON(w, http.StatusOK, publicConfig)
@@ -4982,6 +5019,8 @@ func handleSetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 		http.Error(w, fmt.Sprintf("failed to save navbar config: %v", err), http.StatusInternalServerError)
 		return
 	}
+	// Recording follows the switch at once (history.go).
+	setResourceHistoryEnabled(config.ResourceHistory)
 
 	// If SharedSecret changed, update all existing systems to use the new shared secret
 	if secretChanged {
