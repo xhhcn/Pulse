@@ -33,7 +33,7 @@ const apiBase = apiBaseProp ?? '';
          columns past the rows' borders, backgrounds and detail panels on
          screens narrower than the table. */
       #monitor-root .table-scroll-content {
-        min-width: max(1000px, calc(min(var(--first-col-width), 160px) + 781px));
+        min-width: max(1000px, calc(min(var(--first-col-width), 160px) + 795px));
       }
     </style>
     <div class="min-w-[1000px] table-scroll-content">
@@ -1044,8 +1044,8 @@ const apiBase = apiBaseProp ?? '';
   // 6 px gap each and the 24 px left padding; 1000 px at least from 1280).
   const NAME_TRACK = 'minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px))';
   const COLUMN_TIERS = [
-    { min: 1280, floor: 1000, cols: [['location', 90, '1fr'], ['cpu', 130, '1.8fr'], ['memory', 130, '1.8fr'], ['disk', 130, '1.8fr'], ['net', 70, '0.9fr'], ['uptime', 85, '1fr'], ['os', 80, '1fr']] },
-    { min: 1024, cols: [['location', 76, '0.9fr'], ['cpu', 116, '1.8fr'], ['memory', 116, '1.8fr'], ['disk', 116, '1.8fr'], ['net', 70, '0.9fr'], ['uptime', 68, '0.9fr'], ['os', 76, '1fr']] },
+    { min: 1280, floor: 1000, cols: [['location', 104, '1fr'], ['cpu', 130, '1.8fr'], ['memory', 130, '1.8fr'], ['disk', 130, '1.8fr'], ['net', 70, '0.9fr'], ['uptime', 85, '1fr'], ['os', 80, '1fr']] },
+    { min: 1024, cols: [['location', 88, '0.9fr'], ['cpu', 110, '1.8fr'], ['memory', 110, '1.8fr'], ['disk', 110, '1.8fr'], ['net', 70, '0.9fr'], ['uptime', 68, '0.9fr'], ['os', 76, '1fr']] },
     { min: 900, cols: [['cpu', 116, '1.8fr'], ['memory', 116, '1.8fr'], ['disk', 116, '1.8fr'], ['net', 70, '0.9fr'], ['uptime', 85, '1fr']] },
     { min: 768, cols: [['cpu', 108, '1.8fr'], ['memory', 108, '1.8fr'], ['disk', 108, '1.8fr'], ['net', 70, '0.9fr']] },
   ];
@@ -1159,7 +1159,9 @@ const apiBase = apiBaseProp ?? '';
     // 12 px, and 14 px from 1280 px (the Beszel tier in the styles below).
     const isSmallScreen = window.innerWidth < 640;
     const isWide = window.matchMedia('(min-width: 1280px)').matches;
-    const nameFontSize = isSmallScreen ? '10px' : isWide ? '14px' : '12px';
+    // 13 px in the 1024-1279 table (its tier in the styles below)
+    const isMid = !isWide && window.matchMedia('(min-width: 1024px)').matches;
+    const nameFontSize = isSmallScreen ? '10px' : isWide ? '14px' : isMid ? '13px' : '12px';
     const nameKey = (item) => `${nameFontSize} 500 ${item.name || 'unknown'}`;
 
     // An offline row also carries the "离线 / Offline" chip after its name:
@@ -1205,8 +1207,8 @@ const apiBase = apiBaseProp ?? '';
       for (const [key, span] of spans) textWidths.set(key, span.offsetWidth);
       box.remove();
     }
-    const chipWidth = textWidths.get(chipKey) + (isWide ? 20 : 16);
-    const awaitingWidth = textWidths.get(awaitingKey) + (isWide ? 20 : 16);
+    const chipWidth = textWidths.get(chipKey) + (isWide ? 20 : isMid ? 18 : 16);
+    const awaitingWidth = textWidths.get(awaitingKey) + (isWide ? 20 : isMid ? 18 : 16);
 
     // Measure each server name
     items.forEach(item => {
@@ -1219,7 +1221,7 @@ const apiBase = apiBaseProp ?? '';
       // - Copy button: ~14px (w-2.5 sm:w-3)
       // - Extra buffer for font rendering variations: ~16px
       // From 1280 px the dot is 8 px and both gaps 8 px: 58 px.
-      const uiElementsWidth = isSmallScreen ? 44 : isWide ? 58 : 50; // Mobile: 44px, Desktop: 50px
+      const uiElementsWidth = isSmallScreen ? 44 : isWide ? 58 : isMid ? 52 : 50; // Mobile: 44px, Desktop: 50px (1024-1279: 6 px gaps)
       const estimatedCellWidth = textWidth + uiElementsWidth + (item.alert ? (awaitingClient(item) ? awaitingWidth : chipWidth) : 0);
       maxWidth = Math.max(maxWidth, estimatedCellWidth);
     });
@@ -1273,6 +1275,7 @@ const apiBase = apiBaseProp ?? '';
   }
 
   window.matchMedia('(min-width: 1280px)').addEventListener('change', remeasureNameColumn);
+  window.matchMedia('(min-width: 1024px)').addEventListener('change', remeasureNameColumn);
   if (document.fonts) document.fonts.addEventListener('loadingdone', remeasureNameColumn);
 
   // Get color class based on value threshold
@@ -1465,7 +1468,7 @@ const apiBase = apiBaseProp ?? '';
     if (!cell) return '';
     const icon = cell.querySelector('svg');
     const text = cell.querySelector('span[data-translate]');
-    return `<span class="cell-label hidden items-center gap-0.5 shrink-0 text-[#595959] dark:text-[#ababab]">${icon ? icon.outerHTML : ''}${text ? text.outerHTML : ''}</span>`;
+    return `<span class="cell-label hidden items-center gap-1 shrink-0 text-[#595959] dark:text-[#ababab]">${icon ? icon.outerHTML : ''}${text ? text.outerHTML : ''}</span>`;
   };
 
   // The tag row at the top of a row's details: built with the row, and again
@@ -1610,6 +1613,11 @@ const apiBase = apiBaseProp ?? '';
     const logo = item.os_icon ? `<span class="os-icon block leading-none w-[18px] h-[18px]" data-icon="${escapeHtmlAttr(item.os_icon)}" data-fallback="${escapeHtmlAttr(item.os || '-')}"></span>` : '';
     return `${logo}<span class="os-text${item.os_icon ? '' : ' cell-text-only'}${item.os ? '' : ' cell-empty'}">${escapeHtml(item.os || '-')}</span>`;
   };
+  // A CPU name's core count stays with its words ("1 Virtual Core" was
+  // broken after the 1 on phones).
+  const cpuModelText = (s) => String(s || '-').replace(/(\d+) (Virtual|Physical) (Cores?)/g, '$1\u00a0$2\u00a0$3');
+  // A swap of 0 B / 0 B: the server has none.
+  const noSwap = (s) => /^\s*0(\.0+)?\s*B\s*\/\s*0(\.0+)?\s*B\s*$/.test(String(s || ''));
   const osDetailText = (item) => [item.os, item.virtualization_type].map((v) => String(v || '').trim()).filter(Boolean).join(' · ') || '-';
 
   const renderRow = (item, showTCPing = true) => {
@@ -1621,7 +1629,7 @@ const apiBase = apiBaseProp ?? '';
     const safeNameAttr = escapeHtmlAttr(item.name || 'unknown');
     return `
     <div class="system-row${isOffline ? ' is-offline' : ''}" data-system-id="${safeId}">
-      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer" data-system-id="${safeId}" role="button" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(90px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
+      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer" data-system-id="${safeId}" role="button" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(104px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${statusDotColor(item)} shrink-0"></span>
           <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap" title="${safeNameAttr}">${safeName}</span>${isOffline ? statusChip(item) : ''}
@@ -1680,7 +1688,7 @@ const apiBase = apiBaseProp ?? '';
             <div class="detail-item">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 20v2m0-20v2m5 16v2m0-20v2M2 12h2m-2 5h2M2 7h2m16 5h2m-2 5h2M20 7h2M7 20v2M7 2v2"/><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="8" height="8" x="8" y="8" rx="1"/></g></svg>
               <div class="detail-label shrink-0" data-translate-detail="cpuInformation">CPU:</div>
-              <div class="detail-value" data-detail="cpu_model">${escapeHtml(item.cpu_model || '-')}</div>
+              <div class="detail-value" data-detail="cpu_model">${escapeHtml(cpuModelText(item.cpu_model))}</div>
             </div>
             <!-- Memory Info -->
             <div class="detail-item">
@@ -1688,8 +1696,8 @@ const apiBase = apiBaseProp ?? '';
               <div class="detail-label shrink-0" data-translate-detail="memoryInfo">Memory:</div>
               <div class="detail-value" data-detail="memory_info">${escapeHtml(item.memory_info || '-')}</div>
             </div>
-            <!-- Swap Info -->
-            <div class="detail-item">
+            <!-- Swap Info (none when the server has no swap, as Beszel) -->
+            <div class="detail-item detail-swap"${noSwap(item.swap_info) ? ' hidden' : ''}>
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3L4 7l4 4M4 7h16m-4 14l4-4l-4-4m4 4H4"/></svg>
               <div class="detail-label shrink-0" data-translate-detail="swapPartition">Swap:</div>
               <div class="detail-value" data-detail="swap_info">${escapeHtml(item.swap_info || '-')}</div>
@@ -2531,7 +2539,7 @@ const apiBase = apiBaseProp ?? '';
         
         // Update CPU model if changed
         if (cpuModelEl) {
-          const newCpuModel = String(item.cpu_model || '-');
+          const newCpuModel = cpuModelText(item.cpu_model);
           const oldCpuModel = cpuModelEl.textContent;
           if (oldCpuModel !== newCpuModel) {
             // Update text
@@ -2554,6 +2562,8 @@ const apiBase = apiBaseProp ?? '';
           if (swapInfoEl.textContent !== newSwapInfo) {
             swapInfoEl.textContent = newSwapInfo;
           }
+          const swapItem = swapInfoEl.closest('.detail-item');
+          if (swapItem) swapItem.hidden = noSwap(item.swap_info);
         }
         
         // Update disk info if changed
@@ -4550,7 +4560,11 @@ const apiBase = apiBaseProp ?? '';
               display: false
             },
             bounds: 'ticks', // Use 'ticks' instead of 'data' to ensure proper tooltip positioning
-            afterBuildTicks: roundTimeTicks
+            afterBuildTicks: roundTimeTicks,
+            // Chart.js keeps the label padding free under the time labels as
+            // well as above them: with the loss band's 28 px that was 24 px of
+            // blank card under the times, taken from the plot.
+            afterFit: (scale) => { if (lossLaneOn) scale.height = Math.max(0, scale.height - (LOSS_LANE_LABEL_PADDING - 3)); }
           },
           // Fitted to the lines with room above them, never below 0 ms
           // (latencyTicks, from the visible lines' own range).
@@ -6709,12 +6723,12 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root:not(.layout-grid) .os-icon { width: 16px; height: 16px; }
   }
 
-  /* Under 410 px (Beszel's 16 px page margin and 12 px card padding)
-     "Memory 36.5%" no longer fits its third of a row and the value dropped
-     below the label, out of line with CPU and disk: there the three meters
-     keep their icons and give up the words; the Chinese ones fit down to
-     360 px. */
-  @media (max-width: 409.98px) {
+  /* Under 420 px (Beszel's 16 px page margin and 12 px card padding, and the
+     4 px between an icon and its word) "Memory 36.5%" no longer fits its
+     third of a row and the value dropped below the label, out of line with
+     CPU and disk: there the three meters keep their icons and give up the
+     words; the Chinese ones fit down to 360 px. */
+  @media (max-width: 419.98px) {
     html:lang(en) #monitor-root:not(.layout-grid) .system-row :is(.cell-cpu, .cell-memory, .cell-disk) .cell-label > span { display: none; }
   }
   @media (max-width: 359.98px) {
@@ -6777,10 +6791,21 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .system-row .progress-track { min-width: 56px; }
   }
   @media (min-width: 1024px) and (max-width: 1279.98px) {
-    #monitor-root .table-scroll-content { min-width: calc(min(var(--first-col-width), 160px) + 704px) !important; }
+    /* 13 px regular figures and 50 px rows (15 + the 20 px line + 14, and
+       the 1 px divider), between the 12 px of narrower tables and Beszel's
+       14 px from 1280 px; the header untracked. calculateServerNameColumnWidth
+       measures the names at 13 px here. */
+    #monitor-root:not(.layout-grid) .system-row > [data-system-id] { padding-top: 15px; padding-bottom: 14px; }
+    #monitor-root:not(.layout-grid) .system-row :is(.cell-uptime, .cell-net, .cell-location, .cell-os, .cell-cpu span.font-medium, .cell-memory span.font-medium, .cell-disk span.font-medium) { font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; }
+    #monitor-root:not(.layout-grid) .system-row :is(.row-name, .cell-uptime, .cell-net, .cell-location > span:not(.flag-icon), .cell-os > span:not(.os-icon)),
+    #monitor-root:not(.layout-grid) .system-row :is(.cell-cpu, .cell-memory, .cell-disk) span.font-medium { font-size: 13px; line-height: 20px; }
+    #monitor-root:not(.layout-grid) .system-row .cell-name { gap: 6px; }
+    #monitor-root:not(.layout-grid) .system-row :is(.cell-cpu, .cell-memory, .cell-disk) span.font-medium { width: 44px; }
+    #monitor-root:not(.layout-grid) #system-table-header-row { font-size: 13px; letter-spacing: normal; }
+    #monitor-root .table-scroll-content { min-width: calc(min(var(--first-col-width), 160px) + 698px) !important; }
     #monitor-root .system-row > [data-system-id],
     #monitor-root #system-table-header-row {
-      grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(76px,0.9fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(116px,1.8fr) minmax(70px,0.9fr) minmax(68px,0.9fr) minmax(76px,1fr) !important;
+      grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(88px,0.9fr) minmax(110px,1.8fr) minmax(110px,1.8fr) minmax(110px,1.8fr) minmax(70px,0.9fr) minmax(68px,0.9fr) minmax(76px,1fr) !important;
     }
   }
   @media (min-width: 768px) and (max-width: 1023.98px) {
@@ -7005,7 +7030,7 @@ const apiBase = apiBaseProp ?? '';
   #monitor-root.layout-grid #systems-body .system-row .cell-label > span::after { content: ':'; }
   #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) span.font-medium { width: auto; min-width: 32px; font-size: 14px; line-height: 20px; font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.025em; }
   #monitor-root.layout-grid #systems-body .system-row :is(.cell-cpu, .cell-memory, .cell-disk) .progress-track { min-width: 0; height: 14px; }
-  #monitor-root.layout-grid #systems-body .system-row :is(.cell-net, .cell-uptime) { font-size: 14px; font-weight: 400; font-variant-numeric: tabular-nums; }
+  #monitor-root.layout-grid #systems-body .system-row :is(.cell-net, .cell-uptime) { font-size: 14px; line-height: 20px; font-weight: 400; font-variant-numeric: tabular-nums; }
   #monitor-root.layout-grid #systems-body .system-row :is(.cell-net, .cell-uptime) .cell-value { grid-column: 3 / -1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #monitor-root.layout-grid #systems-body .system-row .cell-cpu * { order: 1; }
   #monitor-root.layout-grid #systems-body .system-row .cell-memory * { order: 2; }
@@ -7042,7 +7067,13 @@ const apiBase = apiBaseProp ?? '';
   #monitor-root .detail-list { display: grid; grid-template-columns: 14px max-content minmax(0, 1fr); align-items: start; column-gap: 8px; row-gap: 8px; font-size: 12px; line-height: 18px; }
   #monitor-root .detail-list > [data-tag-strip] { grid-column: 1 / -1; }
   #monitor-root .detail-item { display: contents; }
-  #monitor-root .detail-last-seen[hidden] { display: none; }
+  #monitor-root .detail-item[hidden] { display: none !important; }
+  /* An opened row in the table wears its details' ground and loses the rule
+     between them: one piece, as an opened card already is. */
+  /* (the details' #f8f8f8 / #171717 as the build tints them) */
+  html:not(.glass-enabled) #monitor-root:not(.layout-grid) #systems-body .system-row > [aria-expanded="true"] { background-color: #f9f8f7; }
+  html.dark:not(.glass-enabled) #monitor-root:not(.layout-grid) #systems-body .system-row > [aria-expanded="true"] { background-color: #161718; }
+  #monitor-root:not(.layout-grid) #systems-body .system-row > [aria-expanded="true"] + .system-details { border-top-color: transparent; }
   #systems-body > .system-row { scroll-margin-top: 16px; }
   html.sticky-table-header #systems-body > .system-row { scroll-margin-top: 72px; }
   #monitor-root .detail-icon { width: 14px; height: 14px; margin-top: 2px; flex: none; color: #595959; }
@@ -7122,13 +7153,13 @@ const apiBase = apiBaseProp ?? '';
     gap: 6px;
     min-width: 150px;
     padding: 8px 10px;
-    border-radius: 8px;
-    border: 1px solid rgba(218, 218, 218, 0.7);
+    border-radius: 12.8px;
+    border: 1px solid rgba(218, 218, 218, 0.5);
     background: #fafafa;
     color: #1d1d20;
     font-size: 12px;
     line-height: 1;
-    box-shadow: 0 16px 24px -6px rgba(0, 0, 0, 0.12), 0 6px 10px -6px rgba(0, 0, 0, 0.1);
+    box-shadow: none;
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.15s ease-out, transform 0.15s ease-out;
@@ -7139,10 +7170,10 @@ const apiBase = apiBaseProp ?? '';
     .tcping-tooltip { transition: none; }
   }
   html.dark .tcping-tooltip {
-    border-color: rgba(64, 64, 64, 0.7);
+    border-color: rgba(44, 44, 44, 0.5);
     background: #161616;
     color: #f5f5f5;
-    box-shadow: 0 16px 28px -6px rgba(0, 0, 0, 0.7);
+    box-shadow: none;
   }
   .tcping-tooltip-title { font-weight: 500; padding-bottom: 2px; }
   .tcping-tooltip-row { display: flex; align-items: center; gap: 8px; }

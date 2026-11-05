@@ -469,6 +469,27 @@ const { isAdmin = false, bare = false } = Astro.props;
         }
       }
       
+      // The sign-in page's mark is the navbar's, as Beszel's sign-in shows
+      // its own logo: the site's logo when one is set (a copy of the element
+      // made and checked above), else the Pulse mark it ships with.
+      const loginMark = document.getElementById('login-mark');
+      if (loginMark && logoContainer) {
+        if (!loginMark._pulseMark) loginMark._pulseMark = loginMark.innerHTML;
+        const custom = logoContainer.querySelector('img.custom-logo-img, svg:not(.default-logo)');
+        if (custom) {
+          const copy = custom.cloneNode(true);
+          copy.setAttribute('class', 'w-8 h-8');
+          if (copy.tagName === 'IMG') {
+            copy.alt = '';
+            copy.style.cssText = 'object-fit: contain; display: block;';
+            copy.addEventListener('error', () => { loginMark.innerHTML = loginMark._pulseMark; });
+          }
+          loginMark.replaceChildren(copy);
+        } else {
+          loginMark.innerHTML = loginMark._pulseMark;
+        }
+      }
+
       // Update monitor icon stroke color based on current theme
       const currentTheme = getCurrentTheme();
       const monitorIcon = logoContainer?.querySelector('.monitor-icon');
