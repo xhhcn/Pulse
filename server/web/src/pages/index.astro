@@ -231,6 +231,9 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
               document.documentElement.dataset.pageSize = String(Number(config.page_size) || 0);
               // The loss band under the TCPing chart (自定义设置 → 丢包时间线), off by default
               document.documentElement.classList.toggle('loss-timeline', config.loss_timeline === true);
+              // 自定义设置 → 资源历史 / 延迟视图 (both off by default)
+              document.documentElement.classList.toggle('resource-history', config.resource_history === true);
+              document.documentElement.classList.toggle('latency-view', config.latency_view === true);
               // Dispatch event when config is ready
               window.dispatchEvent(new CustomEvent('navbarconfigready', { detail: config }));
             }
@@ -266,6 +269,9 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
             document.documentElement.dataset.pageSize = String(Number(config.page_size) || 0);
             // The loss band under the TCPing chart (自定义设置 → 丢包时间线), off by default
             document.documentElement.classList.toggle('loss-timeline', config.loss_timeline === true);
+            // 自定义设置 → 资源历史 / 延迟视图 (both off by default)
+            document.documentElement.classList.toggle('resource-history', config.resource_history === true);
+            document.documentElement.classList.toggle('latency-view', config.latency_view === true);
             
             // Inject CSS if exists
             if (config.custom_css && config.custom_css.trim()) {

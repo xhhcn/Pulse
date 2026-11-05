@@ -21,6 +21,12 @@ import Icon from './Icon.astro';
        beside the title and its summary they no longer fit, and a short box
        under it left most of the row empty. -->
   <div class="flex items-center gap-2 w-full min-[900px]:w-auto">
+    <!-- 自定义设置 → 延迟视图: the servers by resources or by each TCPing
+         target's last-hour latency (SystemTable) -->
+    <div id="list-view-switch" class="list-view-switch" role="tablist">
+      <button type="button" role="tab" class="list-view-tab" data-list-view="resources" aria-selected="true" data-translate="viewResources">Resources</button>
+      <button type="button" role="tab" class="list-view-tab" data-list-view="latency" aria-selected="false" tabindex="-1" data-translate="viewLatency">Latency</button>
+    </div>
     <div class="relative flex-1 min-[900px]:flex-none">
       <input
         id="system-filter-input"
@@ -99,6 +105,20 @@ import Icon from './Icon.astro';
     background: #f5f3f1; color: #595959; font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   html.dark #system-filter-kbd kbd { border-color: #333333; background: #262626; color: #ababab; }
+  /* 资源 | 延迟 (自定义设置 → 延迟视图): Beszel's tabs at the toolbar's height */
+  .list-view-switch { display: none; }
+  html.latency-view .list-view-switch { display: inline-flex; flex: none; align-items: center; height: 40px; padding: 4px; gap: 2px; border-radius: 10.8px; background: #f0f0f0; }
+  html.dark.latency-view .list-view-switch { background: #262626; }
+  .list-view-tab { height: 32px; padding: 0 12px; border-radius: 8.8px; font-size: 14px; line-height: 32px; color: #595959; background: transparent; cursor: pointer; white-space: nowrap; }
+  .list-view-tab[aria-selected="true"] { background: #ffffff; color: #1d1d20; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); cursor: default; }
+  html.dark .list-view-tab { color: #ababab; }
+  html.dark .list-view-tab[aria-selected="true"] { background: #171717; color: #f5f5f5; }
+  .list-view-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px #fafafa, 0 0 0 4px #837e79; }
+  html.dark .list-view-tab:focus-visible { box-shadow: 0 0 0 2px #171717, 0 0 0 4px #cacbce; }
+  html.latency-none .list-view-switch { display: none !important; }
+  @media (max-width: 767.98px) {
+    .list-view-tab { padding: 0 10px; font-size: 13px; }
+  }
 
   /* The menu: Beszel's popover (card ground, hairline border, soft shadow),
      sort and status side by side from 640 px. */
@@ -212,8 +232,11 @@ import Icon from './Icon.astro';
   const translations = {
     'allSystems': { en: 'All Servers', zh: '所有服务器' },
     'updatedInRealTime': { en: 'Updated in real time. Click on a server to view information.', zh: '实时更新，点击服务器查看详细信息。' },
+    'latencyDesc': { en: 'Average latency and loss over the last hour, updated each minute. Click on a server to view information.', zh: '近 1 小时的平均延迟与丢包，每分钟更新，点击服务器查看详细信息。' },
     'filter': { en: 'Filter...', zh: '筛选...' },
     'viewOptions': { en: 'View options', zh: '视图选项' },
+    'viewResources': { en: 'Resources', zh: '资源' },
+    'viewLatency': { en: 'Latency', zh: '延迟' },
     'clear': { en: 'Clear', zh: '清除' },
     'sortBy': { en: 'Sort by', zh: '排序方式' },
     'defaultOrder': { en: 'Default order', zh: '默认顺序' },
@@ -244,7 +267,7 @@ import Icon from './Icon.astro';
     
     // Update description
     const desc = document.getElementById('all-systems-desc');
-    if (desc) desc.textContent = translations.updatedInRealTime[lang];
+    if (desc) desc.textContent = translations[desc.dataset.view === 'latency' ? 'latencyDesc' : 'updatedInRealTime'][lang];
     
     // Update filter placeholder
     const filterInput = document.getElementById('system-filter-input');
@@ -279,6 +302,13 @@ import Icon from './Icon.astro';
   
   // Listen for language changes
   window.addEventListener('languagechange', updateTranslations);
+  // 资源 | 延迟: the line under the title says what the numbers are
+  window.addEventListener('listviewchange', (e) => {
+    const desc = document.getElementById('all-systems-desc');
+    if (!desc) return;
+    desc.dataset.view = e.detail && e.detail.view === 'latency' ? 'latency' : 'resources';
+    updateTranslations();
+  });
   window.addEventListener('translate', updateTranslations);
   
   // Initial translation

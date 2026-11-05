@@ -611,6 +611,11 @@ const apiBase = apiBaseProp ?? '';
   try { ['pulse-sort', 'pulse-status-filter', 'pulse-layout', 'pulse-hidden-cols'].forEach((key) => localStorage.removeItem(key)); } catch (_) {}
   let currentSort = { field: null, direction: 'asc' };
   let statusFilter = 'all';
+  // 资源 | 延迟 (自定义设置 → 延迟视图): the list's view, the targets' last
+  // hour (GET /api/tcping/summary) and its minute timer; see setListView.
+  let listView = 'resources';
+  let latencySummary = null;
+  let latencyTimer = 0;
   // Layout (the table — on phones its compact rows — or Beszel's cards, at
   // every width as in Beszel) and the fields shown; the name stays.
   const HIDEABLE_COLS = ['uptime', 'location', 'cpu', 'memory', 'disk', 'net', 'os'];
@@ -742,8 +747,16 @@ const apiBase = apiBaseProp ?? '';
           bIsEmpty = !Number.isFinite(bVal);
           break;
         }
-        default:
-          return 0;
+        default: {
+          // 延迟 view: a TCPing target's last-hour average ("lat:<address>")
+          if (!currentSort.field.startsWith('lat:')) return 0;
+          const addr = currentSort.field.slice(4);
+          aVal = latencyAvg(a.id, addr);
+          bVal = latencyAvg(b.id, addr);
+          aIsEmpty = !Number.isFinite(aVal);
+          bIsEmpty = !Number.isFinite(bVal);
+          break;
+        }
       }
 
       // Handle empty values: empty values go to the end (or beginning for desc)
@@ -1073,6 +1086,7 @@ const apiBase = apiBaseProp ?? '';
     // Cards and the table have their own page sizes (cards end on full rows).
     if (wasGrid !== root.classList.contains('layout-grid')) applyPagination();
     root.classList.toggle('cols-custom', hiddenCols.length > 0);
+    applyLatencyTemplate();
     if (!hiddenCols.length) return;
     const tier = COLUMN_TIERS.find((t) => window.innerWidth >= t.min);
     if (tier) {
@@ -1755,8 +1769,13 @@ const apiBase = apiBaseProp ?? '';
         <div class="rounded-[12.8px] border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#151515] dark:bg-[#1a1a1a] bg-white p-3 sm:p-4">
           <div class="tcping-head flex items-start justify-between gap-3 sm:gap-4 mb-3">
             <div class="min-w-0">
-              <h2 class="text-sm sm:text-base font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate-detail="tcpingLatency">TCPing Latency</h2>
-              <div class="mt-1 text-xs sm:text-[13px] text-[#595959] dark:text-[#ababab]"><span data-translate-detail="tcpingChartDesc">TCP handshake time of every probe</span><span data-tcping-last="${safeId}" hidden></span></div>
+              <!-- 自定义设置 → 资源历史: 延迟 | 资源 in the title's place -->
+              <div class="chart-tabs" role="tablist" data-chart-tabs>
+                <button type="button" role="tab" class="chart-tab" data-chart-tab="latency" aria-selected="true" data-translate-detail="tabLatency">Latency</button>
+                <button type="button" role="tab" class="chart-tab" data-chart-tab="resource" aria-selected="false" data-translate-detail="tabResources">Resources</button>
+              </div>
+              <h2 class="chart-title text-sm sm:text-base font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate-detail="tcpingLatency">TCPing Latency</h2>
+              <div class="mt-1 text-xs sm:text-[13px] text-[#595959] dark:text-[#ababab]"><span data-pane-desc="latency"><span data-translate-detail="tcpingChartDesc">TCP handshake time of every probe</span><span data-tcping-last="${safeId}" hidden></span></span><span data-pane-desc="resource" data-translate-detail="resourceDesc" hidden>Minute averages</span></div>
             </div>
             <!-- The time range picker, added once the chart is drawn. No
                  statistics here (Beszel's chart cards carry none): the legend
@@ -1764,6 +1783,7 @@ const apiBase = apiBaseProp ?? '';
                  legend, where the band is off). -->
             <div class="tcping-tools" data-tcping-tools></div>
         </div>
+          <div data-chart-pane="latency">
           <!-- Chart canvas -->
           <div class="relative" style="height: 200px; width: 100%; min-height: 200px;">
             <!-- Loading state -->
@@ -1802,7 +1822,22 @@ const apiBase = apiBaseProp ?? '';
           <!-- The legend under the chart, as Beszel's: a colour square and the
                target per entry. Each entry also picks its target (again: all). -->
           <div class="flex items-center justify-center gap-x-1 gap-y-1 flex-wrap pt-2" data-tcping-tabs="${safeId}"></div>
-      </div>` : ''}
+          </div>
+          <!-- 资源: the server's minute averages (built when the tab opens) -->
+          <div data-chart-pane="resource" class="resource-pane" hidden></div>
+      </div>` : (resourceHistoryShown() ? `<!-- 资源 only (no TCPing card for this server) -->
+      <div class="px-3 sm:px-4 md:px-6 pb-2 sm:pb-3" data-resource-only="${safeId}" style="width: 100%;">
+        <div class="rounded-[12.8px] border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#151515] dark:bg-[#1a1a1a] bg-white p-3 sm:p-4">
+          <div class="tcping-head flex items-start justify-between gap-3 sm:gap-4 mb-3">
+            <div class="min-w-0">
+              <h2 class="text-sm sm:text-base font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate-detail="tabResources">Resources</h2>
+              <div class="mt-1 text-xs sm:text-[13px] text-[#595959] dark:text-[#ababab]"><span data-translate-detail="resourceDesc">Minute averages</span></div>
+            </div>
+            <div class="tcping-tools" data-tcping-tools></div>
+          </div>
+          <div data-chart-pane="resource" class="resource-pane"></div>
+        </div>
+      </div>` : '')}
     </div>
   `;
   };
@@ -1856,6 +1891,22 @@ const apiBase = apiBaseProp ?? '';
     'totalTrafficHint': { en: 'Since the server last booted', zh: '开机以来的总流量' },
     'tcpingLatency': { en: 'TCPing Latency', zh: 'TCPing 延迟' },
     'tcpingRange': { en: 'Time range', zh: '时间范围' },
+    'tabLatency': { en: 'Latency', zh: '延迟' },
+    'tabResources': { en: 'Resources', zh: '资源' },
+    'resourceDesc': { en: 'Minute averages kept by the server', zh: '服务端记录的每分钟平均值' },
+    'resCpu': { en: 'CPU', zh: 'CPU' },
+    'resCpuDesc': { en: 'Average usage', zh: '平均使用率' },
+    'resMem': { en: 'Memory', zh: '内存' },
+    'resMemDesc': { en: 'Share in use', zh: '使用率' },
+    'resDisk': { en: 'Disk', zh: '磁盘' },
+    'resDiskDesc': { en: 'Share in use', zh: '使用率' },
+    'resNet': { en: 'Network', zh: '网络' },
+    'resNetDesc': { en: '↓ in · ↑ out', zh: '↓ 下载 · ↑ 上传' },
+    'resNetIn': { en: '↓ In', zh: '↓ 下载' },
+    'resNetOut': { en: '↑ Out', zh: '↑ 上传' },
+    'resEmpty': { en: 'Nothing recorded yet: the server keeps a sample each minute from when Resource History was switched on.', zh: '还没有记录：服务端从开启「资源历史」起每分钟记录一次，稍后这里就会出现曲线。' },
+    'latHeadTitle': { en: '{name}: average latency and loss over the last hour', zh: '{name}：近 1 小时平均延迟与丢包' },
+    'resUnavailable': { en: 'The resource history could not be loaded; trying again in a minute.', zh: '资源历史暂时读取不到，一分钟后再试。' },
     'tcpingTabLoss': { en: '· {pct} lost', zh: '· 丢包 {pct}' },
     'loadFailed': { en: "Couldn't load the server list", zh: '无法加载服务器列表' },
     'loadRetrying': { en: 'Retrying automatically…', zh: '正在自动重试…' },
@@ -1932,6 +1983,10 @@ const apiBase = apiBaseProp ?? '';
   function updateTranslations() {
     const lang = getCurrentLanguage();
     renderSystemsSummary();
+    // The 延迟 view's header titles
+    if (listView === 'latency') ensureLatencyHeader();
+    // The 资源 charts' series names
+    resourcePanes.forEach((_, id) => drawResourceCharts(id));
     // The time range picker's label (an open menu closes), the legend's words
     closeTCPingRangeMenu();
     syncTCPingRangeButtons();
@@ -2868,6 +2923,7 @@ const apiBase = apiBaseProp ?? '';
 
   function cleanupTCPingChart(systemId) {
     hideTCPingTooltip();
+    stopResourcePane(systemId);
     // Cancel any ongoing loading for this system
     // The flag lives on the state object, which the in-flight build keeps a
     // reference to, so it still reads as cancelled after the map entry is
@@ -3077,6 +3133,98 @@ const apiBase = apiBaseProp ?? '';
     script.src = url;
   }
 
+  // Chart.js plugins shared by every Pulse chart (the TCPing chart and the
+  // 资源 charts): the cursor's hairline, and the loss band, which draws only
+  // on a chart whose options enable it. Registered once.
+  function registerPulseChartPlugins(ChartClass) {
+    // Register crosshair plugin if not already registered
+    // Use a global variable to track if plugin is registered
+    if (!window.crosshairPluginRegistered) {
+      const crosshairPlugin = {
+        id: 'crosshair',
+        afterDraw: function(chart) {
+          const tooltip = chart.tooltip;
+          if (tooltip && tooltip.opacity > 0 && tooltip.dataPoints && tooltip.dataPoints.length > 0) {
+            const ctx = chart.ctx;
+            const dataPoint = tooltip.dataPoints[0];
+            const x = dataPoint.element.x;
+            const chartArea = chart.chartArea;
+            
+            // A solid hairline, quieter than the lines (a dashed one read as
+            // a threshold), as Beszel's chart cursor.
+            const crosshairColor = cursorLineColor(document.documentElement.classList.contains('dark'));
+            
+            // Save context state
+            ctx.save();
+            
+            ctx.strokeStyle = crosshairColor;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, chartArea.top);
+            ctx.lineTo(x, chartArea.bottom);
+            ctx.stroke();
+            
+            // Restore context state
+            ctx.restore();
+          }
+        }
+      };
+      
+      try {
+        if (ChartClass.register) {
+          ChartClass.register(crosshairPlugin);
+          window.crosshairPluginRegistered = true;
+        } else if (ChartClass.registry && ChartClass.registry.add) {
+          ChartClass.registry.add(crosshairPlugin);
+          window.crosshairPluginRegistered = true;
+        }
+      } catch (e) {
+        // Plugin registration failed silently
+      }
+    }
+    
+    // 自定义设置 → 丢包时间线: a band under the plot, red where a shown target
+    // lost a probe (the selected target alone while one is picked), each mark
+    // as long as one probe interval; "丢包" in the axis column beside it. A
+    // gap in the lines reads as lost probes or as no data at a glance.
+    if (!window.__pulseLossLaneRegistered && ChartClass.register) {
+      ChartClass.register({
+        id: 'lossLane',
+        afterDraw(chart) {
+          const area = chart.chartArea;
+          const xs = chart.scales.x;
+          const ys = chart.scales.y;
+          if (!area || !xs || !ys) return;
+          const dark = document.documentElement.classList.contains('dark');
+          const top = area.bottom + LOSS_LANE_GAP;
+          const c = chart.ctx;
+          c.save();
+          c.fillStyle = gridLineColor(dark);
+          c.fillRect(area.left, top, area.right - area.left, LOSS_LANE_HEIGHT);
+          c.fillStyle = '#fb2c36';
+          const selected = chart.data.datasets.some((d) => d.role === 'selected');
+          chart.data.datasets.forEach((d, i) => {
+            if ((selected && d.role !== 'selected') || !chart.isDatasetVisible(i)) return;
+            lossRuns(d.data).forEach(([t0, t1]) => {
+              const x0 = Math.max(area.left, xs.getPixelForValue(t0));
+              const x1 = Math.min(area.right, xs.getPixelForValue(t1));
+              if (x1 >= area.left && x0 <= area.right) c.fillRect(x0, top, Math.max(1.5, x1 - x0), LOSS_LANE_HEIGHT);
+            });
+          });
+          const item = ys.getLabelItems ? ys.getLabelItems()[0] : null;
+          const right = item && item.options && item.options.translation ? item.options.translation[0] : ys.right - 8;
+          c.fillStyle = axisLabelColor(dark);
+          c.font = `11px ${ChartClass.defaults.font.family}`;
+          c.textAlign = 'right';
+          c.textBaseline = 'middle';
+          c.fillText(translations.tcpingLossLane[getCurrentLanguage()], right, top + LOSS_LANE_HEIGHT / 2);
+          c.restore();
+        },
+      });
+      window.__pulseLossLaneRegistered = true;
+    }
+  }
+
   // Preload Chart.js library for faster chart rendering
   function preloadChartJS() {
     // Skip if already loaded or loading
@@ -3272,6 +3420,10 @@ const apiBase = apiBaseProp ?? '';
       listed.add(key);
       const value = item.parsed.y;
       const timedOut = value === null || value === undefined;
+      if (dataset.formatValue) {
+        if (!timedOut) rows.push({ color: dataset.borderColor, name: dataset.label || '', y: value, value: dataset.formatValue(value), muted: false });
+        return;
+      }
       rows.push({ color: dataset.borderColor, name: dataset.label || '', y: timedOut ? -1 : value, value: timedOut ? translations.tcpingTimeout[lang] : `${value.toFixed(2)} ms`, muted: timedOut });
     });
     // Highest first, as Beszel sorts its temperature tooltip.
@@ -4254,92 +4406,7 @@ const apiBase = apiBaseProp ?? '';
     const tooltipTextColor = isDarkMode ? '#f5f5f5' : '#272625';
     const tooltipBorderColor = isDarkMode ? '#3e3f42' : '#d7d4d1';
     
-    // Register crosshair plugin if not already registered
-    // Use a global variable to track if plugin is registered
-    if (!window.crosshairPluginRegistered) {
-      const crosshairPlugin = {
-        id: 'crosshair',
-        afterDraw: function(chart) {
-          const tooltip = chart.tooltip;
-          if (tooltip && tooltip.opacity > 0 && tooltip.dataPoints && tooltip.dataPoints.length > 0) {
-            const ctx = chart.ctx;
-            const dataPoint = tooltip.dataPoints[0];
-            const x = dataPoint.element.x;
-            const chartArea = chart.chartArea;
-            
-            // A solid hairline, quieter than the lines (a dashed one read as
-            // a threshold), as Beszel's chart cursor.
-            const crosshairColor = cursorLineColor(document.documentElement.classList.contains('dark'));
-            
-            // Save context state
-            ctx.save();
-            
-            ctx.strokeStyle = crosshairColor;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(x, chartArea.top);
-            ctx.lineTo(x, chartArea.bottom);
-            ctx.stroke();
-            
-            // Restore context state
-            ctx.restore();
-          }
-        }
-      };
-      
-      try {
-        if (ChartClass.register) {
-          ChartClass.register(crosshairPlugin);
-          window.crosshairPluginRegistered = true;
-        } else if (ChartClass.registry && ChartClass.registry.add) {
-          ChartClass.registry.add(crosshairPlugin);
-          window.crosshairPluginRegistered = true;
-        }
-      } catch (e) {
-        // Plugin registration failed silently
-      }
-    }
-    
-    // 自定义设置 → 丢包时间线: a band under the plot, red where a shown target
-    // lost a probe (the selected target alone while one is picked), each mark
-    // as long as one probe interval; "丢包" in the axis column beside it. A
-    // gap in the lines reads as lost probes or as no data at a glance.
-    if (!window.__pulseLossLaneRegistered && ChartClass.register) {
-      ChartClass.register({
-        id: 'lossLane',
-        afterDraw(chart) {
-          const area = chart.chartArea;
-          const xs = chart.scales.x;
-          const ys = chart.scales.y;
-          if (!area || !xs || !ys) return;
-          const dark = document.documentElement.classList.contains('dark');
-          const top = area.bottom + LOSS_LANE_GAP;
-          const c = chart.ctx;
-          c.save();
-          c.fillStyle = gridLineColor(dark);
-          c.fillRect(area.left, top, area.right - area.left, LOSS_LANE_HEIGHT);
-          c.fillStyle = '#fb2c36';
-          const selected = chart.data.datasets.some((d) => d.role === 'selected');
-          chart.data.datasets.forEach((d, i) => {
-            if ((selected && d.role !== 'selected') || !chart.isDatasetVisible(i)) return;
-            lossRuns(d.data).forEach(([t0, t1]) => {
-              const x0 = Math.max(area.left, xs.getPixelForValue(t0));
-              const x1 = Math.min(area.right, xs.getPixelForValue(t1));
-              if (x1 >= area.left && x0 <= area.right) c.fillRect(x0, top, Math.max(1.5, x1 - x0), LOSS_LANE_HEIGHT);
-            });
-          });
-          const item = ys.getLabelItems ? ys.getLabelItems()[0] : null;
-          const right = item && item.options && item.options.translation ? item.options.translation[0] : ys.right - 8;
-          c.fillStyle = axisLabelColor(dark);
-          c.font = `11px ${ChartClass.defaults.font.family}`;
-          c.textAlign = 'right';
-          c.textBaseline = 'middle';
-          c.fillText(translations.tcpingLossLane[getCurrentLanguage()], right, top + LOSS_LANE_HEIGHT / 2);
-          c.restore();
-        },
-      });
-      window.__pulseLossLaneRegistered = true;
-    }
+    registerPulseChartPlugins(ChartClass);
 
     const platform = presize ? class extends ChartClass.DomPlatform {
       getMaximumSize(element, width, height, aspectRatio) {
@@ -4985,6 +5052,7 @@ const apiBase = apiBaseProp ?? '';
       calculateAndUpdateStats(systemId, active ? active.target : null);
       updateTCPingTabAverages(systemId);
     });
+    resourcePanes.forEach((_, id) => drawResourceCharts(id));
   }
   tcpingPhoneQuery.addEventListener('change', () => { if (!tcpingRangePicked) applyTCPingRange(); });
   document.addEventListener('click', (e) => {
@@ -5024,6 +5092,336 @@ const apiBase = apiBaseProp ?? '';
     }
   }, true);
   window.addEventListener('resize', () => closeTCPingRangeMenu());
+
+  // ---- 资源 (自定义设置 → 资源历史, off by default) ----
+  // The chart card's 延迟 | 资源 tabs (a 资源 card of its own where a server
+  // has no TCPing card): CPU, memory, disk and network as the server averaged
+  // them each minute over the last 24 h. Read when the tab opens and each
+  // minute while it shows; the time range picker spans both tabs. Each opened
+  // server starts on 延迟, as before.
+  function resourceHistoryShown() { return document.documentElement.classList.contains('resource-history'); }
+  const RESOURCE_COLORS = {
+    light: { cpu: '#2563eb', mem: '#0d9488', disk: '#7c3aed', in: '#16a34a', out: '#2563eb' },
+    dark: { cpu: '#3b82f6', mem: '#14b8a6', disk: '#8b5cf6', in: '#22c55e', out: '#3b82f6' },
+  };
+  const RESOURCE_KINDS = [['cpu', 'resCpu', 'resCpuDesc'], ['mem', 'resMem', 'resMemDesc'], ['disk', 'resDisk', 'resDiskDesc'], ['net', 'resNet', 'resNetDesc']];
+  const resourcePanes = new Map(); // systemId -> { container, points, charts, timer }
+  async function whenChartReady() {
+    preloadChartJS();
+    for (let i = 0; i < 100 && !(window.Chart && window._chartjsAdapterLoaded); i++) await new Promise((r) => setTimeout(r, 100));
+    if (!(window.Chart && window._chartjsAdapterLoaded)) return false;
+    if (!window.__pulseChartFont) { window.Chart.defaults.font.family = getComputedStyle(document.body).fontFamily; window.__pulseChartFont = true; }
+    registerPulseChartPlugins(window.Chart);
+    return true;
+  }
+  async function fetchResourceHistory(systemId) {
+    try {
+      const { res } = await authedFetch(`${apiBase}/api/resource/history?client_id=${encodeURIComponent(systemId)}`);
+      return res.ok ? await res.json() : null;
+    } catch (_) { return null; }
+  }
+  // Points [t s, cpu, mem, disk, in MB/s, out MB/s] → one series, a gap where
+  // a minute or more is missing (the server was offline, or the history was
+  // switched off). A minute with no neighbour (the first after switching on,
+  // a server that reported once) is marked: a line needs two, it gets a dot.
+  function resourceSeries(points, idx) {
+    const out = [];
+    const apart = (i, j) => points[j][0] - points[i][0] > 150;
+    for (let i = 0; i < points.length; i++) {
+      if (i && apart(i - 1, i)) out.push({ x: points[i - 1][0] * 1000 + 60000, y: null });
+      const lone = (!i || apart(i - 1, i)) && (i === points.length - 1 || apart(i, i + 1));
+      out.push(lone ? { x: points[i][0] * 1000, y: points[i][idx], lone: true } : { x: points[i][0] * 1000, y: points[i][idx] });
+    }
+    return out;
+  }
+  function resourceChartConfig(kind, points, dark) {
+    const c = RESOURCE_COLORS[dark ? 'dark' : 'light'];
+    const lang = getCurrentLanguage();
+    const ds = (label, data, color, fill, formatValue) => ({ label, data, borderColor: color, backgroundColor: fill ? `${color}1f` : color, fill: fill ? 'origin' : false, borderWidth: 1.5, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 3, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, formatValue });
+    const datasets = kind === 'cpu' ? [ds('CPU', resourceSeries(points, 1), c.cpu, true, pctLabel)]
+      : kind === 'mem' ? [ds(translations.resMem[lang], resourceSeries(points, 2), c.mem, true, pctLabel)]
+      : kind === 'disk' ? [ds(translations.resDisk[lang], resourceSeries(points, 3), c.disk, true, pctLabel)]
+      : [ds(translations.resNetIn[lang], resourceSeries(points, 4), c.in, false, formatTrafficSpeed), ds(translations.resNetOut[lang], resourceSeries(points, 5), c.out, false, formatTrafficSpeed)];
+    const bounds = tcpingAxisBounds(points[0][0] * 1000, points[points.length - 1][0] * 1000);
+    const tick = { color: axisLabelColor(dark), font: { size: 11 } };
+    const percentOfWhole = kind === 'mem' || kind === 'disk';
+    return {
+      type: 'line',
+      data: { datasets },
+      options: {
+        animation: false, responsive: true, maintainAspectRatio: false, parsing: false, normalized: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, lossLane: false, tooltip: { enabled: false, external: tcpingTooltipExternal } },
+        scales: {
+          x: { type: 'time', min: bounds.min, max: bounds.max, bounds: 'ticks',
+            time: { displayFormats: { minute: 'HH:mm', hour: 'HH:mm', day: 'MM/dd HH:mm' }, tooltipFormat: 'yyyy-MM-dd HH:mm' },
+            ticks: { ...tick, maxRotation: 0, minRotation: 0, autoSkip: true, autoSkipPadding: 12 }, grid: { display: false }, border: { display: false }, afterBuildTicks: roundTimeTicks },
+          // memory and disk as a share of the whole (0–100 %); CPU and the
+          // network fitted to their own range, as the latency axis
+          y: percentOfWhole
+            ? { min: 0, max: 100, ticks: { ...tick, stepSize: 50, callback: (v) => `${v}%` }, grid: { color: gridLineColor(dark) }, border: { display: false } }
+            : { beginAtZero: true, afterDataLimits: (scale) => { scale.$dataMin = 0; scale.$dataMax = Math.max(scale.max, kind === 'cpu' ? 1 : 0.001); }, afterBuildTicks: latencyTicks,
+              ticks: { ...tick, maxTicksLimit: 5, callback: (v) => (kind === 'cpu' ? `${v}%` : formatTrafficSpeed(v)) }, grid: { color: gridLineColor(dark) }, border: { display: false } },
+        },
+      },
+    };
+  }
+  function drawResourceCharts(systemId) {
+    const entry = resourcePanes.get(systemId);
+    if (!entry || !window.Chart) return;
+    const pane = entry.container.querySelector('[data-chart-pane="resource"]');
+    if (!pane) return;
+    entry.charts.forEach((ch) => { try { ch.destroy(); } catch (_) {} });
+    entry.charts = [];
+    const lang = getCurrentLanguage();
+    const note = pane.querySelector('[data-resource-note]');
+    const grid = pane.querySelector('.resource-grid');
+    const empty = !entry.points || entry.points.length === 0;
+    if (note) { note.hidden = !(empty || entry.failed); note.textContent = entry.failed ? translations.resUnavailable[lang] : translations.resEmpty[lang]; }
+    if (grid) grid.hidden = empty;
+    if (empty) return;
+    const dark = document.documentElement.classList.contains('dark');
+    pane.querySelectorAll('.resource-card').forEach((card) => {
+      try { entry.charts.push(new window.Chart(card.querySelector('canvas'), resourceChartConfig(card.dataset.resourceKind, entry.points, dark))); } catch (_) {}
+    });
+  }
+  async function refreshResourcePane(systemId) {
+    const entry = resourcePanes.get(systemId);
+    if (!entry) return;
+    const data = await fetchResourceHistory(systemId);
+    if (resourcePanes.get(systemId) !== entry) return; // closed or reopened meanwhile
+    entry.failed = !data;
+    if (data) entry.points = Array.isArray(data.points) ? data.points : [];
+    drawResourceCharts(systemId);
+  }
+  async function openResourcePane(container, systemId) {
+    const pane = container && container.querySelector('[data-chart-pane="resource"]');
+    if (!pane) return;
+    stopResourcePane(systemId);
+    const lang = getCurrentLanguage();
+    if (!pane.querySelector('.resource-grid')) {
+      pane.innerHTML = `<div class="resource-grid">${RESOURCE_KINDS.map(([kind, title, desc]) => `<div class="resource-card" data-resource-kind="${kind}"><div class="resource-card-title" data-translate-detail="${title}">${translations[title][lang]}</div><div class="resource-card-desc" data-translate-detail="${desc}">${translations[desc][lang]}</div><div class="resource-plot"><canvas></canvas></div></div>`).join('')}</div><p class="resource-note" data-resource-note hidden></p>`;
+    }
+    const entry = { container, points: null, charts: [], timer: 0, failed: false };
+    resourcePanes.set(systemId, entry);
+    if (!(await whenChartReady()) || resourcePanes.get(systemId) !== entry) return;
+    ensureTCPingRangeButton(container);
+    await refreshResourcePane(systemId);
+    if (resourcePanes.get(systemId) !== entry) return;
+    entry.timer = setInterval(() => { if (!document.hidden) refreshResourcePane(systemId); }, 60000);
+  }
+  function stopResourcePane(systemId) {
+    const entry = resourcePanes.get(systemId);
+    if (!entry) return;
+    clearInterval(entry.timer);
+    entry.charts.forEach((ch) => { try { ch.destroy(); } catch (_) {} });
+    resourcePanes.delete(systemId);
+  }
+  // 延迟 | 资源: the chosen pane, its line under the tabs; back on 延迟 the
+  // TCPing chart takes its box again.
+  function showChartPane(container, systemId, which) {
+    container.querySelectorAll('[data-chart-tab]').forEach((b) => {
+      const on = b.dataset.chartTab === which;
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+    });
+    container.querySelectorAll('[data-chart-pane]').forEach((pn) => { pn.hidden = pn.dataset.chartPane !== which; });
+    container.querySelectorAll('[data-pane-desc]').forEach((d) => { d.hidden = d.dataset.paneDesc !== which; });
+    if (which === 'resource') {
+      hideTCPingTooltip();
+      openResourcePane(container, systemId);
+    } else {
+      stopResourcePane(systemId);
+      const entry = tcpingCharts.get(`${systemId}_all`);
+      if (entry && entry.chart) { try { entry.chart.resize(); } catch (_) {} }
+    }
+  }
+  document.addEventListener('click', (e) => {
+    const tab = e.target.closest && e.target.closest('[data-chart-tab]');
+    if (!tab || tab.getAttribute('aria-selected') === 'true') return;
+    const container = tab.closest('[data-tcping-chart-container]');
+    if (container) showChartPane(container, container.dataset.tcpingChartContainer, tab.dataset.chartTab);
+  });
+  // Arrow keys between the two tabs (the tablist pattern)
+  document.addEventListener('keydown', (e) => {
+    const tab = e.target.closest && e.target.closest('[data-chart-tab]');
+    if (!tab || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    const tabs = [...tab.parentElement.querySelectorAll('[data-chart-tab]')];
+    const next = tabs[(tabs.indexOf(tab) + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    e.preventDefault();
+    next.focus();
+    next.click();
+  });
+  window.addEventListener('themechange', () => { resourcePanes.forEach((_, id) => drawResourceCharts(id)); });
+
+  // ---- 延迟 view (自定义设置 → 延迟视图, off by default) ----
+  // 资源 | 延迟 beside the filter: in 延迟 the resource columns give way to
+  // one column per TCPing target, named as the admin named it, with its
+  // average over the last hour and its loss (GET /api/tcping/summary, read
+  // when the view opens and each minute while it shows). The rows, pages,
+  // filter and the opened server's details are the same; a target's header
+  // sorts by it (lowest first). The choice lasts for the visit. (The state,
+  // listView and latencySummary, is declared with the sort's: the layout
+  // code runs before this point.)
+  function latencyViewShown() { return document.documentElement.classList.contains('latency-view'); }
+  const latencyTargets = () => (cachedTCPingConfig && Array.isArray(cachedTCPingConfig.targets) ? cachedTCPingConfig.targets : []);
+  const latencySignature = () => latencyTargets().map((t) => `${t.address}\u0000${t.name || ''}`).join('\u0001');
+  let latencyHeaderSig = null;
+  function latencyStat(id, addr) {
+    const byTarget = latencySummary && latencySummary.servers ? latencySummary.servers[String(id)] : null;
+    return byTarget ? byTarget[addr] || null : null;
+  }
+  function latencyAvg(id, addr) {
+    const st = latencyStat(id, addr);
+    return st && st.avg !== null && st.avg !== undefined ? Number(st.avg) : NaN;
+  }
+  // the chart's colour for the target, as in its legend
+  const latencyKeyStyle = (i) => `--lat-key:${TCPING_LINE_COLORS_LIGHT[i % TCPING_LINE_COLORS_LIGHT.length]};--lat-key-dark:${TCPING_LINE_COLORS_DARK[i % TCPING_LINE_COLORS_DARK.length]}`;
+  const lossText = (v) => `${v < 10 ? Number(v.toFixed(2)) : Number(v.toFixed(1))}%`;
+  // The table's columns in this view, by the width's tier (the CSS tiers'
+  // breakpoints) and the fields the visitor hid (location, OS): the name,
+  // the location, a column per target, the OS. The minimum width follows
+  // the same sum as applyViewLayout's.
+  function latencyColumns() {
+    const n = Math.max(1, latencyTargets().length);
+    const w = window.innerWidth;
+    const cols = [];
+    if (w >= 1024 && !hiddenCols.includes('location')) cols.push(w >= 1280 ? [104, '1fr'] : [88, '0.9fr']);
+    for (let i = 0; i < n; i++) cols.push(w >= 1280 ? [96, '1.2fr'] : w >= 1024 ? [84, '1.2fr'] : [72, '1fr']);
+    if (w >= 1024 && !hiddenCols.includes('os')) cols.push(w >= 1280 ? [80, '1fr'] : [76, '1fr']);
+    return cols;
+  }
+  function applyLatencyTemplate() {
+    const root = document.getElementById('monitor-root');
+    if (!root || listView !== 'latency') return;
+    const cols = latencyColumns();
+    root.style.setProperty('--lat-template', [NAME_TRACK, ...cols.map(([min, fr]) => `minmax(${min}px,${fr})`)].join(' '));
+    const reserve = cols.reduce((sum, [min]) => sum + min, 0) + 6 * cols.length + 24;
+    root.style.setProperty('--lat-min', `calc(min(var(--first-col-width), 160px) + ${reserve}px)`);
+    // phones: the row's first line as in the resource view, the targets under it
+    root.style.setProperty('--lat-areas', `${cardAreas().match(/^"[^"]*"/)[0]} "lat lat lat lat lat lat"`);
+  }
+  // A row's cell: one item per target (the value and the loss; phones and
+  // cards also show the target's colour and name, having no header)
+  function latencyCellHTML(id) {
+    return latencyTargets().map((t, i) => {
+      const st = latencyStat(id, t.address);
+      const answered = st && st.avg !== null && st.avg !== undefined;
+      const loss = st && st.loss > 0 ? `<span class="lat-loss">${escapeHtml(lossText(st.loss))}</span>` : '';
+      return `<span class="lat-item"><span class="lat-key" style="${latencyKeyStyle(i)}"></span><span class="lat-name">${escapeHtml(t.name || t.address)}</span><span class="lat-value"><span class="lat-ms${answered ? '' : ' lat-none'}">${answered ? `${Math.round(st.avg)} ms` : '-'}</span>${loss}</span></span>`;
+    }).join('');
+  }
+  function fillLatencyCells() {
+    if (listView !== 'latency') return;
+    document.querySelectorAll('#systems-body > .system-row').forEach((row) => {
+      const head = row.querySelector(':scope > [data-system-id]');
+      if (!head) return;
+      let cell = head.querySelector(':scope > .cell-latency');
+      if (!cell) {
+        cell = document.createElement('div');
+        cell.className = 'cell-latency';
+        (head.querySelector(':scope > .cell-location') || head.querySelector(':scope > .cell-name')).after(cell);
+      }
+      const html = latencyCellHTML(row.dataset.systemId);
+      if (cell.__lat !== html) {
+        cell.innerHTML = html;
+        cell.__lat = html;
+      }
+    });
+  }
+  // The header's target columns and the view menu's sort options for them
+  function ensureLatencyHeader() {
+    const header = document.getElementById('system-table-header-row');
+    if (!header) return;
+    const lang = getCurrentLanguage();
+    header.querySelectorAll(':scope > .lat-head').forEach((el) => el.remove());
+    const anchor = header.querySelector(':scope > [data-col="location"]') || header.querySelector(':scope > [data-col="name"]');
+    anchor.insertAdjacentHTML('afterend', latencyTargets().map((t, i) => {
+      const name = escapeHtml(t.name || t.address);
+      const title = escapeHtmlAttr(translations.latHeadTitle[lang].replace('{name}', t.name || t.address));
+      return `<div class="lat-head h-5 flex items-center gap-1 min-w-0" data-col="lat" title="${title}"><button type="button" class="sort-header" data-sort="lat:${escapeHtmlAttr(t.address)}"><span class="lat-key" style="${latencyKeyStyle(i)}"></span><span class="lat-head-name">${name}</span><span class="sort-header-arrow" aria-hidden="true"></span></button></div>`;
+    }).join(''));
+    header.querySelectorAll(':scope > .lat-head .sort-header').forEach((btn) => btn.addEventListener('click', () => setSort(btn.dataset.sort)));
+    const after = document.querySelector('.sort-option[data-sort="location"]') || document.querySelector('.sort-option[data-sort="name"]');
+    if (after) {
+      document.querySelectorAll('.lat-sort-option').forEach((el) => el.remove());
+      after.insertAdjacentHTML('afterend', latencyTargets().map((t) => `<button type="button" role="menuitemradio" class="sort-option lat-sort-option view-menu-item" data-sort="lat:${escapeHtmlAttr(t.address)}"><span class="sort-indicator view-menu-mark"></span><span>${escapeHtml(t.name || t.address)}</span></button>`).join(''));
+      document.querySelectorAll('.lat-sort-option').forEach((btn) => btn.addEventListener('click', () => setSort(btn.dataset.sort)));
+    }
+    latencyHeaderSig = latencySignature();
+    updateSortUI();
+  }
+  async function refreshLatencySummary() {
+    try {
+      const { res } = await authedFetch(`${apiBase}/api/tcping/summary`);
+      if (!res.ok) return;
+      latencySummary = await res.json();
+    } catch (_) { return; }
+    if (listView !== 'latency') return;
+    fillLatencyCells();
+    // sorted by a target: in the new order, on the same page
+    if (currentSort.field && currentSort.field.startsWith('lat:') && lastRenderedPayload) renderData(lastRenderedPayload.slice());
+  }
+  // The resource view's own sorts (and the target sorts in the other view)
+  // end with their columns.
+  const RESOURCE_SORTS = ['cpu', 'memory', 'disk', 'net', 'time'];
+  async function setListView(view) {
+    if (!latencyViewShown() || (view !== 'latency' && view !== 'resources') || view === listView) return;
+    listView = view;
+    const root = document.getElementById('monitor-root');
+    document.querySelectorAll('.list-view-tab').forEach((b) => {
+      const on = b.dataset.listView === view;
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+    });
+    document.documentElement.classList.toggle('list-latency', view === 'latency');
+    window.dispatchEvent(new CustomEvent('listviewchange', { detail: { view } }));
+    clearInterval(latencyTimer);
+    if (view === 'latency') {
+      if (!cachedTCPingConfig) await loadTCPingConfig();
+      if (listView !== 'latency') return;
+      applyLatencyTemplate();
+      ensureLatencyHeader();
+      root.classList.add('view-latency');
+      fillLatencyCells();
+      if (RESOURCE_SORTS.includes(currentSort.field)) setSort(null);
+      await refreshLatencySummary();
+      latencyTimer = setInterval(() => { if (!document.hidden) refreshLatencySummary(); }, 60000);
+    } else {
+      root.classList.remove('view-latency');
+      document.querySelectorAll('#system-table-header-row > .lat-head, .lat-sort-option').forEach((el) => el.remove());
+      latencyHeaderSig = null;
+      if (currentSort.field && currentSort.field.startsWith('lat:')) setSort(null);
+    }
+  }
+  // After each render: the switch only where there are targets; the view's
+  // columns follow a change of the targets (added, removed, renamed).
+  function syncLatencyView() {
+    if (!latencyViewShown()) return;
+    const n = latencyTargets().length;
+    document.documentElement.classList.toggle('latency-none', !!cachedTCPingConfig && !n);
+    if (listView !== 'latency') return;
+    if (cachedTCPingConfig && !n) { setListView('resources'); return; }
+    if (latencyHeaderSig !== latencySignature()) {
+      applyLatencyTemplate();
+      ensureLatencyHeader();
+    }
+    fillLatencyCells();
+  }
+  document.addEventListener('click', (e) => {
+    const tab = e.target.closest && e.target.closest('.list-view-tab');
+    if (tab) setListView(tab.dataset.listView);
+  });
+  document.addEventListener('keydown', (e) => {
+    const tab = e.target.closest && e.target.closest('.list-view-tab');
+    if (!tab || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    const tabs = [...document.querySelectorAll('.list-view-tab')];
+    const next = tabs[(tabs.indexOf(tab) + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    e.preventDefault();
+    next.focus();
+    next.click();
+  });
+  window.addEventListener('resize', () => applyLatencyTemplate());
 
   function updateTCPingTabAverages(systemId) {
     const entry = tcpingCharts.get(`${systemId}_all`);
@@ -5172,6 +5570,8 @@ const apiBase = apiBaseProp ?? '';
         
         if (isExpanding) {
           ensureDetails(systemRow);
+          const resourceOnly = detailsSection.querySelector('[data-resource-only]');
+          if (resourceOnly) requestAnimationFrame(() => openResourcePane(resourceOnly, systemId));
           // (a row whose TCPing card the admin hid has no history to show)
           if (detailsSection.dataset.tcping === '1') prefetchTCPingHistory(systemId);
           // IMPORTANT: Close all other expanded sections first to prevent CPU overload
@@ -5189,6 +5589,7 @@ const apiBase = apiBaseProp ?? '';
               const otherSystemId = otherRowElement ? otherRowElement.dataset.systemId : null;
               
               // Collapse this section
+              sectionSystemRow.classList.add('is-closing');
               section.style.maxHeight = section.scrollHeight + 'px';
               detailsFade(section, '1');
               section.offsetHeight; // Trigger reflow
@@ -5223,8 +5624,10 @@ const apiBase = apiBaseProp ?? '';
             clearTimeout(detailsSection._closeTimer);
             detailsSection._closeTimer = null;
           }
+          systemRow.classList.remove('is-closing');
           detailsSection.classList.remove('hidden');
           detailsSection.style.maxHeight = '0';
+          detailsFade(detailsSection, '0');
           
           // Trigger reflow
           detailsSection.offsetHeight;
@@ -5245,17 +5648,19 @@ const apiBase = apiBaseProp ?? '';
           detailsFade(detailsSection, '1', DETAILS_OPEN);
           // Use a reasonable estimated height, it will adjust as content loads
           detailsSection.style.maxHeight = '800px'; // Temporary max height
-          detailsFade(detailsSection, '1');
           
           // Wait for tabs to finish loading, then adjust to actual height
           tabsPromise.then(() => {
             // Give DOM a moment to update
             requestAnimationFrame(() => {
+              // closed again meanwhile: the close animation owns the section
+              if (detailsSection._closeTimer || detailsSection.classList.contains('hidden')) return;
               // Update to actual scroll height
               detailsSection.style.maxHeight = detailsSection.scrollHeight + 'px';
               
               // Clean up after animation completes
               setTimeout(() => {
+                if (detailsSection._closeTimer || detailsSection.classList.contains('hidden')) return;
                 detailsSection.style.maxHeight = '';
                 detailsFadeClear(detailsSection);
               }, 300);
@@ -5279,7 +5684,9 @@ const apiBase = apiBaseProp ?? '';
           // after the animation (below), not before it: destroying it at
           // click time blanked the chart while the section was still
           // visibly closing.
+          systemRow.classList.add('is-closing');
           detailsSection.style.maxHeight = detailsSection.scrollHeight + 'px';
+          detailsFade(detailsSection, '1');
           
           // Trigger reflow
           detailsSection.offsetHeight;
@@ -5287,7 +5694,6 @@ const apiBase = apiBaseProp ?? '';
           // Animate to zero
           detailsFade(detailsSection, '0', DETAILS_CLOSE);
           detailsSection.style.maxHeight = '0';
-          detailsFade(detailsSection, '0');
           
           // Hide after animation, then release the chart
           if (detailsSection._closeTimer) clearTimeout(detailsSection._closeTimer);
@@ -5305,6 +5711,31 @@ const apiBase = apiBaseProp ?? '';
       }
     };
     
+    // How the details open and close. In the table (not the glass theme) they
+    // slide on their ground, the opened row's colour, from the first frame to
+    // the last, and only what they hold fades: the row and its details stay
+    // one piece (.is-closing keeps the row's colour, and no rule, until the
+    // details are gone). Cards and the glass theme fade the whole panel, a
+    // box of its own.
+    const DETAILS_OPEN = { height: 'max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1)', fade: 'opacity 0.25s ease-out' };
+    const DETAILS_CLOSE = { height: 'max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1)', fade: 'opacity 0.2s ease-in' };
+    const fadesWhole = () => document.getElementById('monitor-root')?.classList.contains('layout-grid')
+      || document.documentElement.classList.contains('glass-enabled');
+    function detailsFade(section, opacity, timing = null) {
+      const whole = fadesWhole();
+      section.style.transition = timing ? (whole ? `${timing.height}, ${timing.fade}` : timing.height) : '';
+      section.style.opacity = whole ? opacity : '';
+      [...section.children].forEach((el) => {
+        el.style.transition = timing && !whole ? timing.fade : '';
+        el.style.opacity = whole ? '' : opacity;
+      });
+    }
+    function detailsFadeClear(section) {
+      section.style.opacity = '';
+      section.style.transition = '';
+      [...section.children].forEach((el) => { el.style.opacity = ''; el.style.transition = ''; });
+    }
+
     // Start a collapsed row's history request before it is opened: when the
     // mouse is pressed on it, or once the mouse has rested on it for a
     // moment. A pointer that only passes over rows requests nothing, and
@@ -5582,7 +6013,6 @@ const apiBase = apiBaseProp ?? '';
       const rowElement = systemRow.querySelector('[data-system-id]');
       const id = rowElement?.dataset.systemId;
       if (id) {
-              sectionSystemRow.classList.add('is-closing');
         existingRowMap.set(id, rowElement);
       }
     });
@@ -5618,7 +6048,6 @@ const apiBase = apiBaseProp ?? '';
       } else if (oldItem && oldItem.order !== normalizedItem.order) {
         // Order changed, need to reorder
         hasChanges = true;
-          systemRow.classList.remove('is-closing');
       }
     });
     
@@ -5648,14 +6077,11 @@ const apiBase = apiBaseProp ?? '';
     if (!hasChanges && !orderChanged && existingRows.length === items.length) {
       // Cache already updated above, just return
       return; // Silent skip - no DOM operations
-              // closed again meanwhile: the close animation owns the section
-              if (detailsSection._closeTimer || detailsSection.classList.contains('hidden')) return;
     }
     
     // Remove deleted rows. Tear down all per-system state first so the
     // Chart.js instance (which holds canvas references, dataset arrays,
     // and an active animation handle) becomes eligible for GC. Without
-                if (detailsSection._closeTimer || detailsSection.classList.contains('hidden')) return;
     // this, every system that was ever expanded before its deletion
     // would leave a ghost chart pinned in memory for the lifetime of
     // the page — a slow leak for browsers left open on the dashboard
@@ -5679,7 +6105,6 @@ const apiBase = apiBaseProp ?? '';
     // Update existing rows (only changed cells) - batch updates
     if (rowsToUpdate.length > 0) {
       rowsToUpdate.forEach(({ row, item }) => {
-          systemRow.classList.add('is-closing');
         // Get previous item data before updating
         const previousItem = previousData.get(item.id);
         updateRow(row, item, previousItem);
@@ -5707,31 +6132,6 @@ const apiBase = apiBaseProp ?? '';
     if (rowsToAdd.length > 0) {
       rowsToAdd.forEach(({ item, index }, addIndex) => {
         // Find insertion point
-    // How the details open and close. In the table (not the glass theme) they
-    // slide on their ground, the opened row's colour, from the first frame to
-    // the last, and only what they hold fades: the row and its details stay
-    // one piece (.is-closing keeps the row's colour, and no rule, until the
-    // details are gone). Cards and the glass theme fade the whole panel, a
-    // box of its own.
-    const DETAILS_OPEN = { height: 'max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1)', fade: 'opacity 0.25s ease-out' };
-    const DETAILS_CLOSE = { height: 'max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1)', fade: 'opacity 0.2s ease-in' };
-    const fadesWhole = () => document.getElementById('monitor-root')?.classList.contains('layout-grid')
-      || document.documentElement.classList.contains('glass-enabled');
-    function detailsFade(section, opacity, timing = null) {
-      const whole = fadesWhole();
-      section.style.transition = timing ? (whole ? `${timing.height}, ${timing.fade}` : timing.height) : '';
-      section.style.opacity = whole ? opacity : '';
-      [...section.children].forEach((el) => {
-        el.style.transition = timing && !whole ? timing.fade : '';
-        el.style.opacity = whole ? '' : opacity;
-      });
-    }
-    function detailsFadeClear(section) {
-      section.style.opacity = '';
-      section.style.transition = '';
-      [...section.children].forEach((el) => { el.style.opacity = ''; el.style.transition = ''; });
-    }
-
         let insertBefore = null;
         for (let i = index + 1; i < items.length; i++) {
           const nextId = items[i].id;
@@ -6103,6 +6503,7 @@ const apiBase = apiBaseProp ?? '';
     const filteredData = filterSystems(data);
     const sortedData = sortSystems(filteredData);
     await render(sortedData);
+    syncLatencyView();
   }
 
   // loadData is kept as the entry point for the cases where the browser
@@ -7149,6 +7550,32 @@ const apiBase = apiBaseProp ?? '';
      picker right (Beszel's chart time select: history icon, span, chevron;
      its list with a check by the span shown). */
   .tcping-tools { display: flex; flex: none; align-items: center; }
+  /* 自定义设置 → 资源历史: 延迟 | 资源 in the chart card's title place
+     (Beszel's tabs: a muted track, the chosen tab on the card's ground); the
+     title stays for screen readers. */
+  .chart-tabs { display: none; }
+  html.resource-history .chart-tabs { display: inline-flex; align-items: center; height: 32px; padding: 3px; gap: 2px; border-radius: 10.8px; background: #f0f0f0; }
+  html.dark.resource-history .chart-tabs { background: #262626; }
+  .chart-tab { height: 26px; padding: 0 12px; border-radius: 8px; font-size: 13px; line-height: 26px; color: #595959; background: transparent; cursor: pointer; }
+  .chart-tab[aria-selected="true"] { background: #ffffff; color: #1d1d20; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); cursor: default; }
+  html.dark .chart-tab { color: #ababab; }
+  html.dark .chart-tab[aria-selected="true"] { background: #171717; color: #f5f5f5; }
+  .chart-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #837e79; }
+  html.dark .chart-tab:focus-visible { box-shadow: 0 0 0 2px #1a1a1a, 0 0 0 4px #cacbce; }
+  html.resource-history [data-tcping-chart-container] .chart-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  /* the 资源 pane: four small charts, two a row from 640 px */
+  .resource-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  @media (min-width: 640px) { .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .resource-card { min-width: 0; padding: 12px 14px 8px; border: 1px solid rgba(212, 212, 212, 0.5); border-radius: 12.8px; background: #ffffff; }
+  html.dark .resource-card { border-color: rgba(44, 44, 44, 0.6); background: #1a1a1a; }
+  html.glass-enabled .resource-card { background: transparent; }
+  .resource-card-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: #1d1d20; }
+  html.dark .resource-card-title { color: #f5f5f5; }
+  .resource-card-desc { margin-top: 2px; font-size: 12px; color: #595959; }
+  html.dark .resource-card-desc { color: #ababab; }
+  .resource-plot { position: relative; height: 128px; margin-top: 8px; }
+  .resource-note { padding: 40px 8px; text-align: center; font-size: 13px; line-height: 20px; color: #595959; }
+  html.dark .resource-note { color: #ababab; }
   @media (max-width: 639.98px) {
     .tcping-range-btn { height: 28px; padding: 0 6px 0 8px; gap: 5px; font-size: 12px; }
     .tcping-range-icon, .tcping-range-chevron { width: 13px; height: 13px; }
@@ -7283,6 +7710,63 @@ const apiBase = apiBaseProp ?? '';
   .system-row > [data-system-id]:focus:not(:focus-visible) {
     outline: none;
   }
+
+  /* 自定义设置 → 延迟视图, the 延迟 view (#monitor-root.view-latency,
+     setListView): a column per TCPing target in place of the resource
+     columns, the template from latencyColumns() (--lat-template, --lat-min;
+     the selectors outrank the tiers' and a custom set of fields'), each with
+     the target's last-hour average and, when it lost probes, its loss in the
+     loss band's red. An offline server's values are grey, as its bars. Phones
+     put the targets on the line under the name (--lat-areas), each with its
+     colour and name over its value; cards give each target a row of their
+     grid (the colour where the icons are, the name, the value). */
+  .cell-latency { display: none; }
+  html #monitor-root.view-latency.view-latency #systems-body .system-row > [data-system-id] > :is(.cell-cpu, .cell-memory, .cell-disk, .cell-net, .cell-uptime),
+  html #monitor-root.view-latency.view-latency #system-table-header-row > :is([data-col="cpu"], [data-col="memory"], [data-col="disk"], [data-col="net"], [data-col="uptime"]) { display: none !important; }
+  .lat-key { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--lat-key); }
+  html.dark .lat-key { background: var(--lat-key-dark); }
+  .lat-item { min-width: 0; }
+  .lat-value { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .lat-ms { color: #1d1d20; }
+  html.dark .lat-ms { color: #f5f5f5; }
+  .lat-ms.lat-none { color: #595959; }
+  html.dark .lat-ms.lat-none { color: #ababab; }
+  .lat-loss { color: #fb2c36; font-size: 0.86em; }
+  .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #a3a3a3; }
+  html.dark .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #737373; }
+  #system-table-header-row .lat-head-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* the sort arrow takes the colour's place, as it takes the icons' */
+  #system-table-header-row .sort-header:is(:hover, :focus-visible, [data-active="true"]) > .lat-key { display: none; }
+  /* the view menu: no resource fields or sorts in this view */
+  html.list-latency #columns-dropdown :is(.sort-option, .column-option):is([data-sort="cpu"], [data-sort="memory"], [data-sort="disk"], [data-sort="net"], [data-sort="time"], [data-col="cpu"], [data-col="memory"], [data-col="disk"], [data-col="net"], [data-col="uptime"]) { display: none; }
+  @media (min-width: 768px) {
+    html #monitor-root.view-latency.view-latency:not(.layout-grid) #systems-body .system-row > [data-system-id],
+    html #monitor-root.view-latency.view-latency:not(.layout-grid) #system-table-header-row { grid-template-columns: var(--lat-template) !important; }
+    html #monitor-root.view-latency.view-latency:not(.layout-grid) .table-scroll-content { min-width: var(--lat-min) !important; }
+    #monitor-root.view-latency:not(.layout-grid) .cell-latency { display: contents; }
+    #monitor-root.view-latency:not(.layout-grid) .lat-item { display: flex; align-items: center; height: 20px; overflow: hidden; font-size: 12px; font-weight: 500; }
+    #monitor-root.view-latency:not(.layout-grid) .lat-item > :is(.lat-key, .lat-name) { display: none; }
+  }
+  @media (min-width: 1024px) and (max-width: 1279.98px) {
+    #monitor-root.view-latency:not(.layout-grid) .lat-item { font-size: 13px; font-weight: 400; letter-spacing: -0.025em; }
+  }
+  @media (min-width: 1280px) {
+    #monitor-root.view-latency:not(.layout-grid) .lat-item { font-size: 14px; font-weight: 400; letter-spacing: -0.025em; }
+  }
+  @media (max-width: 767.98px) {
+    html #monitor-root.view-latency.view-latency:not(.layout-grid) #systems-body .system-row > [data-system-id] { grid-template-areas: var(--lat-areas) !important; }
+    #monitor-root.view-latency:not(.layout-grid) .cell-latency { grid-area: lat; display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); column-gap: 12px; row-gap: 8px; min-width: 0; }
+    #monitor-root.view-latency:not(.layout-grid) .lat-item { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 5px; row-gap: 2px; }
+    #monitor-root.view-latency:not(.layout-grid) .lat-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 16px; color: #595959; }
+    html.dark #monitor-root.view-latency:not(.layout-grid) .lat-name { color: #ababab; }
+    #monitor-root.view-latency:not(.layout-grid) .lat-value { grid-column: 1 / -1; font-size: 12px; line-height: 16px; font-weight: 500; }
+  }
+  #monitor-root.view-latency.layout-grid #systems-body .system-row :is(.cell-latency, .lat-item) { display: contents; }
+  #monitor-root.view-latency.layout-grid #systems-body .system-row .lat-key { width: 8px; height: 8px; margin-left: 4px; }
+  #monitor-root.view-latency.layout-grid #systems-body .system-row .lat-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 12px; font-size: 14px; line-height: 20px; color: #595959; }
+  html.dark #monitor-root.view-latency.layout-grid #systems-body .system-row .lat-name { color: #ababab; }
+  #monitor-root.view-latency.layout-grid #systems-body .system-row .lat-name::after { content: ':'; }
+  #monitor-root.view-latency.layout-grid #systems-body .system-row .lat-value { grid-column: 3 / -1; font-size: 14px; line-height: 20px; letter-spacing: -0.025em; }
 
   /* TCPing target tabs — faster taps on mobile (no double-tap zoom delay). */
   [data-tcping-tabs] button {

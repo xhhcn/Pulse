@@ -579,6 +579,28 @@ const customCodePlaceholder = [
               <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
             </label>
           </div>
+          <!-- Resource history: the server records each server's minute averages for 24 h; a 资源 tab on the opened server's chart card (off by default) -->
+          <div class="flex items-center justify-between gap-3 p-4">
+            <div class="flex-1">
+              <label for="resource-history-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="resourceHistoryLabel">Resource History</label>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="resourceHistoryDesc">Record each server's CPU, memory, disk and network every minute for 24 hours; an opened server's chart card gets a Resources tab. Nothing is recorded while it is off</p>
+            </div>
+            <label class="relative inline-flex shrink-0 items-center cursor-pointer">
+              <input type="checkbox" id="resource-history-toggle" name="resource_history" class="sr-only peer">
+              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+            </label>
+          </div>
+          <!-- Latency view: a Resources | Latency switch on the dashboard, the servers by each TCPing target's last-hour average (off by default) -->
+          <div class="flex items-center justify-between gap-3 p-4">
+            <div class="flex-1">
+              <label for="latency-view-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="latencyViewLabel">Latency View</label>
+              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="latencyViewDesc">A Resources | Latency switch beside the dashboard's filter: the servers side by side by each TCPing target's average latency and loss over the last hour</p>
+            </div>
+            <label class="relative inline-flex shrink-0 items-center cursor-pointer">
+              <input type="checkbox" id="latency-view-toggle" name="latency_view" class="sr-only peer">
+              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+            </label>
+          </div>
           </div>
         </section>
 
@@ -3765,6 +3787,10 @@ const customCodePlaceholder = [
         if (cardLayoutToggle) {
           cardLayoutToggle.checked = config.card_layout === true;
         }
+        const resourceHistoryToggle = document.getElementById('resource-history-toggle');
+        if (resourceHistoryToggle) resourceHistoryToggle.checked = config.resource_history === true;
+        const latencyViewToggle = document.getElementById('latency-view-toggle');
+        if (latencyViewToggle) latencyViewToggle.checked = config.latency_view === true;
         const lossTimelineToggle = document.getElementById('loss-timeline-toggle');
         if (lossTimelineToggle) {
           lossTimelineToggle.checked = config.loss_timeline === true;
@@ -4398,6 +4424,8 @@ const customCodePlaceholder = [
     const pageSizeToggle = document.getElementById('page-size-toggle');
     const pageSizeInput = document.getElementById('page-size-input');
     const lossTimelineToggle = document.getElementById('loss-timeline-toggle');
+    const resourceHistoryToggle = document.getElementById('resource-history-toggle');
+    const latencyViewToggle = document.getElementById('latency-view-toggle');
     const data = {
       text: formData.get('text')?.trim() || 'Pulse',
       logo: formData.get('logo')?.trim() || '',
@@ -4410,6 +4438,8 @@ const customCodePlaceholder = [
       card_layout: cardLayoutToggle?.checked || false,
       page_size: pageSizeToggle?.checked ? Math.min(200, Math.max(1, parseInt(pageSizeInput?.value || '', 10) || 20)) : 0,
       loss_timeline: lossTimelineToggle?.checked || false,
+      resource_history: resourceHistoryToggle?.checked || false,
+      latency_view: latencyViewToggle?.checked || false,
     };
 
     // Set button to saving state
@@ -4978,6 +5008,10 @@ const customCodePlaceholder = [
     'pageSizeLabel': { en: 'Servers per page', zh: '每页显示' },
     'lossTimelineLabel': { en: 'Loss Timeline', zh: '丢包时间线' },
     'lossTimelineDesc': { en: 'A thin band under the TCPing chart, red where probes were lost, so a gap in the lines reads as lost probes or as no data', zh: '在 TCPing 图表下方加一条细带，红色处为丢包；图上断开的地方是丢包还是没有数据，一眼分清' },
+    'resourceHistoryLabel': { en: 'Resource History', zh: '资源历史' },
+    'resourceHistoryDesc': { en: "Record each server's CPU, memory, disk and network every minute for 24 hours; an opened server's chart card gets a Resources tab. Nothing is recorded while it is off", zh: '服务端每分钟记录各服务器的 CPU、内存、磁盘和网络，保留 24 小时；展开服务器时，图表卡片多一个「资源」页。关闭时不记录' },
+    'latencyViewLabel': { en: 'Latency View', zh: '延迟视图' },
+    'latencyViewDesc': { en: "A Resources | Latency switch beside the dashboard's filter: the servers side by side by each TCPing target's average latency and loss over the last hour", zh: '首页筛选框旁出现「资源 | 延迟」切换：按各 TCPing 目标最近 1 小时的平均延迟和丢包，并排比较、排序服务器' },
     'cardLayoutDesc': { en: 'Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu for their visit', zh: '用卡片代替表格显示每台服务器，电脑和手机都一样；访客仍可在视图菜单中临时切换' },
   };
 
