@@ -1901,7 +1901,6 @@ const apiBase = apiBaseProp ?? '';
     'resDisk': { en: 'Disk', zh: '磁盘' },
     'resDiskDesc': { en: 'Share in use', zh: '使用率' },
     'resNet': { en: 'Network', zh: '网络' },
-    'resNetDesc': { en: '↓ in · ↑ out', zh: '↓ 下载 · ↑ 上传' },
     'resNetIn': { en: '↓ In', zh: '↓ 下载' },
     'resNetOut': { en: '↑ Out', zh: '↑ 上传' },
     'resEmpty': { en: 'Nothing recorded yet: the server keeps a sample each minute from when Resource History was switched on.', zh: '还没有记录：服务端从开启「资源历史」起每分钟记录一次，稍后这里就会出现曲线。' },
@@ -2092,15 +2091,30 @@ const apiBase = apiBaseProp ?? '';
     if (!(max > min)) return;
     const fit = Math.max(2, Math.min(12, Math.floor(scale.width / 56)));
     const spanMin = (max - min) / 60000;
-    const step = TIME_TICK_STEPS_MIN.find((s) => Math.floor(spanMin / s) + 1 <= fit);
-    if (!step) return;
-    const first = new Date(min);
-    first.setSeconds(0, 0);
-    const past = (first.getHours() * 60 + first.getMinutes()) % step;
-    let t = first.getTime() + (past ? (step - past) * 60000 : 0);
-    if (t < min) t += step * 60000;
-    const ticks = [];
-    for (; t <= max; t += step * 60000) ticks.push({ value: t });
+    let i = TIME_TICK_STEPS_MIN.findIndex((s) => Math.floor(spanMin / s) + 1 <= fit);
+    if (i < 0) return;
+    // the marks a step puts on the axis
+    const marks = (step) => {
+      const first = new Date(min);
+      first.setSeconds(0, 0);
+      const past = (first.getHours() * 60 + first.getMinutes()) % step;
+      let t = first.getTime() + (past ? (step - past) * 60000 : 0);
+      if (t < min) t += step * 60000;
+      const ticks = [];
+      for (; t <= max && ticks.length <= 12; t += step * 60000) ticks.push({ value: t });
+      return ticks;
+    };
+    let ticks = marks(TIME_TICK_STEPS_MIN[i]);
+    // A narrow axis left with two times (a phone's hour: 11:30, 12:00) takes
+    // the next finer step whose marks, counted, fit at 48 px each
+    // (11:15 … 12:00; "00:00" is about 32 px wide).
+    const roomy = Math.max(fit, Math.floor(scale.width / 48));
+    while (ticks.length < 3 && i > 0) {
+      const finer = marks(TIME_TICK_STEPS_MIN[i - 1]);
+      if (finer.length > roomy) break;
+      ticks = finer;
+      i -= 1;
+    }
     if (ticks.length >= 2) scale.ticks = ticks;
   }
 
@@ -5104,7 +5118,8 @@ const apiBase = apiBaseProp ?? '';
     light: { cpu: '#2563eb', mem: '#0d9488', disk: '#7c3aed', in: '#16a34a', out: '#2563eb' },
     dark: { cpu: '#3b82f6', mem: '#14b8a6', disk: '#8b5cf6', in: '#22c55e', out: '#3b82f6' },
   };
-  const RESOURCE_KINDS = [['cpu', 'resCpu', 'resCpuDesc'], ['mem', 'resMem', 'resMemDesc'], ['disk', 'resDisk', 'resDiskDesc'], ['net', 'resNet', 'resNetDesc']];
+  // (the network's line is its colours and unit, see openResourcePane)
+  const RESOURCE_KINDS = [['cpu', 'resCpu', 'resCpuDesc'], ['mem', 'resMem', 'resMemDesc'], ['disk', 'resDisk', 'resDiskDesc'], ['net', 'resNet', null]];
   const resourcePanes = new Map(); // systemId -> { container, points, charts, timer }
   async function whenChartReady() {
     preloadChartJS();
@@ -5124,26 +5139,41 @@ const apiBase = apiBaseProp ?? '';
   // a minute or more is missing (the server was offline, or the history was
   // switched off). A minute with no neighbour (the first after switching on,
   // a server that reported once) is marked: a line needs two, it gets a dot.
-  function resourceSeries(points, idx) {
+  function resourceSeries(points, idx, factor = 1) {
     const out = [];
     const apart = (i, j) => points[j][0] - points[i][0] > 150;
     for (let i = 0; i < points.length; i++) {
       if (i && apart(i - 1, i)) out.push({ x: points[i - 1][0] * 1000 + 60000, y: null });
       const lone = (!i || apart(i - 1, i)) && (i === points.length - 1 || apart(i, i + 1));
-      out.push(lone ? { x: points[i][0] * 1000, y: points[i][idx], lone: true } : { x: points[i][0] * 1000, y: points[i][idx] });
+      const y = points[i][idx] * factor;
+      out.push(lone ? { x: points[i][0] * 1000, y, lone: true } : { x: points[i][0] * 1000, y });
     }
     return out;
   }
+  // The network chart's unit (1024-based): the one its highest minute reads
+  // in, so the axis steps in round numbers of it (2, 5, 10 KB/s…) instead of
+  // fractions of a MB/s; the tooltip keeps formatTrafficSpeed.
+  const TRAFFIC_UNITS = [['B/s', 1048576], ['KB/s', 1024], ['MB/s', 1], ['GB/s', 1 / 1024]];
+  function trafficUnit(points) {
+    let top = 0;
+    points.forEach((p) => { top = Math.max(top, p[4] || 0, p[5] || 0); });
+    return TRAFFIC_UNITS.find(([, f], i) => i === TRAFFIC_UNITS.length - 1 || top * f < 1024);
+  }
+  const trimNumber = (v) => String(Number(v.toFixed(2)));
   function resourceChartConfig(kind, points, dark) {
     const c = RESOURCE_COLORS[dark ? 'dark' : 'light'];
     const lang = getCurrentLanguage();
-    const ds = (label, data, color, fill, formatValue) => ({ label, data, borderColor: color, backgroundColor: fill ? `${color}1f` : color, fill: fill ? 'origin' : false, borderWidth: 1.5, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 3, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, formatValue });
-    const datasets = kind === 'cpu' ? [ds('CPU', resourceSeries(points, 1), c.cpu, true, pctLabel)]
-      : kind === 'mem' ? [ds(translations.resMem[lang], resourceSeries(points, 2), c.mem, true, pctLabel)]
-      : kind === 'disk' ? [ds(translations.resDisk[lang], resourceSeries(points, 3), c.disk, true, pctLabel)]
-      : [ds(translations.resNetIn[lang], resourceSeries(points, 4), c.in, false, formatTrafficSpeed), ds(translations.resNetOut[lang], resourceSeries(points, 5), c.out, false, formatTrafficSpeed)];
+    // Beszel's area charts: a 1 px line over its colour at 40 % (the network's
+    // two at 20 %, as its bandwidth chart)
+    const ds = (label, data, color, alpha, formatValue) => ({ label, data, borderColor: color, backgroundColor: `${color}${alpha}`, fill: 'origin', borderWidth: 1, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 3, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, formatValue });
+    const [unit, factor] = kind === 'net' ? trafficUnit(points) : ['', 1];
+    const speed = (v) => formatTrafficSpeed(v / factor);
+    const datasets = kind === 'cpu' ? [ds('CPU', resourceSeries(points, 1), c.cpu, '66', pctLabel)]
+      : kind === 'mem' ? [ds(translations.resMem[lang], resourceSeries(points, 2), c.mem, '66', pctLabel)]
+      : kind === 'disk' ? [ds(translations.resDisk[lang], resourceSeries(points, 3), c.disk, '66', pctLabel)]
+      : [ds(translations.resNetIn[lang], resourceSeries(points, 4, factor), c.in, '33', speed), ds(translations.resNetOut[lang], resourceSeries(points, 5, factor), c.out, '33', speed)];
     const bounds = tcpingAxisBounds(points[0][0] * 1000, points[points.length - 1][0] * 1000);
-    const tick = { color: axisLabelColor(dark), font: { size: 11 } };
+    const tick = { color: axisLabelColor(dark), font: { size: 12 } };
     const percentOfWhole = kind === 'mem' || kind === 'disk';
     return {
       type: 'line',
@@ -5153,15 +5183,19 @@ const apiBase = apiBaseProp ?? '';
         interaction: { mode: 'index', intersect: false },
         plugins: { legend: { display: false }, lossLane: false, tooltip: { enabled: false, external: tcpingTooltipExternal } },
         scales: {
+          // the TCPing chart's time axis: a 6 px #666 mark under each time
           x: { type: 'time', min: bounds.min, max: bounds.max, bounds: 'ticks',
             time: { displayFormats: { minute: 'HH:mm', hour: 'HH:mm', day: 'MM/dd HH:mm' }, tooltipFormat: 'yyyy-MM-dd HH:mm' },
-            ticks: { ...tick, maxRotation: 0, minRotation: 0, autoSkip: true, autoSkipPadding: 12 }, grid: { display: false }, border: { display: false }, afterBuildTicks: roundTimeTicks },
+            ticks: { ...tick, maxRotation: 0, minRotation: 0, maxTicksLimit: 12, autoSkip: true, autoSkipPadding: 12, padding: 3 },
+            grid: { display: true, drawOnChartArea: false, drawTicks: true, tickLength: 6, tickColor: '#666666', tickWidth: 1 },
+            border: { display: false }, afterBuildTicks: roundTimeTicks },
           // memory and disk as a share of the whole (0–100 %); CPU and the
           // network fitted to their own range, as the latency axis
           y: percentOfWhole
             ? { min: 0, max: 100, ticks: { ...tick, stepSize: 50, callback: (v) => `${v}%` }, grid: { color: gridLineColor(dark) }, border: { display: false } }
-            : { beginAtZero: true, afterDataLimits: (scale) => { scale.$dataMin = 0; scale.$dataMax = Math.max(scale.max, kind === 'cpu' ? 1 : 0.001); }, afterBuildTicks: latencyTicks,
-              ticks: { ...tick, maxTicksLimit: 5, callback: (v) => (kind === 'cpu' ? `${v}%` : formatTrafficSpeed(v)) }, grid: { color: gridLineColor(dark) }, border: { display: false } },
+            : { beginAtZero: true, afterDataLimits: (scale) => { scale.$dataMin = 0; scale.$dataMax = Math.max(scale.max, 1); }, afterBuildTicks: latencyTicks,
+              // the network's unit is in its card's line: its labels stay as narrow as the others'
+              ticks: { ...tick, maxTicksLimit: 6, callback: (v) => (kind === 'cpu' ? `${v}%` : trimNumber(v)) }, grid: { color: gridLineColor(dark) }, border: { display: false } },
         },
       },
     };
@@ -5184,6 +5218,14 @@ const apiBase = apiBaseProp ?? '';
     pane.querySelectorAll('.resource-card').forEach((card) => {
       try { entry.charts.push(new window.Chart(card.querySelector('canvas'), resourceChartConfig(card.dataset.resourceKind, entry.points, dark))); } catch (_) {}
     });
+    // the widest value axis for all four, so their plots (and times) line up
+    const axis = Math.max(0, ...entry.charts.map((ch) => (ch.scales.y ? ch.scales.y.width : 0)));
+    entry.charts.forEach((ch) => {
+      ch.options.scales.y.afterFit = (scale) => { scale.width = axis; };
+      ch.update('none');
+    });
+    const unitEl = pane.querySelector('[data-res-unit]');
+    if (unitEl) unitEl.textContent = trafficUnit(entry.points)[0];
   }
   async function refreshResourcePane(systemId) {
     const entry = resourcePanes.get(systemId);
@@ -5200,7 +5242,9 @@ const apiBase = apiBaseProp ?? '';
     stopResourcePane(systemId);
     const lang = getCurrentLanguage();
     if (!pane.querySelector('.resource-grid')) {
-      pane.innerHTML = `<div class="resource-grid">${RESOURCE_KINDS.map(([kind, title, desc]) => `<div class="resource-card" data-resource-kind="${kind}"><div class="resource-card-title" data-translate-detail="${title}">${translations[title][lang]}</div><div class="resource-card-desc" data-translate-detail="${desc}">${translations[desc][lang]}</div><div class="resource-plot"><canvas></canvas></div></div>`).join('')}</div><p class="resource-note" data-resource-note hidden></p>`;
+      const key = (k, label) => `<span class="res-key-item"><span class="res-key" style="--res-key:${RESOURCE_COLORS.light[k]};--res-key-dark:${RESOURCE_COLORS.dark[k]}"></span><span data-translate-detail="${label}">${translations[label][lang]}</span></span>`;
+      const desc = (kind, d) => (kind === 'net' ? `<div class="resource-card-desc res-keys">${key('in', 'resNetIn')}${key('out', 'resNetOut')}<span class="res-unit" data-res-unit></span></div>` : `<div class="resource-card-desc" data-translate-detail="${d}">${translations[d][lang]}</div>`);
+      pane.innerHTML = `<div class="resource-grid">${RESOURCE_KINDS.map(([kind, title, d]) => `<div class="resource-card" data-resource-kind="${kind}"><div class="resource-card-title" data-translate-detail="${title}">${translations[title][lang]}</div>${desc(kind, d)}<div class="resource-plot"><canvas></canvas></div></div>`).join('')}</div><p class="resource-note" data-resource-note hidden></p>`;
     }
     const entry = { container, points: null, charts: [], timer: 0, failed: false };
     resourcePanes.set(systemId, entry);
@@ -7555,9 +7599,10 @@ const apiBase = apiBaseProp ?? '';
      title stays for screen readers. */
   .chart-tabs { display: none; }
   html.resource-history .chart-tabs { display: inline-flex; align-items: center; height: 32px; padding: 3px; gap: 2px; border-radius: 10.8px; background: #f0f0f0; }
-  html.dark.resource-history .chart-tabs { background: #262626; }
-  .chart-tab { height: 26px; padding: 0 12px; border-radius: 8px; font-size: 13px; line-height: 26px; color: #595959; background: transparent; cursor: pointer; }
-  .chart-tab[aria-selected="true"] { background: #ffffff; color: #1d1d20; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); cursor: default; }
+  html.dark.resource-history .chart-tabs { background: rgb(38, 40, 43); }
+  .chart-tab { height: 26px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 500; line-height: 26px; color: #595959; background: transparent; cursor: pointer; }
+  /* Beszel's chosen tab: the page's ground (not white) */
+  .chart-tab[aria-selected="true"] { background: rgb(250, 250, 249); color: #1d1d20; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); cursor: default; }
   html.dark .chart-tab { color: #ababab; }
   html.dark .chart-tab[aria-selected="true"] { background: #171717; color: #f5f5f5; }
   .chart-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #837e79; }
@@ -7573,7 +7618,21 @@ const apiBase = apiBaseProp ?? '';
   html.dark .resource-card-title { color: #f5f5f5; }
   .resource-card-desc { margin-top: 2px; font-size: 12px; color: #595959; }
   html.dark .resource-card-desc { color: #ababab; }
-  .resource-plot { position: relative; height: 128px; margin-top: 8px; }
+  .resource-plot { position: relative; height: 160px; margin-top: 8px; }
+  .res-keys { display: flex; flex-wrap: wrap; column-gap: 12px; }
+  .res-key-item { display: inline-flex; align-items: center; gap: 6px; }
+  .res-unit:not(:empty)::before { content: '· '; }
+  .res-key { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--res-key); }
+  html.dark .res-key { background: var(--res-key-dark); }
+  /* phones: the charts span the card, one under another between hairlines
+     (a frame in a frame in the opened row left them 216 px wide) */
+  @media (max-width: 639.98px) {
+    .resource-grid { gap: 0; }
+    html .resource-card, html.dark .resource-card { padding: 14px 0 6px; border: 0; border-radius: 0; background: transparent; }
+    html .resource-card + .resource-card { border-top: 1px solid rgba(212, 212, 212, 0.5); }
+    html.dark .resource-card + .resource-card { border-top: 1px solid rgba(44, 44, 44, 0.6); }
+    html .resource-card:first-child, html.dark .resource-card:first-child { padding-top: 4px; }
+  }
   .resource-note { padding: 40px 8px; text-align: center; font-size: 13px; line-height: 20px; color: #595959; }
   html.dark .resource-note { color: #ababab; }
   @media (max-width: 639.98px) {
@@ -7735,8 +7794,9 @@ const apiBase = apiBaseProp ?? '';
   .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #a3a3a3; }
   html.dark .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #737373; }
   #system-table-header-row .lat-head-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* the sort arrow takes the colour's place, as it takes the icons' */
-  #system-table-header-row .sort-header:is(:hover, :focus-visible, [data-active="true"]) > .lat-key { display: none; }
+  /* a target keeps its colour while sorted (its only link to the chart):
+     the arrow comes after the name */
+  #system-table-header-row .lat-head .sort-header-arrow { order: 2; }
   /* the view menu: no resource fields or sorts in this view */
   html.list-latency #columns-dropdown :is(.sort-option, .column-option):is([data-sort="cpu"], [data-sort="memory"], [data-sort="disk"], [data-sort="net"], [data-sort="time"], [data-col="cpu"], [data-col="memory"], [data-col="disk"], [data-col="net"], [data-col="uptime"]) { display: none; }
   @media (min-width: 768px) {
