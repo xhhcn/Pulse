@@ -1820,10 +1820,8 @@ func main() {
 	go startClientPolling(rootCtx, store, broker, clientRegistry, ipCache)
 	go startTCPingPolling(rootCtx, clientRegistry, store)
 	go startTCPingCleanup(rootCtx, store)
-	// Resource history (自定义设置 → 资源历史): recorded only while switched on.
-	if cfg, err := store.GetNavbarConfig(); err == nil && cfg != nil {
-		setResourceHistoryEnabled(cfg.ResourceHistory)
-	}
+	// Resource history: each server's minutes, the last 24 hours, from the
+	// start (自定义设置 → 资源历史 only shows them).
 	go startResourceHistory(rootCtx, store)
 	go startIPCacheCleanup(rootCtx, ipCache)
 	go startTCPingCacheCleanup(rootCtx)
@@ -5019,9 +5017,6 @@ func handleSetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 		http.Error(w, fmt.Sprintf("failed to save navbar config: %v", err), http.StatusInternalServerError)
 		return
 	}
-	// Recording follows the switch at once (history.go).
-	setResourceHistoryEnabled(config.ResourceHistory)
-
 	// If SharedSecret changed, update all existing systems to use the new shared secret
 	if secretChanged {
 		systems, err := store.List()

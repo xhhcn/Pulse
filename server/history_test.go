@@ -33,7 +33,6 @@ func TestHistorySwitchesDefaultOffAndPublic(t *testing.T) {
 		}
 	}
 	setSwitches(t, store, true, true)
-	t.Cleanup(func() { setResourceHistoryEnabled(false) })
 	rr = httptest.NewRecorder()
 	handleGetNavbarConfig(store, rr, httptest.NewRequest(http.MethodGet, "/api/navbar/config", nil))
 	got = nil
@@ -41,23 +40,14 @@ func TestHistorySwitchesDefaultOffAndPublic(t *testing.T) {
 	if got["resource_history"] != true || got["latency_view"] != true {
 		t.Fatalf("saved switches not public: %s", rr.Body.String())
 	}
-	if !resourceHistoryOn.Load() {
-		t.Fatal("saving resource_history on did not start recording")
-	}
 }
 
-// Off: nothing is summed. On: one averaged sample per server and minute, the
-// current minute kept until it ends; switching off drops what was summed.
+// Recorded whatever the switch (it only shows the history): one averaged
+// sample per server and minute, the current minute kept until it ends.
 func TestResourceRecorderMinutes(t *testing.T) {
-	setResourceHistoryEnabled(false)
 	resourceRec.reset()
-	t.Cleanup(func() { setResourceHistoryEnabled(false); resourceRec.reset() })
+	t.Cleanup(func() { resourceRec.reset() })
 	base := time.Unix(1_800_000_000, 0).Truncate(time.Minute)
-	resourceRec.add(SystemMetric{ID: "a", CPU: 50}, base)
-	if got := resourceRec.take(base.Unix()/60 + 10); len(got) != 0 {
-		t.Fatalf("recorded while off: %+v", got)
-	}
-	setResourceHistoryEnabled(true)
 	for i, cpu := range []float64{10, 20, 30} {
 		resourceRec.add(SystemMetric{ID: "a", CPU: cpu, Memory: 40, Disk: 30, NetInMBps: 0.5, NetOutMBps: 0.25}, base.Add(time.Duration(i*15)*time.Second))
 	}
@@ -66,9 +56,8 @@ func TestResourceRecorderMinutes(t *testing.T) {
 	if len(got) != 1 || got[0].ID != "a" || got[0].Minute != base.Unix()/60 || got[0].CPU != 20 || got[0].Mem != 40 || got[0].In != 0.5 || got[0].Out != 0.25 {
 		t.Fatalf("minute average: %+v", got)
 	}
-	setResourceHistoryEnabled(false)
-	if left := resourceRec.take(base.Unix()/60 + 100); len(left) != 0 {
-		t.Fatalf("switching off kept the unwritten minute: %+v", left)
+	if left := resourceRec.take(base.Unix()/60 + 100); len(left) != 1 || left[0].CPU != 99 {
+		t.Fatalf("the next minute: %+v", left)
 	}
 }
 
@@ -128,7 +117,6 @@ func TestResourceHistoryEndpoint(t *testing.T) {
 		t.Fatalf("switched off: want 404, got %d", rr.Code)
 	}
 	setSwitches(t, store, true, false)
-	t.Cleanup(func() { setResourceHistoryEnabled(false) })
 	rr := get("?client_id=srv")
 	var body resourceHistoryResponse
 	if rr.Code != http.StatusOK || json.Unmarshal(rr.Body.Bytes(), &body) != nil || body.Interval != 60 || len(body.Points) != 1 || body.Points[0][1] != 12.35 || body.Points[0][4] != 0.5 {
@@ -219,9 +207,8 @@ func TestResourceRecorderLegacyIngest(t *testing.T) {
 	if err := store.Upsert(SystemMetric{ID: "old", Name: "Old"}); err != nil {
 		t.Fatal(err)
 	}
-	setResourceHistoryEnabled(true)
 	resourceRec.reset()
-	t.Cleanup(func() { setResourceHistoryEnabled(false); resourceRec.reset() })
+	t.Cleanup(func() { resourceRec.reset() })
 	rr := httptest.NewRecorder()
 	handleIngestMetric(store, nil, rr, jsonRequest(http.MethodPost, "/api/metrics", "", map[string]interface{}{"id": "old", "name": "Old", "uptime": 60, "cpu": 42.0, "memory": 50.0, "disk": 20.0}))
 	if rr.Code != http.StatusAccepted {

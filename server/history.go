@@ -4,16 +4,17 @@ package main
 // 自定义设置 switches, both off by default (NavbarConfig.ResourceHistory and
 // NavbarConfig.LatencyView).
 //
-// Resource history: while the switch is on, each agent push adds its CPU,
+// Resource history: from the server's start, each agent report adds its CPU,
 // memory and disk percentages and network speeds to the server's sums for
 // the current minute; once a minute the finished minutes are written as one
-// averaged sample per server and samples older than 24 hours are removed.
-// Nothing is recorded, written or read while the switch is off (samples
-// already stored still age out). Storage: a "resource_history" bucket with
+// averaged sample per server, and every ten minutes samples older than 24
+// hours are removed. The switch only shows them (the 资源 tab, and
+// GET /api/resource/history?client_id= answering), so a site that turns it
+// on sees its last day at once. Storage: a "resource_history" bucket with
 // one nested bucket per server, keyed by the minute (8-byte big endian),
-// each value five float32 (20 bytes): about 30 bytes a sample on disk, some
-// 8 MB for 129 servers' day. GET /api/resource/history?client_id= answers
-// one server's samples.
+// each value five float32 (20 bytes): about 45 bytes a sample on disk, some
+// 8 MB for 131 servers' day (their TCPing history: about 85 MB); one write
+// a minute.
 //
 // Latency summary: GET /api/tcping/summary answers every server's average
 // latency and loss per TCPing target over the last hour, computed from the
@@ -29,7 +30,6 @@ import (
 	"math"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	bolt "go.etcd.io/bbolt"
@@ -43,18 +43,6 @@ const (
 	latencySummaryWindow  = time.Hour
 	latencySummaryTTL     = time.Minute
 )
-
-// ---------- the switch ----------
-
-var resourceHistoryOn atomic.Bool
-
-// setResourceHistoryEnabled follows the saved setting. Turning it off drops
-// the minutes being summed (nothing more is written).
-func setResourceHistoryEnabled(on bool) {
-	if resourceHistoryOn.Swap(on) && !on {
-		resourceRec.reset()
-	}
-}
 
 // ---------- the per-minute sums ----------
 
@@ -81,9 +69,9 @@ func (rr *resourceRecorder) reset() {
 	rr.mu.Unlock()
 }
 
-// add counts one push of a server into its minute (no-op while off).
+// add counts one report of a server into its minute.
 func (rr *resourceRecorder) add(m SystemMetric, at time.Time) {
-	if !resourceHistoryOn.Load() || m.ID == "" {
+	if m.ID == "" {
 		return
 	}
 	k := resourceKey{id: m.ID, minute: at.Unix() / 60}
@@ -306,14 +294,7 @@ func startResourceHistory(ctx context.Context, store *Store) {
 			return
 		case <-time.After(next.Sub(now)):
 		}
-		if resourceHistoryOn.Load() {
-			flushResourceHistory(store, time.Now())
-		} else if time.Now().Minute()%10 == 0 {
-			// switched off: what is stored still ages out
-			if err := store.PruneResourceHistory(time.Now().Add(-resourceHistoryWindow)); err != nil {
-				log.Printf("⚠️ resource history prune: %v", err)
-			}
-		}
+		flushResourceHistory(store, time.Now())
 	}
 }
 
