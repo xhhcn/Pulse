@@ -1440,11 +1440,12 @@ const apiBase = apiBaseProp ?? '';
   // that is unlikely to collide with real-world tag words.
   //
   // Shared design rules across all three families (keep in sync):
-  //   • Saturation band: Tailwind **600**. Deep enough that white text
-  //     keeps > 3:1 contrast on every stop (no text-shadow needed),
-  //     light enough to still read as a coloured badge rather than a
-  //     muddy pill. 600 also visually matches the grey UI tags next to
-  //     it in weight, which was a hard-won result of earlier tuning.
+  //   • Saturation band: Tailwind **600**, or **700** where white text on
+  //     the 600 shade stays under 4.5:1 (the text minimum for the badges'
+  //     12 px, 10 px on phones). Every stop now gives white text 4.6:1 or
+  //     more, without a text-shadow, and still reads as a coloured badge
+  //     rather than a muddy pill. The 700s are the lighter yellow, green,
+  //     teal and orange, where 600 gave only 2.9–3.7:1.
   //   • Stop count: **3** only. Each stop gets ~9 px of a ~28 px short
   //     badge ("vip", "pro"), which is the maximum the eye reads as
   //     smooth flow rather than discrete bands.
@@ -1463,18 +1464,18 @@ const apiBase = apiBaseProp ?? '';
     // feel but still decorative (pink end pulls it away from pure alert
     // red). Good for "hot", "priority", "danger"-flavoured labels.
     r: 'linear-gradient(90deg, ' +
-      '#dc2626 0%, '   + // red-600
-      '#ea580c 50%, '  + // orange-600
-      '#db2777 100%'   + // pink-600
+      '#dc2626 0%, '   + // red-600 (4.8:1)
+      '#c2410c 50%, '  + // orange-700 (5.2:1; orange-600 was 3.6:1)
+      '#db2777 100%'   + // pink-600 (4.6:1)
       ')',
     // y: golden meadow — amber → green → teal. Warm-to-cool neutral
     // bridge; feels "natural" / "balanced". Good for "standard",
     // "staff", "maintenance"-flavoured labels that are neither warning
     // nor premium.
     y: 'linear-gradient(90deg, ' +
-      '#ca8a04 0%, '   + // amber-600 (deep gold, still legible on white)
-      '#16a34a 50%, '  + // green-600
-      '#0d9488 100%'   + // teal-600
+      '#a16207 0%, '   + // yellow-700, deep gold (4.9:1; 600 was 2.9:1)
+      '#15803d 50%, '  + // green-700 (5.0:1; 600 was 3.3:1)
+      '#0f766e 100%'   + // teal-700 (5.5:1; 600 was 3.7:1)
       ')',
     // b: cosmic — blue → purple → fuchsia. Cool iridescent / "premium"
     // feel in line with Apple achievements / GitHub Sponsor badges.
@@ -1603,8 +1604,8 @@ const apiBase = apiBaseProp ?? '';
                   // background and white text (required for contrast;
                   // grey would be illegible on every gradient stop).
                   // No text-shadow, no box-shadow, no border — the
-                  // 600-band gradients are dark enough on their own
-                  // that white text reads cleanly.
+                  // gradients' 600 / 700 stops are dark enough on their
+                  // own that white text reads cleanly (4.6:1 or more).
                   const colorKey = tag[2].toLowerCase(); // 'r' | 'y' | 'b'
                   const gradient = RAINBOW_GRADIENTS[colorKey];
                   const label = tag.slice(4).trim();
@@ -4662,8 +4663,18 @@ const apiBase = apiBaseProp ?? '';
             afterBuildTicks: roundTimeTicks,
             // Chart.js keeps the label padding free under the time labels as
             // well as above them: with the loss band's 28 px that was 24 px of
-            // blank card under the times, taken from the plot.
-            afterFit: (scale) => { if (lossLaneOn) scale.height = Math.max(0, scale.height - (LOSS_LANE_LABEL_PADDING - 3)); }
+            // blank card under the times, taken from the plot. It adds the
+            // padding to the plot's two ends as well (_calculatePadding),
+            // where the regular 3 px are all the end labels need: with the
+            // last time near the right edge, up to 25 px of blank card there
+            // (14 px measured on a phone).
+            afterFit: (scale) => {
+              if (!lossLaneOn) return;
+              const extra = LOSS_LANE_LABEL_PADDING - 3;
+              scale.height = Math.max(0, scale.height - extra);
+              scale.paddingLeft = Math.max(0, scale.paddingLeft - extra);
+              scale.paddingRight = Math.max(0, scale.paddingRight - extra);
+            }
           },
           // Fitted to the lines with room above them, never below 0 ms
           // (latencyTicks, from the visible lines' own range).
@@ -5184,8 +5195,10 @@ const apiBase = apiBaseProp ?? '';
     const c = RESOURCE_COLORS[dark ? 'dark' : 'light'];
     const lang = getCurrentLanguage();
     // Beszel's area charts: a 1 px line over its colour at 40 % (the network's
-    // two at 20 %, as its bandwidth chart)
-    const ds = (label, data, color, alpha, formatValue) => ({ label, data, borderColor: color, backgroundColor: `${color}${alpha}`, fill: 'origin', borderWidth: 1, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 3, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, formatValue });
+    // two at 20 %, as its bandwidth chart). The line and its dots drawn whole
+    // at the plot's top and bottom: on the fixed 0–100 % axes Chart.js clipped
+    // half of a line at 0 % (a disk at 0.03 % looked empty) or 100 %.
+    const ds = (label, data, color, alpha, formatValue) => ({ label, data, borderColor: color, backgroundColor: `${color}${alpha}`, fill: 'origin', borderWidth: 1, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 3, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, clip: { left: 0, top: 4, right: 0, bottom: 4 }, formatValue });
     const [unit, factor] = kind === 'net' ? trafficUnit(points) : ['', 1];
     const speed = (v) => formatTrafficSpeed(v / factor);
     const datasets = kind === 'cpu' ? [ds('CPU', resourceSeries(points, 1), c.cpu, '66', pctLabel)]
@@ -5345,7 +5358,14 @@ const apiBase = apiBaseProp ?? '';
   }
   // the chart's colour for the target, as in its legend
   const latencyKeyStyle = (i) => `--lat-key:${TCPING_LINE_COLORS_LIGHT[i % TCPING_LINE_COLORS_LIGHT.length]};--lat-key-dark:${TCPING_LINE_COLORS_DARK[i % TCPING_LINE_COLORS_DARK.length]}`;
-  const lossText = (v) => `${v < 10 ? Number(v.toFixed(2)) : Number(v.toFixed(1))}%`;
+  // A loss share, written the same in the 延迟 view and the chart's legend:
+  // two decimals under 10 %, one from there, 100 % whole (1.67%, 5.00%,
+  // 20.0%, 100%). The view used to drop trailing zeros: one column read 5%
+  // beside 1.67%, and the legend 5.00% for the same loss.
+  const lossPercent = (v) => {
+    const t = v < 9.995 ? v.toFixed(2) : v.toFixed(1);
+    return `${t === '100.0' ? '100' : t}%`;
+  };
   // The table's columns in this view, by the width's tier (the CSS tiers'
   // breakpoints) and the fields the visitor hid (location, OS): the name,
   // the location, a column per target, the OS. The minimum width follows
@@ -5375,7 +5395,7 @@ const apiBase = apiBaseProp ?? '';
     return latencyTargets().map((t, i) => {
       const st = latencyStat(id, t.address);
       const answered = st && st.avg !== null && st.avg !== undefined;
-      const loss = st && st.loss > 0 ? `<span class="lat-loss">${escapeHtml(lossText(st.loss))}</span>` : '';
+      const loss = st && st.loss > 0 ? `<span class="lat-loss">${escapeHtml(lossPercent(st.loss))}</span>` : '';
       return `<span class="lat-item"><span class="lat-key" style="${latencyKeyStyle(i)}"></span><span class="lat-name">${escapeHtml(t.name || t.address)}</span><span class="lat-value"><span class="lat-ms${answered ? '' : ' lat-none'}">${answered ? `${Math.round(st.avg)} ms` : '-'}</span>${loss}</span></span>`;
     }).join('');
   }
@@ -5544,7 +5564,7 @@ const apiBase = apiBaseProp ?? '';
       const lossCell = tab.querySelector('[data-tcping-tab-loss]');
       const lost = probes - n;
       const pct = probes ? (lost / probes) * 100 : 0;
-      const lossText = !bandOn && n && lost > 0 ? translations.tcpingTabLoss[lang].replace('{pct}', `${pct < 10 ? pct.toFixed(2) : pct.toFixed(1)}%`) : '';
+      const lossText = !bandOn && n && lost > 0 ? translations.tcpingTabLoss[lang].replace('{pct}', lossPercent(pct)) : '';
       if (lossCell && lossCell.textContent !== lossText) lossCell.textContent = lossText;
     });
   }
@@ -7657,6 +7677,17 @@ const apiBase = apiBaseProp ?? '';
      picker right (Beszel's chart time select: history icon, span, chevron;
      its list with a check by the span shown). */
   .tcping-tools { display: flex; flex: none; align-items: center; }
+  /* Phones: the tabs (or the title) and the picker on the first row, the
+     line under them on a row of its own across the card, as Beszel's phone
+     chart cards. In the left column it was held to the tabs' 170 px and
+     wrapped (English) beside the empty space under the picker. */
+  @media (max-width: 639.98px) {
+    html .tcping-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 0; align-items: start; }
+    html .tcping-head > .min-w-0 { display: contents; }
+    html .tcping-head > .min-w-0 > :not(.mt-1) { grid-column: 1; grid-row: 1; justify-self: start; }
+    html .tcping-head > .tcping-tools { grid-column: 2; grid-row: 1; }
+    html .tcping-head > .min-w-0 > .mt-1 { grid-column: 1 / -1; grid-row: 2; }
+  }
   /* 自定义设置 → 资源历史: 延迟 | 资源 in the chart card's title place
      (Beszel's tabs: a muted track, the chosen tab on the card's ground); the
      title stays for screen readers. */
@@ -7861,7 +7892,10 @@ const apiBase = apiBaseProp ?? '';
   html.dark .lat-ms { color: #f5f5f5; }
   .lat-ms.lat-none { color: #595959; }
   html.dark .lat-ms.lat-none { color: #ababab; }
-  .lat-loss { color: #fb2c36; font-size: 0.86em; }
+  /* the loss in the 离线 chip's reds (red-700 / red-300): #fb2c36, the loss
+     band's, was 3.8:1 on white as 12 px text */
+  .lat-loss { color: #b91c1c; font-size: 0.86em; }
+  html.dark .lat-loss { color: #fca5a5; }
   .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #a3a3a3; }
   html.dark .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #737373; }
   #system-table-header-row .lat-head-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

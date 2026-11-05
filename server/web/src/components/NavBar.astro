@@ -483,6 +483,29 @@ const { isAdmin = false, bare = false } = Astro.props;
             copy.alt = '';
             copy.style.cssText = 'object-fit: contain; display: block;';
             copy.addEventListener('error', () => { loginMark.innerHTML = loginMark._pulseMark; });
+          } else {
+            // The navbar keeps its own copy (hidden on this page), and a
+            // url(#id) or href="#id" finds the first element with that id:
+            // the hidden copy's, where a gradient, mask or clip path draws
+            // nothing, so such a logo showed blank here. The copy's ids get
+            // a suffix and its references follow them.
+            const renamed = new Map();
+            [copy, ...copy.querySelectorAll('[id]')].forEach((el) => {
+              if (!el.id) return;
+              const next = `${el.id}-login`;
+              renamed.set(el.id, next);
+              el.id = next;
+            });
+            if (renamed.size) {
+              const swap = (v) => v.replace(/url\(\s*(['"]?)#([^'")\s]+)\1\s*\)/g, (m, q, id) => (renamed.has(id) ? `url(#${renamed.get(id)})` : m));
+              [copy, ...copy.querySelectorAll('*')].forEach((el) => {
+                Array.from(el.attributes).forEach((attr) => {
+                  const v = attr.value.trim();
+                  const next = /(^|:)href$/i.test(attr.name) && v.startsWith('#') && renamed.has(v.slice(1)) ? `#${renamed.get(v.slice(1))}` : swap(attr.value);
+                  if (next !== attr.value) attr.value = next;
+                });
+              });
+            }
           }
           loginMark.replaceChildren(copy);
         } else {
