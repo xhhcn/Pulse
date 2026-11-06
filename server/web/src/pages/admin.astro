@@ -262,14 +262,20 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
                 // Has <script> tags - parse and inject each
                 scriptMatches.forEach(function(scriptData) {
                   var script = document.createElement('script');
-                  
-                  // Check if it has src attribute (external script)
-                  var srcMatch = scriptData.attrs.match(/src=["']([^"']+)["']/);
-                  if (srcMatch) {
-                    script.src = srcMatch[1];
-                    // Force synchronous loading for external scripts
-                    script.async = false;
-                    script.defer = false;
+                  // Every attribute as written (data-* for trackers such as Umami's
+                  // data-website-id, type, integrity, crossorigin, async/defer...): only
+                  // src was copied, and its pattern stopped at a quote inside the URL.
+                  var tpl = document.createElement('template');
+                  tpl.innerHTML = '<script' + scriptData.attrs + '></scr' + 'ipt>';
+                  var parsed = tpl.content.firstElementChild;
+                  if (parsed) {
+                    for (var ai = 0; ai < parsed.attributes.length; ai++) {
+                      script.setAttribute(parsed.attributes[ai].name, parsed.attributes[ai].value);
+                    }
+                  }
+                  if (script.hasAttribute('src')) {
+                    // in order, as before, unless the tag itself says async or defer
+                    if (!script.hasAttribute('async') && !script.hasAttribute('defer')) script.async = false;
                   } else if (scriptData.content.trim()) {
                     // Inline script
                     script.textContent = scriptData.content;

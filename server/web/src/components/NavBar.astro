@@ -14,7 +14,9 @@ const { isAdmin = false, bare = false } = Astro.props;
 
 <nav class={bare ? 'fixed right-3 top-3 z-20' : 'glass-nav mx-auto mt-4 max-w-[1568px] flex items-center justify-between rounded-[10.8px] border border-[#404040]/50 bg-[#1c1c1c] dark:border-[#2c2c2c]/60 dark:bg-[#1a1a1a] border-[#d4d4d4]/50 bg-white ps-4 pe-3 sm:px-6 py-0 h-14 md:h-16'}>
   <!-- Logo -->
-  <a href="/" id="navbar-home-link" class={bare ? 'hidden' : 'flex items-center gap-1.5 sm:gap-2'}>
+  <!-- min-w-0 + truncate: a long site name stays on one line, cut before
+       the buttons (it wrapped to 2–3 lines out of the 56 px phone bar) -->
+  <a href="/" id="navbar-home-link" class={bare ? 'hidden' : 'flex min-w-0 items-center gap-1.5 sm:gap-2'}>
     <!-- Logo Container -->
     <span id="navbar-logo-container" class="shrink-0" style="opacity: 0;">
       <svg width="20" height="20" class="sm:w-6 sm:h-6 monitor-icon default-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="--monitor-stroke: #24292f;">
@@ -26,7 +28,7 @@ const { isAdmin = false, bare = false } = Astro.props;
       </svg>
     </span>
     <!-- Text Container -->
-    <span id="navbar-text" class="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-[#1d1d20] dark:text-white" style="opacity: 0;">Pulse</span>
+    <span id="navbar-text" class="min-w-0 truncate text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-[#1d1d20] dark:text-white" style="opacity: 0;">Pulse</span>
   </a>
 
   <!-- Right Side Icons -->

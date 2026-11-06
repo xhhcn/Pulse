@@ -326,14 +326,14 @@ const customCodePlaceholder = [
                 type="number"
                 id="tcping-interval"
                 name="interval"
-                min="1"
+                min="5"
                 max="86400"
                 required
                 class="w-32 toolbar-control px-3 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <span class="text-sm text-[#595959] dark:text-[#ababab] shrink-0" data-translate="seconds">seconds</span>
             </div>
-            <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="pollingIntervalDesc">How often the clients run their TCPing probes</p>
+            <p class="mt-1 text-xs text-[#595959] dark:text-[#ababab]" data-translate="pollingIntervalDesc">How often the clients run their TCPing probes: 5 seconds to a day</p>
           </div>
 
           <div>
@@ -753,18 +753,18 @@ const customCodePlaceholder = [
 
           <!-- Current Share Link -->
           <div id="current-share-link-container" class="hidden">
-            <label for="current-share-link" class="mb-1 block text-xs font-medium text-[#595959] dark:text-[#ababab]" data-translate="currentShareLink">Current Share Link</label>
+            <label for="current-share-link" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="currentShareLink">Current Share Link</label>
             <div class="flex items-center gap-2">
               <input
                 type="text"
                 id="current-share-link"
                 readonly
-                class="flex-1 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#282828] dark:bg-[#282828] bg-[#f5f5f5] px-3 py-2 text-xs text-[#1d1d20] dark:text-[#d4d4d4]"
+                class="toolbar-control flex-1 min-w-0 px-3 text-sm"
               />
               <button
                 type="button"
                 id="copy-share-link-btn"
-                class="shrink-0 whitespace-nowrap rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white px-3 py-2 text-xs font-medium text-[#1d1d20] dark:text-[#d4d4d4] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0]"
+                class="toolbar-control toolbar-btn shrink-0"
                 data-translate="copy">Copy</button>
             </div>
             <p id="token-expires-info" class="mt-1 text-xs text-[#595959] dark:text-[#ababab]"></p>
@@ -1522,7 +1522,7 @@ const customCodePlaceholder = [
         throw new Error(error || `HTTP ${res.status}`);
       }
     } catch (err) {
-      alert(adminTranslations.deleteServiceFailed[adminLang()] + err.message);
+      showMessage(adminTranslations.deleteServiceFailed[adminLang()] + err.message, 'error');
     } finally {
       if (confirmDeleteBtn) {
         confirmDeleteBtn.disabled = false;
@@ -1696,17 +1696,14 @@ const customCodePlaceholder = [
     }
     const statusLine = status ? `<span class="basis-full text-[#b45309] dark:text-[#fbbf24]">${status}</span>` : '';
     if (!items.length) return statusLine || '<span class="invisible">-</span>';
-    let first = { all: true, phone: true };
-    return items.map((item) => {
-      const dotAll = first.all ? '' : '· ';
-      const dotPhone = first.phone ? '' : '· ';
-      first.all = false;
-      if (item.phone) first.phone = false;
-      // the dot can differ on phones, where an item before it may be left out
-      return item.phone
-        ? `<span class="inline-flex items-center gap-1 whitespace-nowrap"><span class="hidden sm:inline" aria-hidden="true">${dotAll}</span><span class="sm:hidden" aria-hidden="true">${dotPhone}</span>${item.html}</span>`
-        : `<span class="hidden sm:inline-flex items-center gap-1 whitespace-nowrap"><span aria-hidden="true">${dotAll}</span>${item.html}</span>`;
-    }).join('') + statusLine;
+    // Each item carries its dot in the gap before it (global.css
+    // .admin-sub-dot); the line clips the dot of an item that starts a line,
+    // which read "· 客户端 1.3.34" when the line wrapped. Items left out on
+    // phones take their dot with them.
+    const dot = '<span class="admin-sub-dot" aria-hidden="true">·</span>';
+    return items.map((item) => (item.phone
+      ? `<span class="admin-sub-item inline-flex items-center gap-1 whitespace-nowrap">${dot}${item.html}</span>`
+      : `<span class="admin-sub-item hidden sm:inline-flex items-center gap-1 whitespace-nowrap">${dot}${item.html}</span>`)).join('') + statusLine;
   }
   const adminSublineKey = (s) => [s.location, s.virtualization_type, s.os, s.agent_version, isAwaitingClient(s), newestAgentVersion, adminLang()].join('|');
   function refreshAdminSubline(row, s) {
@@ -1748,7 +1745,7 @@ const customCodePlaceholder = [
               <div class="admin-name-col flex flex-col gap-1 flex-shrink-0 lg:w-[250px]" style="flex-shrink: 1; min-width: 0; max-width: 250px;">
                 <span class="system-name text-sm font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" style="word-break: break-word; overflow-wrap: break-word; display: block;">${adminNameHTML(system.name)}</span>
                 <!-- Location, kind of machine, OS, client (adminSublineHTML) -->
-                <div class="admin-subline flex flex-wrap items-center gap-x-1 gap-y-0.5 text-xs text-[#595959] dark:text-[#ababab] min-h-[16px]" data-key="${escapeHtmlAttr(adminSublineKey(system))}">${adminSublineHTML(system)}</div>
+                <div class="admin-subline flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[#595959] dark:text-[#ababab] min-h-[16px]" data-key="${escapeHtmlAttr(adminSublineKey(system))}">${adminSublineHTML(system)}</div>
               </div>
               
               ${(system.ipv4 || system.ipv6) ? `
@@ -2897,7 +2894,7 @@ const customCodePlaceholder = [
       markListReady();
       container.innerHTML = `
         <div class="text-center py-12">
-          <p class="text-sm text-red-500 dark:text-red-400">${adminT('loadServicesError')}</p>
+          <p class="text-sm text-red-700 dark:text-red-400">${adminT('loadServicesError')}</p>
           <p class="text-xs text-[#595959] dark:text-[#ababab] mt-2">${escapeHtml(err.message || adminT('unknownError'))}</p>
         </div>
       `;
@@ -2942,11 +2939,26 @@ const customCodePlaceholder = [
   }
 
   // Show temporary message
+  // An error inside a dialog goes on its message line (never the browser's
+  // alert box, which blocked the page and looked like no other part of it).
+  function showFormError(id, text) {
+    const el = document.getElementById(id);
+    if (!el) { showMessage(text, 'error'); return; }
+    el.className = 'text-sm text-red-700 dark:text-red-400';
+    el.setAttribute('role', 'alert');
+    el.textContent = text;
+  }
+  function clearFormMessage(id) {
+    const el = document.getElementById(id);
+    if (el) { el.className = 'hidden text-sm'; el.textContent = ''; el.removeAttribute('role'); }
+  }
   function showMessage(text, type = 'info') {
     const messageEl = document.createElement('div');
     // Beszel's toast: a card with an icon (red only for an error).
     messageEl.setAttribute('role', type === 'error' ? 'alert' : 'status');
-    messageEl.className = `fixed top-4 right-4 z-50 flex max-w-[min(92vw,380px)] items-center gap-2.5 rounded-[10px] border px-4 py-3 text-sm font-medium shadow-lg ${
+    // top right on phones, bottom right from 640 px (as upstream): at the
+    // top it covered the navbar's language, theme and home buttons for 3 s
+    messageEl.className = `fixed top-4 right-4 sm:top-auto sm:bottom-4 z-50 flex max-w-[min(92vw,380px)] items-center gap-2.5 rounded-[10px] border px-4 py-3 text-sm font-medium shadow-lg ${
       type === 'error'
         ? 'border-[#dc2626] bg-[#dc2626] text-white'
         : 'pulse-toast border-[#e5e5e5] dark:border-[#2b2b2b] bg-white dark:bg-[#1a1a1a] text-[#1d1d20] dark:text-[#f5f5f5]'
@@ -3168,7 +3180,7 @@ const customCodePlaceholder = [
       const systemName = formData.get('name')?.trim();
       if (!systemName) {
         if (messageEl) {
-          messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+          messageEl.className = 'text-sm text-red-700 dark:text-red-400';
           messageEl.textContent = '❌ ' + adminT('serviceNameRequired');
           messageEl.classList.remove('hidden');
         }
@@ -3196,7 +3208,7 @@ const customCodePlaceholder = [
         /* Without the current list we cannot pick a free id; guessing
            "1" would silently overwrite an existing system. */
         if (messageEl) {
-          messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+          messageEl.className = 'text-sm text-red-700 dark:text-red-400';
           messageEl.textContent = '❌ ' + adminT('loadServicesFailed') + err.message;
           messageEl.classList.remove('hidden');
         }
@@ -3245,7 +3257,7 @@ const customCodePlaceholder = [
         }
       } catch (err) {
         if (messageEl) {
-          messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+          messageEl.className = 'text-sm text-red-700 dark:text-red-400';
           messageEl.textContent = '❌ ' + adminT('addServiceFailed') + err.message;
           messageEl.classList.remove('hidden');
         }
@@ -3270,9 +3282,10 @@ const customCodePlaceholder = [
 
       // Validate
       if (!systemId || !systemName || systemId.trim() === '' || systemName.trim() === '') {
-        alert(adminTranslations.serviceNameRequired[adminLang()]);
+        showFormError('edit-form-message', adminTranslations.serviceNameRequired[adminLang()]);
         return;
       }
+      clearFormMessage('edit-form-message');
 
       // Disable submit button during request
       if (submitBtn) {
@@ -3317,7 +3330,7 @@ const customCodePlaceholder = [
           throw new Error(errorText || `HTTP ${res.status}`);
         }
       } catch (err) {
-        alert(adminTranslations.updateServiceFailed[adminLang()] + err.message);
+        showFormError('edit-form-message', adminTranslations.updateServiceFailed[adminLang()] + err.message);
       } finally {
         // Re-enable submit button
         if (submitBtn) {
@@ -3425,7 +3438,9 @@ const customCodePlaceholder = [
 
       let errorMessage = '';
       try {
-        const res = await fetch(apiBase + '/api/admin/backup', {
+        // gz=1: compressed on the wire (a tenth of the size), unpacked by the
+        // browser, so the file saved is the database itself
+        const res = await fetch(apiBase + '/api/admin/backup?gz=1', {
           method: 'GET',
           headers: { 'Authorization': 'Bearer ' + token },
         });
@@ -3462,7 +3477,7 @@ const customCodePlaceholder = [
       if (errorMessage) {
         const lang = (document.documentElement.getAttribute('lang') || 'en').indexOf('zh') === 0 ? 'zh' : 'en';
         const prefix = lang === 'zh' ? '下载备份失败：' : 'Failed to download backup: ';
-        alert(prefix + errorMessage);
+        showMessage(prefix + errorMessage, 'error');
       }
     });
   }
@@ -3518,14 +3533,14 @@ const customCodePlaceholder = [
       if (!currentPassword || !newPassword || !confirmNewPassword) {
         changePasswordFormMessage.textContent = t('fillAllFields');
         changePasswordFormMessage.classList.remove('hidden');
-        changePasswordFormMessage.classList.add('text-red-500', 'dark:text-red-400');
+        changePasswordFormMessage.classList.add('text-red-700', 'dark:text-red-400');
         return;
       }
 
       if (newPassword.length < 6) {
         changePasswordFormMessage.textContent = t('newPasswordTooShort');
         changePasswordFormMessage.classList.remove('hidden');
-        changePasswordFormMessage.classList.add('text-red-500', 'dark:text-red-400');
+        changePasswordFormMessage.classList.add('text-red-700', 'dark:text-red-400');
         return;
       }
 
@@ -3533,14 +3548,14 @@ const customCodePlaceholder = [
       if (newPassword.length > 128) {
         changePasswordFormMessage.textContent = t('newPasswordTooLong');
         changePasswordFormMessage.classList.remove('hidden');
-        changePasswordFormMessage.classList.add('text-red-500', 'dark:text-red-400');
+        changePasswordFormMessage.classList.add('text-red-700', 'dark:text-red-400');
         return;
       }
 
       if (newPassword !== confirmNewPassword) {
         changePasswordFormMessage.textContent = t('newPasswordsDoNotMatch');
         changePasswordFormMessage.classList.remove('hidden');
-        changePasswordFormMessage.classList.add('text-red-500', 'dark:text-red-400');
+        changePasswordFormMessage.classList.add('text-red-700', 'dark:text-red-400');
         return;
       }
 
@@ -3586,7 +3601,7 @@ const customCodePlaceholder = [
         changePasswordFormMessage.textContent = err.name === 'Error' && err.message ? err.message : t('changePasswordFailed');
         changePasswordFormMessage.classList.remove('hidden');
         changePasswordFormMessage.classList.remove('text-emerald-600', 'dark:text-emerald-400', 'text-emerald-400');
-        changePasswordFormMessage.classList.add('text-red-500', 'dark:text-red-400');
+        changePasswordFormMessage.classList.add('text-red-700', 'dark:text-red-400');
       } finally {
         // Re-enable submit button
         if (submitBtn) {
@@ -3717,7 +3732,7 @@ const customCodePlaceholder = [
       const messageEl = document.getElementById(messageId);
       if (messageEl) {
         messageEl.textContent = adminT('settingsLoadFailed');
-        messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+        messageEl.className = 'text-sm text-red-700 dark:text-red-400';
       }
     });
   }
@@ -3964,7 +3979,7 @@ const customCodePlaceholder = [
       if (msUntilExpiry > MAX_DELAY) { scheduleExpiryLabel(msUntilExpiry - MAX_DELAY); return; }
       if (tokenExpiresInfo) {
         tokenExpiresInfo.textContent = adminTranslations.shareExpired[adminLang()];
-        tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
+        tokenExpiresInfo.className = 'mt-1 text-xs text-red-700 dark:text-red-400';
       }
     }, delay);
   }
@@ -4055,7 +4070,7 @@ const customCodePlaceholder = [
             if (config.token_expired === true) {
               // Token is already expired according to server
               tokenExpiresInfo.textContent = adminTranslations.shareExpired[adminLang()];
-              tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
+              tokenExpiresInfo.className = 'mt-1 text-xs text-red-700 dark:text-red-400';
             } else {
               // Calculate time difference using server time
               const timeDiff = expiresDate.getTime() - serverTime.getTime();
@@ -4070,7 +4085,7 @@ const customCodePlaceholder = [
               } else {
                 // Token is expired or will expire within 1 second
                 tokenExpiresInfo.textContent = adminTranslations.shareExpired[adminLang()];
-                tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
+                tokenExpiresInfo.className = 'mt-1 text-xs text-red-700 dark:text-red-400';
               }
             }
           }
@@ -4132,7 +4147,7 @@ const customCodePlaceholder = [
     const timeDiff = expiresDate.getTime() - serverTime.getTime();
     if (isNaN(timeDiff) || cfg.token_expired === true || timeDiff <= 1000) {
       tokenExpiresInfo.textContent = adminTranslations[isNaN(timeDiff) ? 'shareExpiryInvalid' : 'shareExpired'][adminLang()];
-      tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
+      tokenExpiresInfo.className = 'mt-1 text-xs text-red-700 dark:text-red-400';
       return;
     }
     tokenExpiresInfo.textContent = shareExpiresText(formatDate(cfg.token_expires));
@@ -4146,7 +4161,7 @@ const customCodePlaceholder = [
   generateShareLinkBtn?.addEventListener('click', async () => {
     const hours = parseInt(tokenExpiresHoursInput?.value || '1');
     if (!(hours >= 1 && hours <= 720)) {
-      alert(adminTranslations.shareHoursInvalid[adminLang()]);
+      showFormError('privacy-config-message', adminTranslations.shareHoursInvalid[adminLang()]);
       return;
     }
     const messageEl = document.getElementById('privacy-config-message');
@@ -4166,7 +4181,7 @@ const customCodePlaceholder = [
       generateShareLinkBtn.disabled = false;
       if (messageEl) {
         messageEl.textContent = adminT('shareLinkCreateFailed');
-        messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+        messageEl.className = 'text-sm text-red-700 dark:text-red-400';
       }
       return;
     }
@@ -4218,7 +4233,7 @@ const customCodePlaceholder = [
     } catch (err) {
       if (messageEl) {
         messageEl.textContent = adminT('shareLinkRevokeFailed');
-        messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+        messageEl.className = 'text-sm text-red-700 dark:text-red-400';
       }
       revokeShareLinkBtn.disabled = false;
       return;
@@ -4300,11 +4315,11 @@ const customCodePlaceholder = [
             if (isNaN(expiresDate.getTime())) {
               // Invalid expiration date from server
               tokenExpiresInfo.textContent = adminTranslations.shareExpiryInvalid[adminLang()];
-              tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
+              tokenExpiresInfo.className = 'mt-1 text-xs text-red-700 dark:text-red-400';
             } else if (responseData.config.token_expired === true) {
               // Token is already expired according to server
               tokenExpiresInfo.textContent = adminTranslations.shareExpired[adminLang()];
-              tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
+              tokenExpiresInfo.className = 'mt-1 text-xs text-red-700 dark:text-red-400';
             } else {
               // Calculate time difference using server time
               const timeDiff = expiresDate.getTime() - serverTime.getTime();
@@ -4318,7 +4333,7 @@ const customCodePlaceholder = [
               } else {
                 // Token is expired or will expire within 1 second
                 tokenExpiresInfo.textContent = adminTranslations.shareExpired[adminLang()];
-                tokenExpiresInfo.className = 'mt-1 text-xs text-red-500 dark:text-red-400';
+                tokenExpiresInfo.className = 'mt-1 text-xs text-red-700 dark:text-red-400';
               }
             }
           }
@@ -4344,7 +4359,7 @@ const customCodePlaceholder = [
         setButtonLabel(submitBtn, 'save');
       }
       if (messageEl) {
-        messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+        messageEl.className = 'text-sm text-red-700 dark:text-red-400';
         messageEl.textContent = '❌ ' + adminT('savePrivacyFailed') + err.message;
         messageEl.classList.remove('hidden');
       }
@@ -4507,7 +4522,7 @@ const customCodePlaceholder = [
         setButtonLabel(submitBtn, 'save');
       }
       if (messageEl) {
-        messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+        messageEl.className = 'text-sm text-red-700 dark:text-red-400';
         messageEl.textContent = '❌ ' + adminT('saveCustomizationFailed') + err.message;
         messageEl.classList.remove('hidden');
       }
@@ -4552,7 +4567,7 @@ const customCodePlaceholder = [
           const messageEl = document.getElementById('tcping-config-message');
           if (messageEl) {
             messageEl.textContent = adminT('targetAddressMissing');
-            messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+            messageEl.className = 'text-sm text-red-700 dark:text-red-400';
           }
           addressInput.focus();
           return;
@@ -4589,7 +4604,7 @@ const customCodePlaceholder = [
         const error = await res.text();
         if (messageEl) {
           messageEl.textContent = adminT('saveFailed') + error;
-          messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+          messageEl.className = 'text-sm text-red-700 dark:text-red-400';
           messageEl.classList.remove('hidden');
         }
       }
@@ -4597,7 +4612,7 @@ const customCodePlaceholder = [
       const messageEl = document.getElementById('tcping-config-message');
       if (messageEl) {
         messageEl.textContent = adminT('errorPrefix') + err.message;
-        messageEl.className = 'text-sm text-red-500 dark:text-red-400';
+        messageEl.className = 'text-sm text-red-700 dark:text-red-400';
         messageEl.classList.remove('hidden');
       }
     } finally {
@@ -4785,7 +4800,7 @@ const customCodePlaceholder = [
     const timer = setTimeout(() => ctl.abort(), 10_000);
     try {
       const res = await fetch(`${apiBase}/api/auth/stream-ticket`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store', signal: ctl.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) { const e = new Error(`HTTP ${res.status}`); e.status = res.status; throw e; }
       const data = await res.json();
       if (!data || typeof data.ticket !== 'string' || !data.ticket) throw new Error('no ticket');
       return data.ticket;
@@ -4814,13 +4829,23 @@ const customCodePlaceholder = [
     }
     fetchStreamTicket(adminToken).then((ticket) => {
       if (gen === sseConnectGen) openSSE(`${apiBase}/api/events?ticket=${encodeURIComponent(ticket)}`);
-    }, () => {
-      // the network or the session failed: the stream's backoff applies
-      if (gen === sseConnectGen) scheduleSSEReconnect();
+    }, (err) => {
+      if (gen !== sseConnectGen) return;
+      // A refused ticket is an ended session (a server restart ends every
+      // one, as do a logout elsewhere and the 24 h limit): verify, then the
+      // login, as the stream's own refusal did before tickets. The page
+      // stayed frozen on its last values instead. Anything else (the
+      // network) gets the stream's backoff.
+      if (err && err.status === 401) { handleSessionLost(); return; }
+      scheduleSSEReconnect();
     });
   }
 
+  let sseStreamOpenedAt = 0;
+  let sseUpdatesOnStream = 0;
   function openSSE(sseUrl) {
+    sseStreamOpenedAt = Date.now();
+    sseUpdatesOnStream = 0;
     adminPrimePending = true;
     eventSource = new EventSource(sseUrl);
     markSSEAlive();
@@ -4847,8 +4872,11 @@ const customCodePlaceholder = [
     //   * order updates are handled locally by drag & drop, so we ignore
     //     order_updated here.
     eventSource.addEventListener('update', (e) => {
-      // data: the stream works, a future disconnect starts over at 1 s
-      sseReconnectAttempt = 0;
+      // data: the stream works, a future disconnect starts over at 1 s, once
+      // this connection has carried a second update or lasted 10 s (a stream
+      // cut right after its first snapshot reconnected every 1–2 s, forever)
+      sseUpdatesOnStream++;
+      if (sseUpdatesOnStream >= 2 || Date.now() - sseStreamOpenedAt >= 10_000) sseReconnectAttempt = 0;
       sseErrorStreak = 0;
       markSSEAlive();
       let update;
@@ -4943,7 +4971,7 @@ const customCodePlaceholder = [
     'tcpingSettings': { en: 'TCPing Settings', zh: 'TCPing 设置' },
     'pollingInterval': { en: 'Polling Interval', zh: '轮询间隔' },
     'seconds': { en: 'seconds', zh: '秒' },
-    'pollingIntervalDesc': { en: 'How often the clients run their TCPing probes', zh: '客户端发起 TCPing 探测的间隔' },
+    'pollingIntervalDesc': { en: 'How often the clients run their TCPing probes: 5 seconds to a day', zh: '客户端发起 TCPing 探测的间隔，5 秒到 1 天' },
     'tcpingTargets': { en: 'TCPing Targets', zh: 'TCPing 目标' },
     'addTarget': { en: 'Add Target', zh: '添加目标' },
     'targetFormatDesc': { en: 'Format: name and address (e.g., Google DNS, 8.8.8.8:53)', zh: '格式：名称和地址（例如：Google DNS, 8.8.8.8:53）' },

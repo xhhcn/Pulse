@@ -129,6 +129,16 @@ html.dark .toolbar-btn[aria-expanded="true"] { background-color: rgba(40, 40, 40
   transform-origin: top right;
 }
 html.dark .admin-menu { border-color: #2c2c2c; background-color: #171717; }
+/* Phones: the 设置 button sits left of centre, so its menu opens rightwards
+   from it (anchored right, the English menu reached 4 px from the edge). */
+@media (max-width: 639.98px) {
+  .admin-menu { right: auto; left: 0; transform-origin: top left; }
+}
+/* An admin row's subline: a dot centred in the 12 px gap before each item;
+   the line clips the dot of an item that starts a line. */
+.admin-subline { overflow: hidden; }
+.admin-sub-item { position: relative; }
+.admin-sub-dot { position: absolute; left: -8px; }
 .admin-menu:not(.hidden) { animation: pulse-menu-in 150ms ease; }
 @keyframes pulse-menu-in { from { opacity: 0; transform: translateY(-8px) scale(0.95); } }
 .admin-menu-item {
@@ -850,6 +860,37 @@ html.glass-enabled.dark #columns-btn:hover {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.12) !important;
 }
+/* The 资源 | 延迟 switch, an opened server's 延迟 | 资源 tabs and the page
+   buttons, frosted like the filter beside them: they kept the plain theme's
+   solid fills (black tiles on dark glass, a lone white chip on light). */
+html.glass-enabled.light .list-view-switch,
+html.glass-enabled.light .chart-tabs {
+  background: rgba(0, 0, 0, 0.05) !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+html.glass-enabled.dark .list-view-switch,
+html.glass-enabled.dark .chart-tabs {
+  background: rgba(255, 255, 255, 0.05) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+}
+html.glass-enabled.light :is(.list-view-tab, .chart-tab)[aria-selected="true"] { background: rgba(255, 255, 255, 0.85) !important; }
+html.glass-enabled.dark :is(.list-view-tab, .chart-tab)[aria-selected="true"] { background: rgba(255, 255, 255, 0.1) !important; }
+html.glass-enabled.light #systems-pagination .pagination-btn {
+  background: rgba(255, 255, 255, 0.6) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+html.glass-enabled.dark #systems-pagination .pagination-btn {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+html.glass-enabled.light #systems-pagination .pagination-btn:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+html.glass-enabled.dark #systems-pagination .pagination-btn:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
 
 /* Admin service rows: one list in a box (the box is .glass-inner, as the
    dashboard's table); the rows' dividers and hover tint. */
@@ -1099,4 +1140,17 @@ html.dark .os-icon[data-icon="devicon:fedora"] svg [fill="#294172"] { fill: #51a
   .min-h-screen {
     min-height: 100dvh;
   }
+}
+
+/* Phones: a lost stream is said on the line under the title, in place of
+   "updated in real time", instead of as a fourth chip that wrapped onto a
+   line of its own and moved the list 30 px down and back. */
+.desc-stack { display: grid; }
+.desc-stack > * { grid-area: 1 / 1; }
+@media (max-width: 479.98px) {
+  html.stream-lost #systems-summary .summary-conn-lost { display: none; }
+  /* both lines stay in the cell (the taller sets its height), one shown */
+  #all-systems-desc-lost { display: flex; visibility: hidden; }
+  html.stream-lost #all-systems-desc { visibility: hidden; }
+  html.stream-lost #all-systems-desc-lost { visibility: visible; }
 }

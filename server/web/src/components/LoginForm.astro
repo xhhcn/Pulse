@@ -22,7 +22,7 @@
 
       <!-- Error message -->
       <div id="login-error" class="hidden mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/50 animate-scale-in">
-        <p class="text-sm text-red-500" id="login-error-text"></p>
+        <p class="text-sm text-red-700 dark:text-red-400" id="login-error-text"></p>
       </div>
 
       <!-- Success message (for password setup) -->
@@ -35,6 +35,25 @@
            script blocked) reloads this page instead of putting the
            password into the address bar, history and access logs. -->
       <form id="login-form" method="post" class="space-y-4">
+        <!-- A database replaced after damage: the one-time setup code from the
+             server's log (and setup-code.txt beside the database) -->
+        <div id="setup-code-field" class="hidden">
+          <label for="setup-code" class="sr-only" data-translate-login="setupCode">Setup code</label>
+          <div class="relative">
+          <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#595959] dark:text-[#ababab]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+          <input
+            type="text"
+            id="setup-code"
+            name="setup-code"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            class="toolbar-control w-full pl-9 pr-3 text-sm"
+            placeholder="Setup code"
+            data-translate-login-placeholder="setupCodePlaceholder"
+          />
+          </div>
+        </div>
         <div>
           <label for="password" class="sr-only" data-translate-login="password">Password</label>
           <div class="relative">
@@ -120,7 +139,10 @@
       submit: 'Login',
       setupPassword: 'Setup Password',
       setupSubtitle: 'Set up your admin password (first time only)',
-      setupLocked: 'The database was found damaged and replaced with an empty one. For safety the new password can only be set on the server itself (the server log says how), or restore a backup.',
+      setupLocked: 'The database was found damaged and replaced with an empty one. Setting a new password needs the one-time setup code from the server log (also in setup-code.txt beside the database), or restore a backup.',
+      setupCode: 'Setup code',
+      setupCodePlaceholder: 'Setup code from the server log',
+      setupCodeWrong: 'That setup code is not right. It is in the server log and in setup-code.txt beside the database; a restart issues a new one.',
       error: 'Error',
       invalidPassword: 'Invalid password',
       tooManyAttempts: 'Too many wrong passwords. Try again in {n} min.',
@@ -146,7 +168,10 @@
       submit: '登录',
       setupPassword: '设置密码',
       setupSubtitle: '设置您的管理员密码（仅首次）',
-      setupLocked: '数据库损坏，已换成新的空库。为安全起见，新密码只能在服务器本机上设置（方法见服务端日志），或恢复备份。',
+      setupLocked: '数据库损坏，已换成新的空库。设置新密码需要服务端日志里的一次性设置码（也保存在数据库旁的 setup-code.txt），或恢复备份。',
+      setupCode: '设置码',
+      setupCodePlaceholder: '服务端日志里的设置码',
+      setupCodeWrong: '设置码不对。它在服务端日志和数据库旁的 setup-code.txt 里；服务重启后会换新码。',
       error: '错误',
       invalidPassword: '密码错误',
       tooManyAttempts: '密码错误次数过多，请 {n} 分钟后再试。',
@@ -276,14 +301,17 @@
   }
 
   // Setup password (first time)
-  async function setupPassword(password) {
+  async function setupPassword(password, setupCode = '') {
     try {
       const res = await fetch(`${apiBase}/api/auth/setup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify(setupCode ? { password, setup_code: setupCode } : { password })
       });
       
+      // a locked setup refused: the code is missing or wrong (the server's
+      // own text is English and names no more than that)
+      if (res.status === 403) return { success: false, error: translations[getCurrentLanguage()].setupCodeWrong };
       if (!res.ok) {
         const errorText = await res.text();
         return { success: false, error: errorText || 'Failed to setup password' };
@@ -475,6 +503,8 @@
     const passwordField = document.getElementById('password');
     const confirmPasswordField = document.getElementById('confirm-password-field');
     const confirmPasswordInput = document.getElementById('confirm-password');
+    const setupCodeField = document.getElementById('setup-code-field');
+    const setupCodeInput = document.getElementById('setup-code');
     const submitButton = document.getElementById('login-submit');
 
     // Switch the form between first-time setup and login. Kept as a
@@ -492,6 +522,11 @@
         confirmPasswordInput.required = false;
         confirmPasswordInput.value = '';
       }
+      // the setup code only for a locked setup
+      const withCode = setup && setupLocked;
+      setupCodeField.classList.toggle('hidden', !withCode);
+      setupCodeInput.required = withCode;
+      if (!withCode) setupCodeInput.value = '';
     }
     applyLoginMode(isPasswordSet === false);
 
@@ -529,7 +564,7 @@
             return;
           }
 
-          const result = await setupPassword(password);
+          const result = await setupPassword(password, setupLocked ? setupCodeInput.value.trim() : '');
           if (result && result.success) {
             // After setup, automatically login
             const loginResult = await login(password);

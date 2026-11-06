@@ -33,7 +33,7 @@ const apiBase = apiBaseProp ?? '';
          columns past the rows' borders, backgrounds and detail panels on
          screens narrower than the table. */
       #monitor-root .table-scroll-content {
-        min-width: max(1000px, calc(min(var(--first-col-width), 160px) + 795px));
+        min-width: max(1000px, calc(min(var(--first-col-width), 160px) + 803px));
       }
     </style>
     <div class="min-w-[1000px] table-scroll-content">
@@ -1124,8 +1124,8 @@ const apiBase = apiBaseProp ?? '';
   // 6 px gap each and the 24 px left padding; 1000 px at least from 1280).
   const NAME_TRACK = 'minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px))';
   const COLUMN_TIERS = [
-    { min: 1280, floor: 1000, cols: [['location', 104, '1fr'], ['cpu', 130, '1.8fr'], ['memory', 130, '1.8fr'], ['disk', 130, '1.8fr'], ['net', 70, '0.9fr'], ['uptime', 85, '1fr'], ['os', 80, '1fr']] },
-    { min: 1024, cols: [['location', 88, '0.9fr'], ['cpu', 110, '1.8fr'], ['memory', 110, '1.8fr'], ['disk', 110, '1.8fr'], ['net', 70, '0.9fr'], ['uptime', 68, '0.9fr'], ['os', 76, '1fr']] },
+    { min: 1280, floor: 1000, cols: [['location', 104, '1fr'], ['cpu', 130, '1.8fr'], ['memory', 130, '1.8fr'], ['disk', 130, '1.8fr'], ['net', 78, '0.9fr'], ['uptime', 85, '1fr'], ['os', 80, '1fr']] },
+    { min: 1024, cols: [['location', 88, '0.9fr'], ['cpu', 108, '1.8fr'], ['memory', 108, '1.8fr'], ['disk', 108, '1.8fr'], ['net', 72, '0.9fr'], ['uptime', 72, '0.9fr'], ['os', 76, '1fr']] },
     { min: 900, cols: [['cpu', 116, '1.8fr'], ['memory', 116, '1.8fr'], ['disk', 116, '1.8fr'], ['net', 70, '0.9fr'], ['uptime', 85, '1fr']] },
     { min: 768, cols: [['cpu', 108, '1.8fr'], ['memory', 108, '1.8fr'], ['disk', 108, '1.8fr'], ['net', 70, '0.9fr']] },
   ];
@@ -1468,20 +1468,19 @@ const apiBase = apiBaseProp ?? '';
   }
 
   // Format traffic speed from MB/s to appropriate unit
+  // At most four digits: one decimal from 100, the next unit before a value
+  // would print 1000. "110.20 MB/s" and "1023.99 MB/s" ran into the uptime
+  // column, and 1023.96 KB/s printed as "1024.0 KB/s".
   function formatTrafficSpeed(mbps) {
     if (mbps === 0 || mbps == null) return '0 B/s';
-    
     const bytes = mbps * 1024 * 1024; // Convert MB/s to Bytes/s
-    
-    if (bytes < 1024) {
-      return `${bytes.toFixed(0)} B/s`;
-    } else if (bytes < 1024 * 1024) {
-      return `${(bytes / 1024).toFixed(1)} KB/s`;
-    } else if (bytes < 1024 * 1024 * 1024) {
-      return `${(bytes / (1024 * 1024)).toFixed(2)} MB/s`;
-    } else {
-      return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB/s`;
-    }
+    if (bytes < 1024) return `${bytes.toFixed(0)} B/s`;
+    const kb = bytes / 1024;
+    if (kb < 999.95) return `${kb.toFixed(1)} KB/s`;
+    const dec = (v) => v.toFixed(v >= 99.995 ? 1 : 2);
+    const mb = kb / 1024;
+    if (mb < 999.95) return `${dec(mb)} MB/s`;
+    return `${dec(mb / 1024)} GB/s`;
   }
 
   // SECURITY: HTML attribute escape function
@@ -1731,7 +1730,7 @@ const apiBase = apiBaseProp ?? '';
     const safeNameAttr = escapeHtmlAttr(item.name || 'unknown');
     return `
     <div class="system-row${isOffline ? ' is-offline' : ''}" data-system-id="${safeId}">
-      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer" data-system-id="${safeId}" role="button" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(104px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(70px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
+      <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer" data-system-id="${safeId}" role="button" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(104px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(78px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${statusDotColor(item)} shrink-0"></span>
           <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap" title="${safeNameAttr}">${safeName}</span>${isOffline ? statusChip(item) : ''}
@@ -1993,6 +1992,17 @@ const apiBase = apiBaseProp ?? '';
     'resNet': { en: 'Network', zh: '网络' },
     'resNetIn': { en: '↓ In', zh: '↓ 下载' },
     'resNetOut': { en: '↑ Out', zh: '↑ 上传' },
+    // what each resource tooltip calls its value (a word that fills the line,
+    // not a bare "CPU" far from its number)
+    'resCpuTip': { en: 'CPU usage', zh: 'CPU 使用率' },
+    'resMemTip': { en: 'Memory usage', zh: '内存使用率' },
+    'resDiskTip': { en: 'Disk usage', zh: '磁盘使用率' },
+    // averaged (按时段平均): the same, said to be averages
+    'resCpuTipAvg': { en: 'Avg CPU usage', zh: 'CPU 平均使用率' },
+    'resMemTipAvg': { en: 'Avg memory usage', zh: '内存平均使用率' },
+    'resDiskTipAvg': { en: 'Avg disk usage', zh: '磁盘平均使用率' },
+    'resNetInAvg': { en: '↓ Avg download', zh: '↓ 平均下载速度' },
+    'resNetOutAvg': { en: '↑ Avg upload', zh: '↑ 平均上传速度' },
     'resEmpty': { en: 'Nothing recorded yet: the server keeps a sample of each server every minute; check back in a minute or two.', zh: '还没有记录：服务端每分钟记录一次，过一两分钟再看。' },
     'latHeadTitle': { en: '{name}: average latency and loss over the last hour', zh: '{name}：近 1 小时平均延迟与丢包' },
     'resUnavailable': { en: 'The resource history could not be loaded; trying again in a minute.', zh: '资源历史暂时读取不到，一分钟后再试。' },
@@ -2179,7 +2189,7 @@ const apiBase = apiBaseProp ?? '';
   // gave a label every 5 hours on a phone (04:00, 09:00, 14:00…), 295 minute
   // ticks one every 59 minutes. Spans too short for two round ticks keep
   // Chart.js's ticks.
-  const TIME_TICK_STEPS_MIN = [5, 10, 15, 30, 60, 120, 180, 240, 360, 480, 720];
+  const TIME_TICK_STEPS_MIN = [1, 2, 5, 10, 15, 30, 60, 120, 180, 240, 360, 480, 720];
   function roundTimeTicks(scale) {
     const { min, max } = scale;
     if (!(max > min)) return;
@@ -3031,9 +3041,49 @@ const apiBase = apiBaseProp ?? '';
     return { borderColor: hide, backgroundColor: hide };
   }
 
+  // Every answered probe is drawn: one whose pieces to both neighbours are
+  // gaps by the rules above (an answer between runs of lost probes, or a
+  // target's only probe so far) has no line to show it, yet it sets the axis
+  // and the legend's average, so it gets a dot. Null when there is none (the
+  // radius stays a plain 0: a scriptable one is resolved for every point).
+  function tcpingLoneProbes(points) {
+    const n = points.length;
+    if (n === 0) return null;
+    const d = [];
+    for (let i = 1; i < n; i++) {
+      const v = points[i].x - points[i - 1].x;
+      if (v > 0) d.push(v);
+    }
+    d.sort((a, b) => a - b);
+    const limit = d.length ? d[d.length >> 1] * 2.5 : Infinity;
+    // the answered samples, with the long steps and lost samples before each
+    const at = [], longAt = [], lostAt = [];
+    for (let i = 0, long = 0, lost = 0; i < n; i++) {
+      if (i > 0 && points[i].x - points[i - 1].x > limit) long++;
+      if (points[i].y === null) { lost++; continue; }
+      at.push(i); longAt.push(long); lostAt.push(lost);
+    }
+    const broken = (k) => longAt[k] > longAt[k - 1] || lostAt[k] - lostAt[k - 1] >= 2;
+    let flags = null;
+    for (let k = 0; k < at.length; k++) {
+      if ((k === 0 || broken(k)) && (k === at.length - 1 || broken(k + 1))) {
+        if (!flags) flags = new Uint8Array(n);
+        flags[at[k]] = 1;
+      }
+    }
+    return flags;
+  }
+  const tcpingPointRadius = (points) => {
+    const lone = tcpingLoneProbes(points);
+    return lone ? (c) => (lone[c.dataIndex] ? 2 : 0) : 0;
+  };
+
+  // When each open chart last read its history (see the update handler).
+  const tcpingLastReadAt = new Map();
   function cleanupTCPingChart(systemId) {
     hideTCPingTooltip();
     stopResourcePane(systemId);
+    tcpingLastReadAt.delete(systemId);
     // Cancel any ongoing loading for this system
     // The flag lives on the state object, which the in-flight build keeps a
     // reference to, so it still reads as cancelled after the map entry is
@@ -3190,11 +3240,20 @@ const apiBase = apiBaseProp ?? '';
         const systemId = detailsSection.dataset.detailsId;
         if (!systemId) return;
 
+        const container = document.querySelector(`[data-tcping-chart-container="${cssEscape(String(systemId))}"]`);
+        const resourceOnly = detailsSection.querySelector('[data-resource-only]');
+        const onResource = !!(container && container.querySelector('[data-chart-tab="resource"][aria-selected="true"]'));
+
         // Tear down the existing chart / tab state first so nothing from
         // the old target set can survive the redraw.
         cleanupTCPingChart(systemId);
 
-        const container = document.querySelector(`[data-tcping-chart-container="${cssEscape(String(systemId))}"]`);
+        // The teardown also stops the 资源 charts: they come back where they
+        // were shown (the card stayed on 资源 with four blank charts, for good).
+        if (resourceOnly) {
+          openResourcePane(resourceOnly, systemId);
+          return;
+        }
         if (!container) return;
 
         if (!fresh || !Array.isArray(fresh.targets) || fresh.targets.length === 0) {
@@ -3207,6 +3266,7 @@ const apiBase = apiBaseProp ?? '';
         // and re-initialise the chart.
         initializeTCPingTabs(systemId).then(() => {
           initializeTCPingChart(systemId);
+          if (onResource) showChartPane(container, systemId, 'resource');
         }).catch(() => {
           // Swallow — a missing DOM node simply means the row was
           // collapsed in between the SSE arrival and our async work.
@@ -4131,7 +4191,10 @@ const apiBase = apiBaseProp ?? '';
         tension: 0.1,
         spanGaps: true,
         segment: tcpingGapSegment(chartData),
-        pointRadius: 0,
+        // 0, except a dot on an answered probe with no line to either side
+        // (filled with backgroundColor, which follows the line's colour)
+        pointRadius: tcpingPointRadius(chartData),
+        pointBorderWidth: 0,
         // Beszel's active dot on the probes under the pointer.
         pointHoverRadius: 4,
         pointHoverBorderWidth: 0,
@@ -4299,6 +4362,7 @@ const apiBase = apiBaseProp ?? '';
         if (data !== currentData) {
           currentDataset.data = data;
           currentDataset.segment = tcpingGapSegment(data);
+          currentDataset.pointRadius = tcpingPointRadius(data);
         }
       });
         
@@ -4741,6 +4805,9 @@ const apiBase = apiBaseProp ?? '';
             min: tcpingAxisBounds(minTime, maxTime).min,
             max: tcpingAxisBounds(minTime, maxTime).max,
             time: {
+              // whole minutes at the finest (a new target's few probes
+              // were labelled every few seconds)
+              minUnit: 'minute',
               displayFormats: {
                 second: 'HH:mm:ss',
                 minute: 'HH:mm',
@@ -4857,6 +4924,7 @@ const apiBase = apiBaseProp ?? '';
 
     tcpingCharts.set(chartKey, { chart, target: 'all' });
     if (sigAtFetch !== null) tcpingDataSignatures.set(systemId, sigAtFetch);
+    tcpingLastReadAt.set(systemId, Date.now());
     updateTCPingTabAverages(systemId);
     updateTCPingLastProbe(systemId);
 
@@ -5113,11 +5181,16 @@ const apiBase = apiBaseProp ?? '';
   let tcpingRangePicked = null;
   const tcpingPhoneQuery = window.matchMedia('(max-width: 767.98px)');
   const tcpingRangeHours = () => tcpingRangePicked || (tcpingPhoneQuery.matches ? 1 : 24);
+  // At least 10 minutes wide: a server's first probe or minute (min = max)
+  // left Chart.js nothing to place it on, and a span of a few minutes was
+  // labelled every few seconds; the empty start reads as the time before
+  // the first sample, as on any chart that begins mid-way.
+  const AXIS_MIN_SPAN_MS = 10 * 60e3;
   function tcpingAxisBounds(minTime, maxTime) {
     if (minTime === null || maxTime === null) return { min: undefined, max: undefined };
     const hours = tcpingRangeHours();
     const from = hours < 24 ? Math.max(minTime, maxTime - hours * 3600e3) : minTime;
-    return { min: from, max: maxTime };
+    return { min: Math.min(from, maxTime - AXIS_MIN_SPAN_MS), max: maxTime };
   }
   // Where the span shown starts (the axis start), for the counts.
   function tcpingSpanStart(chart) {
@@ -5179,6 +5252,11 @@ const apiBase = apiBaseProp ?? '';
     menu.style.left = `${Math.round(left + window.scrollX)}px`;
     menu.style.top = `${Math.round(r.bottom + 4 + window.scrollY)}px`;
     menu._button = btn;
+    // the highlight follows the pointer as it follows the keys (the focus)
+    menu.addEventListener('pointermove', (e) => {
+      const it = e.target.closest && e.target.closest('.view-menu-item');
+      if (it && document.activeElement !== it) it.focus({ preventScroll: true });
+    });
     tcpingRangeMenu = menu;
     btn.setAttribute('aria-expanded', 'true');
     (menu.querySelector('[aria-checked="true"]') || menu.firstElementChild).focus({ preventScroll: true });
@@ -5295,8 +5373,11 @@ const apiBase = apiBaseProp ?? '';
     for (let i = 0; i < points.length; i++) {
       if (i && apart(i - 1, i)) out.push({ x: points[i - 1][0] * 1000 + step * 1000, y: null });
       const lone = (!i || apart(i - 1, i)) && (i === points.length - 1 || apart(i, i + 1));
-      const y = points[i][idx] * factor;
-      out.push(lone ? { x: points[i][0] * 1000, y, lone: true } : { x: points[i][0] * 1000, y });
+      const pt = { x: points[i][0] * 1000, y: points[i][idx] * factor };
+      if (lone) pt.lone = true;
+      // an average's minutes, for its tooltip (resourceBuckets)
+      if (points[i].span) pt.span = points[i].span;
+      out.push(pt);
     }
     return out;
   }
@@ -5314,11 +5395,21 @@ const apiBase = apiBaseProp ?? '';
     if (step <= 60 || !points || points.length < 2) return points;
     const out = [];
     let key = null, acc = null;
-    const flush = () => { if (acc) out.push(acc.sum.map((v, i) => (i === 0 ? Math.round(v / acc.n) : v / acc.n))); };
+    // Each average also keeps the minutes it covers, from its first to the
+    // end of its last (row.span, in s): its tooltip names them ("03:20–03:40",
+    // "14:20–14:35" for the slot in progress, or after a gap) rather than
+    // the mean minute it is drawn at, which read as that minute's value.
+    const flush = () => {
+      if (!acc) return;
+      const row = acc.sum.map((v, i) => (i === 0 ? Math.round(v / acc.n) : v / acc.n));
+      row.span = [acc.first, acc.last + 60];
+      out.push(row);
+    };
     for (const p of points) {
       const k = Math.floor(p[0] / step);
-      if (k !== key) { flush(); key = k; acc = { n: 0, sum: [0, 0, 0, 0, 0, 0] }; }
+      if (k !== key) { flush(); key = k; acc = { n: 0, sum: [0, 0, 0, 0, 0, 0], first: p[0], last: p[0] }; }
       acc.n++;
+      acc.last = p[0];
       for (let i = 0; i < 6; i++) acc.sum[i] += Number(p[i]) || 0;
     }
     flush();
@@ -5344,20 +5435,35 @@ const apiBase = apiBaseProp ?? '';
     return TRAFFIC_UNITS.find(([, f], i) => i === TRAFFIC_UNITS.length - 1 || top * f < 1024);
   }
   const trimNumber = (v) => String(Number(v.toFixed(2)));
+  // A minute's tooltip keeps its own time; an average's names its minutes.
+  function resourceTooltipTitle(items) {
+    const it = items && items[0];
+    const span = it && it.raw && it.raw.span;
+    if (!span) return it ? it.label : '';
+    const two = (n) => String(n).padStart(2, '0');
+    const a = new Date(span[0] * 1000), b = new Date(span[1] * 1000);
+    const hm = (d) => `${two(d.getHours())}:${two(d.getMinutes())}`;
+    return `${a.getFullYear()}-${two(a.getMonth() + 1)}-${two(a.getDate())} ${hm(a)}–${hm(b)}`;
+  }
   function resourceChartConfig(kind, points, dark, step = 60) {
     const c = RESOURCE_COLORS[dark ? 'dark' : 'light'];
     const lang = getCurrentLanguage();
     // Beszel's area charts: a 1 px line over its colour at 40 % (the network's
     // two at 20 %, as its bandwidth chart). The line and its dots drawn whole
     // at the plot's top and bottom: on the fixed 0–100 % axes Chart.js clipped
-    // half of a line at 0 % (a disk at 0.03 % looked empty) or 100 %.
-    const ds = (label, data, color, alpha, formatValue) => ({ label, data, borderColor: color, backgroundColor: `${color}${alpha}`, fill: 'origin', borderWidth: 1, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 3, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, clip: { left: 0, top: 4, right: 0, bottom: 4 }, formatValue });
+    // half of a line at 0 % (a disk at 0.03 % looked empty) or 100 %. The
+    // right edge lets the newest minute's dot show whole; the left stays at
+    // the edge (minutes before the span's start would reach into the axis).
+    const ds = (label, data, color, alpha, formatValue) => ({ label, data, borderColor: color, backgroundColor: `${color}${alpha}`, fill: 'origin', borderWidth: 1, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 3, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, clip: { left: 0, top: 4, right: 3, bottom: 4 }, formatValue });
     const [unit, factor] = kind === 'net' ? trafficUnit(points) : ['', 1];
     const speed = (v) => formatTrafficSpeed(v / factor);
-    const datasets = kind === 'cpu' ? [ds('CPU', resourceSeries(points, 1, 1, step), c.cpu, '66', pctLabel)]
-      : kind === 'mem' ? [ds(translations.resMem[lang], resourceSeries(points, 2, 1, step), c.mem, '66', pctLabel)]
-      : kind === 'disk' ? [ds(translations.resDisk[lang], resourceSeries(points, 3, 1, step), c.disk, '66', pctLabel)]
-      : [ds(translations.resNetIn[lang], resourceSeries(points, 4, factor, step), c.in, '33', speed), ds(translations.resNetOut[lang], resourceSeries(points, 5, factor, step), c.out, '33', speed)];
+    // the tooltip's names (one line each): "CPU 使用率", or for averaged
+    // points "CPU 平均使用率", which also fills the line beside the wider span
+    const tip = (k) => translations[step > 60 ? `${k}Avg` : k][lang];
+    const datasets = kind === 'cpu' ? [ds(tip('resCpuTip'), resourceSeries(points, 1, 1, step), c.cpu, '66', pctLabel)]
+      : kind === 'mem' ? [ds(tip('resMemTip'), resourceSeries(points, 2, 1, step), c.mem, '66', pctLabel)]
+      : kind === 'disk' ? [ds(tip('resDiskTip'), resourceSeries(points, 3, 1, step), c.disk, '66', pctLabel)]
+      : [ds(tip('resNetIn'), resourceSeries(points, 4, factor, step), c.in, '33', speed), ds(tip('resNetOut'), resourceSeries(points, 5, factor, step), c.out, '33', speed)];
     const bounds = tcpingAxisBounds(points[0][0] * 1000, points[points.length - 1][0] * 1000);
     const tick = { color: axisLabelColor(dark), font: { size: 12 } };
     const percentOfWhole = kind === 'mem' || kind === 'disk';
@@ -5367,11 +5473,13 @@ const apiBase = apiBaseProp ?? '';
       options: {
         animation: false, responsive: true, maintainAspectRatio: false, parsing: false, normalized: true,
         interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { display: false }, lossLane: false, tooltip: { enabled: false, external: tcpingTooltipExternal } },
+        plugins: { legend: { display: false }, lossLane: false, tooltip: { enabled: false, external: tcpingTooltipExternal, callbacks: { title: resourceTooltipTitle } } },
         scales: {
           // the TCPing chart's time axis: a 6 px #666 mark under each time
           x: { type: 'time', min: bounds.min, max: bounds.max, bounds: 'ticks',
-            time: { displayFormats: { minute: 'HH:mm', hour: 'HH:mm', day: 'MM/dd HH:mm' }, tooltipFormat: 'yyyy-MM-dd HH:mm' },
+            // minutes at the finest (a span of a few minutes was labelled in
+            // seconds, in the date adapter's 12-hour "2:40:00 p.m.")
+            time: { minUnit: 'minute', displayFormats: { minute: 'HH:mm', hour: 'HH:mm', day: 'MM/dd HH:mm' }, tooltipFormat: 'yyyy-MM-dd HH:mm' },
             ticks: { ...tick, maxRotation: 0, minRotation: 0, maxTicksLimit: 12, autoSkip: true, autoSkipPadding: 12, padding: 3 },
             grid: { display: true, drawOnChartArea: false, drawTicks: true, tickLength: 6, tickColor: '#666666', tickWidth: 1 },
             border: { display: false }, afterBuildTicks: roundTimeTicks },
@@ -5421,6 +5529,7 @@ const apiBase = apiBaseProp ?? '';
     if (!entry) return;
     const data = await fetchResourceHistory(systemId);
     if (resourcePanes.get(systemId) !== entry) return; // closed or reopened meanwhile
+    entry.readAt = Date.now();
     entry.failed = !data;
     if (data) entry.points = Array.isArray(data.points) ? data.points : [];
     drawResourceCharts(systemId);
@@ -5595,11 +5704,13 @@ const apiBase = apiBaseProp ?? '';
     latencyHeaderSig = latencySignature();
     updateSortUI();
   }
+  let latencySummaryReadAt = 0;
   async function refreshLatencySummary() {
     try {
       const { res } = await authedFetch(`${apiBase}/api/tcping/summary`);
       if (!res.ok) return;
       latencySummary = await res.json();
+      latencySummaryReadAt = Date.now();
     } catch (_) { return; }
     if (listView !== 'latency') return;
     fillLatencyCells();
@@ -5631,6 +5742,10 @@ const apiBase = apiBaseProp ?? '';
       fillLatencyCells();
       if (RESOURCE_SORTS.includes(currentSort.field)) setSort(null);
       await refreshLatencySummary();
+      // still 延迟 after the read, and one timer only: a quick 延迟 → 资源
+      // (→ 延迟) during it left an extra timer running for the whole visit
+      if (listView !== 'latency') return;
+      clearInterval(latencyTimer);
       latencyTimer = setInterval(() => { if (!document.hidden) refreshLatencySummary(); }, 60000);
     } else {
       root.classList.remove('view-latency');
@@ -6630,8 +6745,10 @@ const apiBase = apiBaseProp ?? '';
       html += `<span class="${quiet}">${dot('bg-[#a3a3a3]')}${awaiting} ${translations.summaryAwaiting[lang]}</span>`;
     }
     if (connectionLost) {
-      html += `<span class="${chip} bg-black/5 dark:bg-white/[0.06] text-[#595959] dark:text-[#ababab]" role="status">${dot('bg-[#a3a3a3]')}${translations.connectionLost[lang]}</span>`;
+      html += `<span class="${chip} summary-conn-lost bg-black/5 dark:bg-white/[0.06] text-[#595959] dark:text-[#ababab]" role="status">${dot('bg-[#a3a3a3]')}${translations.connectionLost[lang]}</span>`;
     }
+    // phones say it on the line under the title instead (global.css)
+    document.documentElement.classList.toggle('stream-lost', !!connectionLost);
     if (el.innerHTML !== html) {
       // A redraw replaces the offline button: keep the keyboard on it.
       const hadFocus = document.activeElement && document.activeElement.id === 'summary-offline-chip';
@@ -6992,8 +7109,14 @@ const apiBase = apiBaseProp ?? '';
         if (gen !== sseConnectGen || (ssePaused && document.hidden)) return;
         openSSE(`${apiBase}/api/events?ticket=${encodeURIComponent(ticket)}`);
       }, () => {
-        // the network or the session failed: the stream's backoff applies
-        if (gen === sseConnectGen) scheduleSSEReconnect();
+        // The network or the session failed: the stream's backoff applies,
+        // and a plain request tells which. A refused ticket is an ended
+        // session (a server restart ends every one): that request is refused
+        // too and goes to the login, as the stream's own refusal did before
+        // tickets (no stream opened, so nothing else ever checked).
+        if (gen !== sseConnectGen) return;
+        scheduleSSEReconnect();
+        checkAccessAfterStreamError();
       });
     } else {
       openSSE(`${apiBase}/api/events`);
@@ -7006,7 +7129,7 @@ const apiBase = apiBaseProp ?? '';
     const timer = setTimeout(() => ctl.abort(), 10_000);
     try {
       const res = await fetch(`${apiBase}/api/auth/stream-ticket`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store', signal: ctl.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) { const e = new Error(`HTTP ${res.status}`); e.status = res.status; throw e; }
       const data = await res.json();
       if (!data || typeof data.ticket !== 'string' || !data.ticket) throw new Error('no ticket');
       return data.ticket;
@@ -7015,7 +7138,11 @@ const apiBase = apiBaseProp ?? '';
     }
   }
 
+  let sseStreamOpenedAt = 0;
+  let sseUpdatesOnStream = 0;
   function openSSE(sseUrl) {
+    sseStreamOpenedAt = Date.now();
+    sseUpdatesOnStream = 0;
     primeGuardArmed = true;
     eventSource = new EventSource(sseUrl);
     markSSEAlive();
@@ -7051,8 +7178,11 @@ const apiBase = apiBaseProp ?? '';
     //     signal, which will arrive within a few ms and supersede the
     //     fetched result.)
     const updateHandler = (e) => {
-      // data: the stream works, the next disconnect starts over at 1 s
-      sseReconnectAttempt = 0;
+      // data: the stream works, the next disconnect starts over at 1 s, once
+      // this connection has carried a second update or lasted 10 s (a stream
+      // cut right after its first snapshot reconnected every 1–2 s, forever)
+      sseUpdatesOnStream++;
+      if (sseUpdatesOnStream >= 2 || Date.now() - sseStreamOpenedAt >= 10_000) sseReconnectAttempt = 0;
       markSSEAlive();
       noteStreamMessage();
       try {
@@ -7142,12 +7272,18 @@ const apiBase = apiBaseProp ?? '';
 
             const newSig = computeTCPingSignature(systemData);
             const oldSig = tcpingDataSignatures.get(systemId) || '';
-            if (newSig === oldSig) {
-              // No tcping target has produced a new timestamp — nothing
-              // fresh to draw. Skip the fetch entirely.
-              return;
-            }
+            // No target has a new answered probe: nothing fresh, except that
+            // a lost probe changes no "latest" (the server keeps the last
+            // answered one there). So the tail is read at least once per
+            // probe interval as well: a stretch where every probe failed left
+            // the open chart (its gaps, the loss band, the averages) as it was
+            // until the first answer. One small since= read per probe
+            // interval (5 s after it, 20 s at the shortest), and only then.
+            const cfg = tcpingConfigs.get(systemId);
+            const every = (Math.max(15, (cfg && Number(cfg.interval_secs)) || 60) + 5) * 1000;
+            if (newSig === oldSig && Date.now() - (tcpingLastReadAt.get(systemId) || 0) < every) return;
             tcpingDataSignatures.set(systemId, newSig);
+            tcpingLastReadAt.set(systemId, Date.now());
             updateTCPingChart(systemId, null, null, true);
           });
         }
@@ -7398,6 +7534,12 @@ const apiBase = apiBaseProp ?? '';
       // the pause was no outage: no connection notice while it reopens
       if (ssePaused) lastStreamMessageAt = Date.now();
       reconnectIfQuiet(false);
+      // the per-minute reads skip a hidden page: what they show is read
+      // again now if it is older than a minute (they waited for their next
+      // tick, beside rows already fresh)
+      const stale = (t) => !t || Date.now() - t > 60_000;
+      resourcePanes.forEach((entry, id) => { if (stale(entry.readAt)) refreshResourcePane(id); });
+      if (listView === 'latency' && stale(latencySummaryReadAt)) refreshLatencySummary();
     } else if (!sseHiddenTimer && !ssePaused) {
       sseHiddenTimer = setTimeout(pauseSSEWhileHidden, SSE_HIDDEN_PAUSE_MS);
     }
@@ -7601,6 +7743,10 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .cell-disk > div { padding-right: 0; gap: 6px; }
     #monitor-root .system-row .progress-track { min-width: 56px; }
   }
+  /* Live speeds and uptimes in even-width figures at every width, as the
+     percentages beside them (below 1024 px they shifted sideways as their
+     digits changed) */
+  #monitor-root .system-row :is(.cell-net, .cell-uptime) .cell-value { font-variant-numeric: tabular-nums; }
   @media (min-width: 1024px) and (max-width: 1279.98px) {
     /* 13 px regular figures and 50 px rows (15 + the 20 px line + 14, and
        the 1 px divider), between the 12 px of narrower tables and Beszel's
@@ -7616,8 +7762,12 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .table-scroll-content { min-width: calc(min(var(--first-col-width), 160px) + 698px) !important; }
     #monitor-root .system-row > [data-system-id],
     #monitor-root #system-table-header-row {
-      grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(88px,0.9fr) minmax(110px,1.8fr) minmax(110px,1.8fr) minmax(110px,1.8fr) minmax(70px,0.9fr) minmax(68px,0.9fr) minmax(76px,1fr) !important;
+      grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(88px,0.9fr) minmax(108px,1.8fr) minmax(108px,1.8fr) minmax(108px,1.8fr) minmax(72px,0.9fr) minmax(72px,0.9fr) minmax(76px,1fr) !important;
     }
+    /* 1024–1279: the bars' least 54 px (the three columns 108 px): the 4 px
+       more for 「运行时间」 and 2 more for the net speed come out of them,
+       not out of the names ("Lightlayer($7.63/Y)" lost 2 px at 1024) */
+    #monitor-root .system-row .progress-track { min-width: 54px; }
   }
   @media (min-width: 768px) and (max-width: 1023.98px) {
     #monitor-root .cell-location,
@@ -7689,15 +7839,20 @@ const apiBase = apiBaseProp ?? '';
     font: inherit;
     letter-spacing: inherit;
     color: inherit;
+    /* one line, always: 「运行时间」 broke into two at 1024–1119 px once
+       that tier's header became 13 px (the columns now hold every label) */
+    white-space: nowrap;
     cursor: pointer;
     transition: background-color 50ms ease, color 50ms ease;
   }
+  /* the accent of the menus and the navbar's buttons (as the upstream
+     headers): warm in light, the dark accent at 70 %; was a cool grey */
   #system-table-header-row .sort-header:hover,
-  #system-table-header-row .sort-header:focus-visible { background-color: rgba(0, 0, 0, 0.045); color: #1d1d20; outline: none; }
+  #system-table-header-row .sort-header:focus-visible { background-color: rgba(243, 239, 236, 0.7); color: #1d1d20; outline: none; }
   html.dark #system-table-header-row .sort-header:hover,
-  html.dark #system-table-header-row .sort-header:focus-visible { background-color: rgba(255, 255, 255, 0.06); color: #f5f5f5; }
-  #system-table-header-row .sort-header[data-active="true"] { background-color: rgba(0, 0, 0, 0.06); color: #1d1d20; }
-  html.dark #system-table-header-row .sort-header[data-active="true"] { background-color: rgba(255, 255, 255, 0.08); color: #f5f5f5; }
+  html.dark #system-table-header-row .sort-header:focus-visible { background-color: rgba(40, 40, 40, 0.7); color: #f5f5f5; }
+  #system-table-header-row .sort-header[data-active="true"] { background-color: #f3efec; color: #1d1d20; }
+  html.dark #system-table-header-row .sort-header[data-active="true"] { background-color: rgba(40, 40, 40, 0.7); color: #f5f5f5; }
   #system-table-header-row .sort-header-arrow { display: none; flex: none; }
   #system-table-header-row .sort-header-arrow svg { width: 14px; height: 14px; }
   #system-table-header-row .sort-header:is(:hover, :focus-visible, [data-active="true"]) .sort-header-arrow { display: inline-flex; }
@@ -7789,6 +7944,14 @@ const apiBase = apiBaseProp ?? '';
   #monitor-root.layout-grid:not(.hide-col-location) #systems-body .system-row .cell-name { --card-head-reserve: 52px; }
   #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row .cell-name { --card-head-reserve: 48px; }
   #monitor-root.layout-grid:not(.hide-col-location):not(.hide-col-os) #systems-body .system-row .cell-name { --card-head-reserve: 80px; }
+  /* A server without a flag or an OS logo (a new one not yet reporting, an
+     agent without location) gives its name that room back: "New VPS (pen…"
+     was cut beside 102 px of empty header. */
+  #monitor-root.layout-grid:not(.hide-col-os) #systems-body .system-row > [data-system-id]:has(> .cell-location > .cell-empty) > .cell-name { --card-head-reserve: 48px; }
+  #monitor-root.layout-grid:not(.hide-col-location) #systems-body .system-row > [data-system-id]:has(> .cell-os > .cell-empty) > .cell-name { --card-head-reserve: 52px; }
+  #monitor-root.layout-grid.hide-col-os #systems-body .system-row > [data-system-id]:has(> .cell-location > .cell-empty) > .cell-name,
+  #monitor-root.layout-grid.hide-col-location #systems-body .system-row > [data-system-id]:has(> .cell-os > .cell-empty) > .cell-name,
+  #monitor-root.layout-grid #systems-body .system-row > [data-system-id]:has(> .cell-location > .cell-empty):has(> .cell-os > .cell-empty) > .cell-name { --card-head-reserve: 16px; }
   html.dark #monitor-root.layout-grid #systems-body .system-row .cell-name { background-color: rgba(41, 41, 41, 0.3); border-bottom-color: rgba(42, 43, 45, 0.6); }
   #monitor-root.layout-grid #systems-body .system-row .cell-name > .rounded-full:first-child { width: 8px; height: 8px; }
   #monitor-root.layout-grid #systems-body .system-row .row-name {
@@ -7959,6 +8122,9 @@ const apiBase = apiBaseProp ?? '';
   html.resource-history [data-tcping-chart-container] .chart-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   /* the 资源 pane: four small charts, two a row from 640 px */
   .resource-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  /* no minutes yet, or the read failed: the note alone (display: grid
+     outranked the hidden attribute and left four empty cards above it) */
+  .resource-grid[hidden] { display: none; }
   @media (min-width: 640px) { .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .resource-card { min-width: 0; padding: 12px 14px 8px; border: 1px solid rgba(212, 212, 212, 0.5); border-radius: 12.8px; background: #ffffff; }
   html.dark .resource-card { border-color: rgba(44, 44, 44, 0.6); background: #1a1a1a; }
@@ -7984,10 +8150,6 @@ const apiBase = apiBaseProp ?? '';
   }
   .resource-note { padding: 40px 8px; text-align: center; font-size: 13px; line-height: 20px; color: #595959; }
   html.dark .resource-note { color: #ababab; }
-  @media (max-width: 639.98px) {
-    .tcping-range-btn { height: 28px; padding: 0 6px 0 8px; gap: 5px; font-size: 12px; }
-    .tcping-range-icon, .tcping-range-chevron { width: 13px; height: 13px; }
-  }
   .tcping-range-btn {
     display: inline-flex; flex: none; align-items: center; gap: 6px;
     height: 32px; padding: 0 8px 0 10px;
@@ -8009,6 +8171,13 @@ const apiBase = apiBaseProp ?? '';
   }
   html.dark .tcping-range-menu { border-color: #2c2c2c; background-color: #171717; }
   .tcping-range-menu .view-menu-item { padding: 6px 12px 6px 32px; font-size: 13px; white-space: nowrap; }
+  /* The highlight is where the focus is, as with the keys: on the chosen
+     span when the menu opens (a pointer's open showed none), then under the
+     pointer (pointermove moves the focus). */
+  .tcping-range-menu .view-menu-item:focus { background-color: rgba(243, 239, 236, 0.7); outline: none; }
+  html.dark .tcping-range-menu .view-menu-item:focus { background-color: rgba(40, 40, 40, 0.7); }
+  html.glass-enabled.light .tcping-range-menu .view-menu-item:focus { background-color: rgba(0, 0, 0, 0.05) !important; }
+  html.glass-enabled.dark .tcping-range-menu .view-menu-item:focus { background-color: rgba(255, 255, 255, 0.06) !important; }
   @media (prefers-reduced-motion: reduce) { .tcping-range-menu { animation: none; } }
 
   .tcping-tooltip {
@@ -8018,15 +8187,19 @@ const apiBase = apiBaseProp ?? '';
     z-index: 60;
     display: grid;
     gap: 6px;
-    min-width: 150px;
-    padding: 8px 10px;
+    /* upstream's 112 px: wider left a long gap between a short name and its value */
+    min-width: 112px;
+    padding: 6px 10px;
     border-radius: 12.8px;
     border: 1px solid rgba(218, 218, 218, 0.5);
     background: #fafafa;
     color: #1d1d20;
     font-size: 12px;
     line-height: 1;
-    box-shadow: none;
+    /* as the upstream chart tooltip measures (shadow-xl, both themes): it
+       lifts the card off three lines of probes (11-05 removed it on the
+       belief the upstream one had none) */
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.15s ease-out, transform 0.15s ease-out;
@@ -8040,7 +8213,6 @@ const apiBase = apiBaseProp ?? '';
     border-color: rgba(44, 44, 44, 0.5);
     background: #161616;
     color: #f5f5f5;
-    box-shadow: none;
   }
   .tcping-tooltip-title { font-weight: 500; padding-bottom: 2px; }
   .tcping-tooltip-row { display: flex; align-items: center; gap: 8px; }
