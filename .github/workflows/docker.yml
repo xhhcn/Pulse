@@ -146,95 +146,67 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows another review of the server, the web app and the design. It fixes a v1.3.69 regression that froze the admin page after a server restart, writes about a twelfth as much to disk, and fixes a set of display problems.
+            v${{ steps.version.outputs.version }} follows a design review of the charts and the interface. The latency legend names the routes that lose probes, a selected target gets its own latency axis, and the network chart draws upload below the zero line. Windows contrast themes, screen readers and touch screens are better served.
 
-            ### Fixed (a v1.3.69 regression)
+            ### Server details: the TCPing chart
 
-            - After a server restart (each upgrade), or when a session ended while the page was open, the admin page and a private dashboard opened with the admin session stayed frozen on their last values. The refused stream ticket went unnoticed. They go to the sign-in page again, as before v1.3.69.
+            - The legend names a target's loss where it counts, with the loss band on or off.
+              - A target that lost 1 % or more of its probes in the span, and at least two of them, shows its loss in red: 「CT 993 ms · 丢包 96.8%」.
+              - A target that lost every probe shows 「丢包 100%」. It used to show its name alone.
+              - Smaller losses stay on the loss band, in the readout and in the 延迟 view. A selected target shows any loss.
+              - With 10 targets the legend stays on one line at 1440 px. On a phone it grows only by the targets in trouble.
+            - Selecting a target fits the latency axis to its line, for example 160–240 ms instead of 0–1250 ms when another target answers near 1 s. The other targets stay faded behind it.
+            - The readout keeps the legend's order while the pointer moves. It used to be sorted by value, so rows changed places at almost every probe. Its keys are now short lines.
+            - The readout follows the pointer between probes. On the 1-hour span it used to drop out between them. In a stretch without samples, no dots light up any more.
+            - Colours from the 4th target on stay apart for red-green colour-blind readers; the 4th used to look like the 1st's blue to them. The first three are unchanged.
+            - With reduced motion asked for, the chart doesn't animate.
 
-            ### Storage
+            ### Server details: 资源
 
-            - The agents' live numbers are kept in memory and written once a minute, and also when a server goes offline, before a backup and at shutdown.
-              - TCPing samples are still written before a push is answered, now in groups of up to 2 s.
-              - Resource minutes are written every 10 minutes.
-              - Measured on a copy of 131 servers, side by side with v1.3.69: 236.6 → 18.9 KB/s, or 20.9 → 1.7 GB a day, with the same CPU.
-            - A clean stop loses nothing. A crash or a power cut can lose the last minute's "last seen" times and up to 10 minutes of resource minutes, but never TCPing history.
-            - Storage failures are still caught: while writes fail, pushes are refused and /healthz answers 503.
-            - `PULSE_LIVE_FLUSH=0` restores the previous writes.
+            - The network chart draws upload below the zero line. Download and upload of similar size used to knot into one band, with their fills mixed into a third colour. The axis is labelled without signs.
 
-            ### Security
+            ### Windows contrast themes
 
-            - Setting the password after a damaged database now needs the one-time setup code. The server prints it in its log at start and writes it to `setup-code.txt` beside the database; the sign-in page asks for it. v1.3.69 accepted the server's own address instead, but behind a reverse proxy on the same machine every visitor has that address.
-            - Three more agent endpoints answer an unknown server ID exactly as they answer a wrong secret: TCPing results, the legacy ingest, and registration without a secret.
-            - The TCPing interval cannot be set below 5 s. At 1 s, 137 servers would add about 13 GB of history a day.
+            - Focus shows as an outline on every control; 26 of 49 used to show none.
+            - The usage bars, status dots, legend keys and readout keys keep their colours.
+            - The chosen tab, the pressed offline filter and the switches are outlined.
+            - The chart's text, grid and cursor take the theme's colours.
 
-            ### Dashboard
+            ### Phones
 
-            - 「运行时间」 no longer breaks onto two lines in the 1024–1119 px table.
-            - Network speeds of 100 MB/s and more no longer run into the uptime column: they show one decimal from 100, and the next unit before 1000.
-            - Phones: a lost connection is shown on the line under the title. The list no longer jumps down and back.
-            - English: switching to Latency no longer wraps the toolbar at 1024–1079 px.
-            - A long site name stays on one line in the navbar.
-            - Glass: the 资源 | 延迟 switches and the page buttons are frosted like the filter beside them.
-            - Cards: a server without a flag or OS logo gets that room back for its name.
-            - Speeds and uptimes use even-width figures at every width.
-            - Look:
-              - sorted and hovered column headers use the menus' accent;
-              - the footer lines up with the cards' content;
-              - the chart tooltip has a shadow again.
+            - A tap just right of a server's name opens the row. An invisible copy-link button used to take it. The opened row shows the button, with a 24 px target.
+            - Tags in the details are 12 px instead of 10 px.
 
-            ### Server details
+            ### Sign-in and admin
 
-            - A TCPing probe answered between lost ones is drawn as a dot. It was invisible, yet it set the axis and the average.
-            - An open chart now shows a stretch where every probe fails as it happens; it used to stand still until the first answer.
-            - A new server's first minute and first probe are drawn, on an axis of at least 10 minutes in whole minutes.
-            - 资源:
-              - a tab with no data or a failed read shows its note alone, without four blank cards;
-              - averaged points name the minutes they cover (03:20–03:40);
-              - each tooltip line names its value in full, such as 「CPU 使用率」 or 「CPU 平均使用率」 for an average, so a short name no longer sits far from its number;
-              - the newest dot is no longer cut in half.
-            - The 资源 charts come back after an admin changes the TCPing targets, and they and the latency view refresh when a tab is shown again.
-            - The time range menu highlights the chosen span when opened with the pointer.
-
-            ### Admin and sign-in
-
-            - Errors appear in the dialogs or as notices, never as the browser's alert box. Notices sit at the bottom right from 640 px, clear of the navbar.
-            - The share link row matches the dialog's other controls.
-            - A row's second line no longer starts a wrapped line with "·".
-            - The settings menu stays on screen on phones.
-            - Error text is darker: 5.7:1 contrast instead of 3.3:1.
+            - Sign-in errors stay until you type again. They used to vanish after 5 s, the setup-code note included. Screen readers announce them, and the field concerned is marked.
+            - Switches that are off are easier to see: a darker track and a shadowed knob.
+            - The 设置 menu has the view menu's size and hover.
+            - Dialogs:
+              - the close buttons have a 16 px cross;
+              - the privacy dialog's rows match the other dialogs;
+              - the edit dialog's switch rows match the settings dialog's.
+            - Smaller fixes:
+              - copy buttons are read out by their Chinese names in the Chinese interface;
+              - required marks are darker and not read out;
+              - the sign-in button's focus ring meets 3:1.
 
             ### Also
 
-            - The resource history answers are cached: 8.1 → 0.5 ms of CPU a request.
-            - The admin page downloads backups compressed: 186 MB → about 22 MB for 131 servers. Scripts get them as before.
-            - Custom `<script>` tags keep their attributes, so trackers that read `data-*` (Umami, Plausible) work.
-            - A stream cut right after its first update backs off instead of reconnecting every second.
-            - Switching 延迟 → 资源 during a read no longer leaves a summary refresh running.
+            - Screen readers hear how the table is sorted: 「CPU，降序」.
+            - Page buttons and unselected tabs react to the pointer. Menus, close buttons and copy buttons hover in the same warm accent.
+            - 延迟 view: an offline server's last figures are readable at 7:1 contrast, up from 2.6:1.
 
             ### Compatibility
 
-            - Agents are unchanged (1.3.68). Pulse-Hotaru gets the server changes; its pages keep working as they are.
-            - A downgrade reads the database. Settings added since are dropped when saved, and the setup lock is not enforced.
+            - No server or agent code changes; agents stay at 1.3.68. Pulse-Hotaru is not affected.
 
             ### Verified
 
-            - Go, with the race detector, including:
-              - the live state: admin edits between a push and a flush, kill -9 and clean stops, offline marking, clock steps, storage failures;
-              - the setup code;
-              - the uniform agent answers;
-              - the history cache;
-              - the compressed backup;
-              - the interval bounds.
-            - Side by side on copies of 131 servers:
-              - the write rates;
-              - an admin rename kept through pushes, a flush and a kill -9;
-              - TCPing history intact after kill -9;
-              - a clean stop within 5 s of the last push.
             - Chromium, Firefox and WebKit:
-              - each display fix;
-              - header and column fit, 768–1920 px in zh and en;
-              - the stream and session scenarios (restart, ended session, privacy, share link, cut, stall, offline);
+              - each change;
+              - the legend with 3, 5 and 10 targets, 360–1440 px;
+              - contrast-theme emulation;
               - the regression suites.
 
             ### 📦 Docker Images
