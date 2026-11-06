@@ -1882,8 +1882,8 @@ const apiBase = apiBaseProp ?? '';
             </div>
             <!-- The time range picker, added once the chart is drawn. No
                  statistics here (Beszel's chart cards carry none): the legend
-                 gives each target's average and loss, the loss band when the
-                 probes were lost. -->
+                 gives each target's average, the loss band the losses (or the
+                 legend, where the band is off). -->
             <div class="tcping-tools" data-tcping-tools></div>
         </div>
           <div data-chart-pane="latency">
@@ -2270,33 +2270,6 @@ const apiBase = apiBaseProp ?? '';
     if (ticks.length >= 2) scale.ticks = ticks;
   }
 
-  // The latency axis's data range: every line's, or the selected target's
-  // alone (its answers inside the time span; Chart.js counts only those for
-  // the others as well). A selected target with no answer in the span keeps
-  // every line's range.
-  function tcpingValueLimits(scale) {
-    const chart = scale.chart;
-    const picked = chart.data.datasets.filter((d) => d.role === 'selected');
-    if (picked.length) {
-      const x = chart.options.scales.x;
-      const from = Number.isFinite(x.min) ? x.min : -Infinity;
-      const to = Number.isFinite(x.max) ? x.max : Infinity;
-      let lo = Infinity, hi = -Infinity;
-      picked.forEach((d) => d.data.forEach((q) => {
-        if (!q || q.y === null || q.y === undefined || q.x < from || q.x > to) return;
-        if (q.y < lo) lo = q.y;
-        if (q.y > hi) hi = q.y;
-      }));
-      if (lo <= hi) {
-        scale.$dataMin = lo;
-        scale.$dataMax = hi;
-        return;
-      }
-    }
-    scale.$dataMin = scale.min;
-    scale.$dataMax = scale.max;
-  }
-
   // Latency-axis ticks: round steps (1, 2 or 5 × 10ⁿ ms, and 25, 250…), at
   // most six labels, fitted to the lines (Beszel's ["auto", "auto"] domain
   // for response times) and never below 0 ms. Above the highest point the
@@ -2321,30 +2294,6 @@ const apiBase = apiBaseProp ?? '';
         scale.ticks = Array.from({ length: spaces + 1 }, (_, i) => ({ value: round(bottom + i * step) }));
         scale.min = round(bottom);
         scale.max = round(top);
-        return;
-      }
-    }
-  }
-
-  // The network chart's axis: download above zero, upload below, one round
-  // step for both sides (1, 2, 2.5 or 5 × a power of ten), a quarter of room
-  // beyond each side's peak as on the latency axis, at most six spaces in all.
-  // A side without traffic keeps one step, so the zero line never sits on
-  // the plot's edge.
-  function mirroredTicks(scale) {
-    const up = Math.max(0, scale.$dataMax);
-    const down = Math.max(0, -scale.$dataMin);
-    const peak = Math.max(up, down, 0.01);
-    for (let exp = Math.floor(Math.log10(peak / 6)); exp < 12; exp++) {
-      for (const m of exp >= 1 ? [1, 2, 2.5, 5] : [1, 2, 5]) {
-        const step = m * 10 ** exp;
-        const above = Math.max(1, Math.ceil(up / 0.8 / step - 1e-9));
-        const below = Math.max(1, Math.ceil(down / 0.8 / step - 1e-9));
-        if (above + below > 6) continue;
-        const round = (v) => Number(v.toFixed(Math.max(0, -exp)));
-        scale.ticks = Array.from({ length: above + below + 1 }, (_, i) => ({ value: round((i - below) * step) }));
-        scale.min = round(-below * step);
-        scale.max = round(above * step);
         return;
       }
     }
@@ -3956,8 +3905,8 @@ const apiBase = apiBaseProp ?? '';
       dot.setAttribute('data-tcping-dot', '');
       dot.setAttribute('aria-hidden', 'true');
       dot.className = 'inline-block w-2 h-2 shrink-0 rounded-[2px]';
-      // The target's own average over the span shown after its name, and
-      // its loss where it counts, in the 延迟 view's red
+      // The target's own average over the span shown after its name, and,
+      // where the loss band is off, its loss where it counts
       // (updateTCPingTabAverages). Each stays on one line; on a phone the
       // legend wraps between targets.
       const average = document.createElement('span');
@@ -3965,7 +3914,7 @@ const apiBase = apiBaseProp ?? '';
       average.className = 'tabular-nums whitespace-nowrap text-[#595959] dark:text-[#ababab] empty:hidden';
       const loss = document.createElement('span');
       loss.setAttribute('data-tcping-tab-loss', '');
-      loss.className = 'tcping-tab-loss tabular-nums whitespace-nowrap text-[#b91c1c] dark:text-[#fca5a5] empty:hidden';
+      loss.className = 'tcping-tab-loss tabular-nums whitespace-nowrap text-[#595959] dark:text-[#ababab] empty:hidden';
       tab.append(dot, document.createTextNode(target.name || target.address), average, loss);
       tab.dataset.target = target.address;
       tab.dataset.targetName = target.name || target.address;
@@ -5027,13 +4976,10 @@ const apiBase = apiBaseProp ?? '';
             }
           },
           // Fitted to the lines with room above them, never below 0 ms
-          // (latencyTicks, from the visible lines' own range). While a target
-          // is selected, to its line alone: a far slower target no longer
-          // squeezes it into the bottom of the plot; the faded others stay
-          // behind it, cut at the plot's edges.
+          // (latencyTicks, from the visible lines' own range).
           y: {
             beginAtZero: false,
-            afterDataLimits: tcpingValueLimits,
+            afterDataLimits: (scale) => { scale.$dataMin = scale.min; scale.$dataMax = scale.max; },
             afterBuildTicks: latencyTicks,
             ticks: {
               color: axisLabelColor(isDarkMode),
@@ -5321,8 +5267,6 @@ const apiBase = apiBaseProp ?? '';
     });
     
     chart.update('none');
-    // the selected target's loss in the legend, however small
-    updateTCPingTabAverages(systemId);
 
     // Recalculate statistics based on selected target
     calculateAndUpdateStats(systemId, selectedTarget);
@@ -5628,18 +5572,14 @@ const apiBase = apiBaseProp ?? '';
     // the edge (minutes before the span's start would reach into the axis).
     const ds = (label, data, color, alpha, formatValue) => ({ label, data, borderColor: color, backgroundColor: `${color}${alpha}`, fill: 'origin', borderWidth: 1, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 3, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, clip: { left: 0, top: 4, right: 3, bottom: 4 }, formatValue });
     const [unit, factor] = kind === 'net' ? trafficUnit(points) : ['', 1];
-    // the network's upload is drawn below the zero line (negative values):
-    // the readout and the axis give it unsigned
-    const speed = (v) => formatTrafficSpeed(Math.abs(v) / factor);
+    const speed = (v) => formatTrafficSpeed(v / factor);
     // the tooltip's names (one line each): "CPU 使用率", or for averaged
     // points "CPU 平均使用率", which also fills the line beside the wider span
     const tip = (k) => translations[step > 60 ? `${k}Avg` : k][lang];
     const datasets = kind === 'cpu' ? [ds(tip('resCpuTip'), resourceSeries(points, 1, 1, step), c.cpu, '66', pctLabel)]
       : kind === 'mem' ? [ds(tip('resMemTip'), resourceSeries(points, 2, 1, step), c.mem, '66', pctLabel)]
       : kind === 'disk' ? [ds(tip('resDiskTip'), resourceSeries(points, 3, 1, step), c.disk, '66', pctLabel)]
-      // download above the zero line, upload mirrored below it: of similar
-      // size, the two lines knotted into one band and their fills mixed
-      : [ds(tip('resNetIn'), resourceSeries(points, 4, factor, step), c.in, '33', speed), ds(tip('resNetOut'), resourceSeries(points, 5, -factor, step), c.out, '33', speed)];
+      : [ds(tip('resNetIn'), resourceSeries(points, 4, factor, step), c.in, '33', speed), ds(tip('resNetOut'), resourceSeries(points, 5, factor, step), c.out, '33', speed)];
     const bounds = tcpingAxisBounds(points[0][0] * 1000, points[points.length - 1][0] * 1000);
     const tick = { color: axisLabelColor(dark), font: { size: 12 } };
     const percentOfWhole = kind === 'mem' || kind === 'disk';
@@ -5659,19 +5599,13 @@ const apiBase = apiBaseProp ?? '';
             ticks: { ...tick, maxRotation: 0, minRotation: 0, maxTicksLimit: 12, autoSkip: true, autoSkipPadding: 12, padding: 3 },
             grid: { display: true, drawOnChartArea: false, drawTicks: true, tickLength: 6, tickColor: '#666666', tickWidth: 1 },
             border: { display: false }, afterBuildTicks: roundTimeTicks },
-          // memory and disk as a share of the whole (0–100 %); CPU fitted to
-          // its own range, as the latency axis; the network to each side of
-          // its zero line (download up, upload down), labelled unsigned, the
-          // zero line a step darker than the grid
+          // memory and disk as a share of the whole (0–100 %); CPU and the
+          // network fitted to their own range, as the latency axis
           y: percentOfWhole
             ? { min: 0, max: 100, ticks: { ...tick, stepSize: 50, callback: (v) => `${v}%` }, grid: { color: gridLineColor(dark) }, border: { display: false } }
-            : kind === 'net'
-              ? { afterDataLimits: (scale) => { scale.$dataMin = Math.min(scale.min, 0); scale.$dataMax = Math.max(scale.max, 0); }, afterBuildTicks: mirroredTicks,
-                // the unit is in the card's line: the labels stay as narrow as the others'
-                ticks: { ...tick, maxTicksLimit: 7, callback: (v) => trimNumber(Math.abs(v)) },
-                grid: { color: (ctx) => (ctx.tick && ctx.tick.value === 0 ? cursorLineColor(dark) : gridLineColor(dark)) }, border: { display: false } }
-              : { beginAtZero: true, afterDataLimits: (scale) => { scale.$dataMin = 0; scale.$dataMax = Math.max(scale.max, 1); }, afterBuildTicks: latencyTicks,
-                ticks: { ...tick, maxTicksLimit: 6, callback: (v) => `${v}%` }, grid: { color: gridLineColor(dark) }, border: { display: false } },
+            : { beginAtZero: true, afterDataLimits: (scale) => { scale.$dataMin = 0; scale.$dataMax = Math.max(scale.max, 1); }, afterBuildTicks: latencyTicks,
+              // the network's unit is in its card's line: its labels stay as narrow as the others'
+              ticks: { ...tick, maxTicksLimit: 6, callback: (v) => (kind === 'cpu' ? `${v}%` : trimNumber(v)) }, grid: { color: gridLineColor(dark) }, border: { display: false } },
         },
       },
     };
@@ -5995,13 +5929,13 @@ const apiBase = apiBaseProp ?? '';
   });
   window.addEventListener('resize', () => applyLatencyTemplate());
 
-  // The legend names a target's loss where it counts: 1 % or more of its
-  // probes in the span and at least two of them (a route in trouble, or one
-  // that lost them all; one lost probe is bridged on the line as well), or
-  // any loss of the selected target. Smaller losses stay on the loss band,
-  // in the readout ("超时") and in the 延迟 view: with every target's
-  // 0.07 % spelt out, five or ten targets made the legend several lines
-  // long on a phone.
+  // Where the loss band is off, the legend names a target's loss, and only
+  // where it counts: 1 % or more of its probes in the span and at least two
+  // of them (a route in trouble, or one that lost them all; one lost probe
+  // is bridged on the line as well). With every target's 0.07 % spelt out,
+  // five or ten targets made the legend several lines long on a phone; the
+  // readout ("超时") and the 延迟 view still give every loss. Where the band
+  // is on, the band shows the losses.
   const TCPING_LEGEND_LOSS_MIN_PCT = 1;
   const TCPING_LEGEND_LOSS_MIN_PROBES = 2;
   function updateTCPingTabAverages(systemId) {
@@ -6009,9 +5943,8 @@ const apiBase = apiBaseProp ?? '';
     const strip = document.querySelector(`[data-tcping-tabs="${cssEscape(String(systemId))}"]`);
     if (!entry || !entry.chart || !strip) return;
     const from = tcpingSpanStart(entry.chart);
+    const bandOn = document.documentElement.classList.contains('loss-timeline');
     const lang = getCurrentLanguage();
-    const active = tcpingActiveTargets.get(systemId);
-    const selected = active ? active.target : null;
     entry.chart.data.datasets.forEach((dataset) => {
       let sum = 0, n = 0, probes = 0;
       dataset.data.forEach((point) => {
@@ -6027,11 +5960,10 @@ const apiBase = apiBaseProp ?? '';
       const lossCell = tab.querySelector('[data-tcping-tab-loss]');
       const lost = probes - n;
       const pct = probes ? (lost / probes) * 100 : 0;
-      // In both band modes: the band shows when, the legend who and how
-      // much. A target that lost every probe in the span has no average, so
-      // its loss is all there is to say ("CM · 丢包 100%"), not a bare name.
-      const named = (pct >= TCPING_LEGEND_LOSS_MIN_PCT && lost >= TCPING_LEGEND_LOSS_MIN_PROBES) || dataset.targetAddress === selected;
-      const lossText = lost > 0 && named ? translations.tcpingTabLoss[lang].replace('{pct}', lossPercent(pct)) : '';
+      // A target that lost every probe in the span has no average, so its
+      // loss is all there is to say ("CM · 丢包 100%"), not a bare name.
+      const named = !bandOn && pct >= TCPING_LEGEND_LOSS_MIN_PCT && lost >= TCPING_LEGEND_LOSS_MIN_PROBES;
+      const lossText = named ? translations.tcpingTabLoss[lang].replace('{pct}', lossPercent(pct)) : '';
       if (lossCell && lossCell.textContent !== lossText) lossCell.textContent = lossText;
     });
   }
@@ -8412,8 +8344,7 @@ const apiBase = apiBaseProp ?? '';
   }
   .tcping-tooltip-title { font-weight: 500; padding-bottom: 2px; }
   .tcping-tooltip-row { display: flex; align-items: center; gap: 8px; }
-  /* Beszel's line key: a 4 × 12 bar in the series' colour */
-  .tcping-tooltip-key { width: 4px; height: 12px; flex: none; border-radius: 2px; }
+  .tcping-tooltip-key { width: 10px; height: 10px; flex: none; border-radius: 2px; }
   .tcping-tooltip-name { flex: 1; color: #595959; }
   html.dark .tcping-tooltip-name { color: #ababab; }
   .tcping-tooltip-value { font-weight: 500; font-variant-numeric: tabular-nums; }
