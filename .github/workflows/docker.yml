@@ -146,42 +146,40 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} is an agent update (1.3.67). It follows a review of how the agent measures disks, traffic and memory, checked against df, /proc and the physical links in containers. Agents installed with auto-update move to it within a day. The server and web app are the same as v1.3.66.
+            v${{ steps.version.outputs.version }} is a server update. Agents whose clocks are off by seconds or minutes no longer misplace their TCPing points: the server estimates each agent's clock offset and corrects its samples by a steady amount. Agents (1.3.67) and the web app are the same as v1.3.67.
 
             ### Highlights
 
-            - Disk: the percentage is now df's Use% (used / (used + available)). On ext4 it reads 2–5 points higher than before, because the space kept for root is no longer counted as free; a full disk now reads 100 % instead of 95 %.
-            - Disk: ZFS pools are counted, each pool's free space once. A ZFS root used to show only its EFI partition.
-            - Network: only the machine's own NICs are counted, physical or a VM's virtual NIC. Bridges, bonds, VLANs, veth/tap pairs, tunnels and Proxmox firewall bridges are not. A Proxmox VM's download used to count twice, and as upload too.
-            - Network: speeds are taken per interface, so a link that disappears (a PPP reconnect) no longer drops the whole reading to zero.
-            - Memory: in a container, file cache is no longer counted as used; reading a large file used to fill the bar. On a ZFS host, the ARC is not counted as used either.
-            - A hung network mount no longer delays pushes. It made one push in ten arrive 13 s late, close to the 15 s offline limit.
-            - The first push after an agent start or update reports measured CPU and traffic, not 0.
-            - TCPing: a lost probe is stamped with its round instead of 3 s later. At most eight targets are dialled at once.
+            - Many hosts run without NTP. On xhh.li, 22 of 128 agents were 6 s to 100 s off, some early, some late.
+            - The server used to judge each batch of probes on its own. It moved a batch onto the time it arrived only when its newest sample looked over 2 minutes old or 30 s ahead:
+              - inside those lines, an agent kept its error: one 100 s slow drew every point 100 s early;
+              - near a line, an agent's points jumped back and forth by two minutes, a doubled point in one minute and none in the next (about 110 a day on one server).
+            - The server now estimates each agent's clock offset from its pushes:
+              - an observation is the arrival time less the newest sample's stamp, taken only when the push follows the previous one within 10 s and brings a sample newer than any seen;
+              - the estimate is the smallest of the last five;
+              - an agent between 2 s ahead and 6 s behind keeps its own stamps;
+              - any other agent is corrected by its estimate, and the correction stays the same until the estimate moves by more than 2 s.
+            - A correction that stays the same maps a re-sent sample onto its first record, so it is not stored twice. An agent re-sends a push whose reply was lost; with batches moved one by one, those could show as doubled points.
+            - A clock that is set right is followed within one round (three rounds for steps under 20 s).
+            - After a short restart, the server uses each server's last report to treat the first push as fresh, so even that push is placed by an estimate. A new agent, or one back after more than half an hour away, is placed batch by batch as before for its first round.
 
             ### Compatibility
 
-            - Agent 1.3.67 uses the same push format and works with every v1.3 server.
-            - After the update, ext4 hosts show their disk 2–5 points higher, the same figure as df.
+            - Server only. Agents stay on 1.3.67 and need no update; every agent version works.
+            - An agent whose clock is right is unaffected: its samples keep their own stamps.
+            - The server change is shared with Pulse-Hotaru.
 
             ### Verified
 
             - Go, with the race detector:
-              - df tables: a full ext4 disk, a ZFS root, btrfs with NFS, snap and overlay mounts;
-              - sysfs interface sets;
-              - meminfo with arcstats;
-              - cgroup v1 and v2 memory.stat;
-              - TCPing stamps;
-              - background disk refresh.
-            - Builds and go vet on Linux amd64/arm64, macOS amd64/arm64 and Windows amd64.
-            - In containers, against /proc, df and the physical link:
-              - CPU within 0.5 points;
-              - memory exact;
-              - disk equal to df;
-              - a Proxmox-like topology reads the uplink's traffic;
-              - a 512 MiB container reads 4 % with a file in cache (was 53 %);
-              - a hung df keeps pushes 3 s apart;
-              - end to end with the v1.3.66 server.
+              - a simulated day for each of 29 agent clocks, from 6 h behind to 3 h ahead, with lost replies, 5 s and 10 min intervals, a 10 min outage and a 2 s restart: no doubled or missing points and nothing stored twice;
+              - every sample lands within 3.3 s of the probe's real start, or keeps its own error (at most 5 s) for agents in sync;
+              - the old rule, run on the same days, shows the flips;
+              - pushes through the handler for fast, slow and synced clocks, re-sends, and an agent on the old 2-minute line.
+            - End to end:
+              - nine agents, with clocks from 125 s behind to 31 s ahead, pushed to the built server for 5 minutes, with a restart halfway;
+              - the same run against v1.3.67, for comparison;
+              - the 1.3.67 agent in sync keeps its own stamps to the millisecond.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
