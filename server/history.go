@@ -29,6 +29,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -202,8 +203,88 @@ func (s *Store) SaveResourceSamples(samples []resourceSample) error {
 	})
 }
 
-// GetResourceHistory returns one server's samples from `since`, oldest first.
+// saveResourceSamplesPruned is SaveResourceSamples and (prune) the
+// PruneResourceHistory cut in one transaction: a server's bucket then pays
+// its branch page once for both.
+func (s *Store) saveResourceSamplesPruned(samples []resourceSample, cutoff time.Time, prune bool) error {
+	limit := resourceKeyBytes(cutoff.Unix() / 60)
+	return s.db.Update(func(tx *bolt.Tx) error {
+		systems := tx.Bucket([]byte(bucketName))
+		root, err := tx.CreateBucketIfNotExists([]byte(resourceHistoryBucket))
+		if err != nil {
+			return err
+		}
+		if prune {
+			var empty [][]byte
+			err := root.ForEach(func(name, v []byte) error {
+				if v != nil {
+					return nil
+				}
+				b := root.Bucket(name)
+				if b == nil {
+					return nil
+				}
+				c := b.Cursor()
+				for k, _ := c.First(); k != nil && bytes.Compare(k, limit) < 0; k, _ = c.First() {
+					if err := c.Delete(); err != nil {
+						return err
+					}
+				}
+				if k, _ := b.Cursor().First(); k == nil {
+					empty = append(empty, append([]byte(nil), name...))
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			for _, name := range empty {
+				if err := root.DeleteBucket(name); err != nil && err != bolt.ErrBucketNotFound {
+					return err
+				}
+			}
+		}
+		for _, sm := range samples {
+			if bytes.Compare(resourceKeyBytes(sm.Minute), limit) < 0 {
+				continue
+			}
+			if systems == nil || systems.Get([]byte(sm.ID)) == nil {
+				continue
+			}
+			b, err := root.CreateBucketIfNotExists([]byte(sm.ID))
+			if err != nil {
+				return err
+			}
+			b.FillPercent = 1
+			if err := b.Put(resourceKeyBytes(sm.Minute), encodeResourceValue(sm)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// GetResourceHistory returns one server's samples from `since`, oldest first,
+// the minutes still waiting in memory included.
 func (s *Store) GetResourceHistory(clientID string, since time.Time) ([]resourceSample, error) {
+	out, err := s.getStoredResourceHistory(clientID, since)
+	if err != nil {
+		return out, err
+	}
+	var last int64 = -1
+	if n := len(out); n > 0 {
+		last = out[n-1].Minute
+	}
+	for _, p := range pendingResourceSamples(clientID, since) {
+		if p.Minute > last {
+			out = append(out, p)
+			last = p.Minute
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) getStoredResourceHistory(clientID string, since time.Time) ([]resourceSample, error) {
 	out := make([]resourceSample, 0, 1440)
 	err := s.db.View(func(tx *bolt.Tx) error {
 		root := tx.Bucket([]byte(resourceHistoryBucket))
@@ -273,6 +354,7 @@ func (s *Store) PruneResourceHistory(cutoff time.Time) error {
 
 // DeleteResourceHistory removes a server's samples (the server was deleted).
 func (s *Store) DeleteResourceHistory(clientID string) error {
+	defer invalidateResourceHistoryCache()
 	return s.db.Update(func(tx *bolt.Tx) error {
 		root := tx.Bucket([]byte(resourceHistoryBucket))
 		if root == nil {
@@ -285,32 +367,109 @@ func (s *Store) DeleteResourceHistory(clientID string) error {
 	})
 }
 
-// flushResourceHistory writes the finished minutes and drops old samples.
-func flushResourceHistory(store *Store, now time.Time) {
-	samples := resourceRec.take(now.Unix() / 60)
-	if len(samples) > 0 {
-		if err := store.SaveResourceSamples(samples); err != nil {
-			log.Printf("⚠️ resource history: %v", err)
+// Finished minutes wait in memory (resourcePending, which the history
+// endpoint reads too) and are written every resourceWriteEvery, together with
+// the prune, in one transaction. One write touches two pages of every
+// server's bucket however many minutes it carries: 131 servers cost about
+// 1.2 MB a write, so a write a minute was 1.7 GB a day.
+var resourceWriteEvery = durationFromEnv("PULSE_RESOURCE_FLUSH", 10*time.Minute)
+
+// resourcePendingMax bounds what waits while writes fail (6 h of 131 servers: ~3 MB).
+const resourcePendingMax = 131 * 360
+
+var resourcePending struct {
+	sync.Mutex
+	samples []resourceSample
+	written time.Time
+}
+
+// pendingResourceSamples returns the waiting minutes of one server from `since`.
+func pendingResourceSamples(clientID string, since time.Time) []resourceSample {
+	from := since.Unix() / 60
+	resourcePending.Lock()
+	defer resourcePending.Unlock()
+	var out []resourceSample
+	for _, s := range resourcePending.samples {
+		if s.ID == clientID && s.Minute >= from {
+			out = append(out, s)
 		}
 	}
-	// what has aged out goes every ten minutes (one write a minute otherwise)
-	if now.Minute()%10 == 0 {
-		if err := store.PruneResourceHistory(now.Add(-resourceHistoryWindow)); err != nil {
-			log.Printf("⚠️ resource history prune: %v", err)
+	sort.Slice(out, func(i, j int) bool { return out[i].Minute < out[j].Minute })
+	return out
+}
+
+// forgetPendingResources drops a deleted server's waiting minutes.
+func forgetPendingResources(clientID string) {
+	resourcePending.Lock()
+	defer resourcePending.Unlock()
+	kept := resourcePending.samples[:0]
+	for _, s := range resourcePending.samples {
+		if s.ID != clientID {
+			kept = append(kept, s)
 		}
+	}
+	resourcePending.samples = kept
+}
+
+// writePendingResources writes every waiting minute (and prunes) in one
+// transaction; the minutes are dropped from memory once that commit is on disk.
+func writePendingResources(store *Store, now time.Time, prune bool) error {
+	resourcePending.Lock()
+	defer resourcePending.Unlock()
+	samples := resourcePending.samples
+	if len(samples) == 0 && !prune {
+		return nil
+	}
+	err := store.saveResourceSamplesPruned(samples, now.Add(-resourceHistoryWindow), prune)
+	if err != nil {
+		if over := len(resourcePending.samples) - resourcePendingMax; over > 0 {
+			resourcePending.samples = resourcePending.samples[over:]
+		}
+		return err
+	}
+	resourcePending.samples = nil
+	resourcePending.written = now
+	return nil
+}
+
+// flushResourceHistory takes the finished minutes; every resourceWriteEvery
+// they are written. The history's cached answers go with each new minute
+// (they show the waiting minutes as well as the stored ones).
+func flushResourceHistory(store *Store, now time.Time) {
+	samples := resourceRec.take(now.Unix() / 60)
+	resourcePending.Lock()
+	resourcePending.samples = append(resourcePending.samples, samples...)
+	if resourcePending.written.IsZero() {
+		resourcePending.written = now
+	}
+	// a minute or less: every minute, pruned every ten (as v1.3.69)
+	due := resourceWriteEvery <= time.Minute || now.Sub(resourcePending.written) >= resourceWriteEvery-30*time.Second
+	prune := resourceWriteEvery > time.Minute || now.Minute()%10 == 0
+	resourcePending.Unlock()
+	if len(samples) > 0 {
+		invalidateResourceHistoryCache()
+	}
+	if !due {
+		return
+	}
+	if err := writePendingResources(store, now, prune); err != nil {
+		log.Printf("⚠️ resource history: %v", err)
+		storeHealth.failed(time.Now(), err)
+	} else {
+		storeHealth.stored(time.Now())
 	}
 }
 
 // flushResourceHistoryAtExit writes what the shutdown would lose: the
-// finished minutes not written yet and the current minute's average so far
-// (after a quick restart the minute's later reports replace it). Called
-// once no request can add a report and before the database closes.
+// waiting minutes and the current minute's average so far (after a quick
+// restart the minute's later reports replace it). Called once no request can
+// add a report and before the database closes.
 func flushResourceHistoryAtExit(store *Store, now time.Time) {
 	samples := resourceRec.take(now.Unix()/60 + 1)
-	if len(samples) == 0 {
-		return
-	}
-	if err := store.SaveResourceSamples(samples); err != nil {
+	resourcePending.Lock()
+	resourcePending.samples = append(resourcePending.samples, samples...)
+	resourcePending.Unlock()
+	if err := writePendingResources(store, now, false); err != nil {
 		log.Printf("⚠️ resource history at exit: %v", err)
 	}
 }
@@ -363,6 +522,29 @@ func round(v float64, places int) float64 {
 	return math.Round(v*p) / p
 }
 
+// resourceHistoryCache keeps each server's encoded answer (and its gzip
+// copy) until the stored minutes change: they change once a minute, while a
+// request built from the store cost about 8 ms of CPU (1440 points read,
+// rounded, encoded and compressed), anonymously and uncached.
+var resourceHistoryCache struct {
+	sync.Mutex
+	gen     uint64
+	entries map[string]resourceCacheEntry
+}
+
+type resourceCacheEntry struct {
+	gen      uint64
+	json, gz []byte
+}
+
+// invalidateResourceHistoryCache: the stored minutes changed.
+func invalidateResourceHistoryCache() {
+	resourceHistoryCache.Lock()
+	resourceHistoryCache.gen++
+	resourceHistoryCache.entries = nil
+	resourceHistoryCache.Unlock()
+}
+
 func handleGetResourceHistory(store *Store, w http.ResponseWriter, r *http.Request) {
 	if !navbarSwitch(store, func(c *NavbarConfig) bool { return c.ResourceHistory }) {
 		http.Error(w, "resource history is off", http.StatusNotFound)
@@ -382,6 +564,14 @@ func handleGetResourceHistory(store *Store, w http.ResponseWriter, r *http.Reque
 		http.Error(w, "client not found", http.StatusNotFound)
 		return
 	}
+	resourceHistoryCache.Lock()
+	gen := resourceHistoryCache.gen
+	e, ok := resourceHistoryCache.entries[clientID]
+	resourceHistoryCache.Unlock()
+	if ok && e.gen == gen {
+		writeCachedBody(w, r, e.json, e.gz)
+		return
+	}
 	samples, err := store.GetResourceHistory(clientID, time.Now().Add(-resourceHistoryWindow))
 	if err != nil {
 		http.Error(w, "failed to read history", http.StatusInternalServerError)
@@ -391,7 +581,25 @@ func handleGetResourceHistory(store *Store, w http.ResponseWriter, r *http.Reque
 	for _, s := range samples {
 		resp.Points = append(resp.Points, [6]float64{float64(s.Minute * 60), round(s.CPU, 2), round(s.Mem, 2), round(s.Disk, 2), round(s.In, 6), round(s.Out, 6)})
 	}
-	writeJSON(w, http.StatusOK, resp)
+	body, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, "failed to encode", http.StatusInternalServerError)
+		return
+	}
+	body = append(body, '\n')
+	var gz []byte
+	if httpGzipEnabled && len(body) >= apiGzipMinSize {
+		gz = gzipBytes(body)
+	}
+	resourceHistoryCache.Lock()
+	if resourceHistoryCache.gen == gen {
+		if resourceHistoryCache.entries == nil {
+			resourceHistoryCache.entries = make(map[string]resourceCacheEntry)
+		}
+		resourceHistoryCache.entries[clientID] = resourceCacheEntry{gen: gen, json: body, gz: gz}
+	}
+	resourceHistoryCache.Unlock()
+	writeCachedBody(w, r, body, gz)
 }
 
 // ---------- GET /api/tcping/summary ----------

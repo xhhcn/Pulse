@@ -238,7 +238,7 @@ func TestLoginBudgetPerIPv6Slash48AndConcurrentChecks(t *testing.T) {
 	}
 }
 
-func TestSetupAfterADamagedDatabaseOnlyFromTheServerItself(t *testing.T) {
+func TestSetupAfterADamagedDatabaseNeedsTheSetupCode(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/metrics.db"
 	s, err := NewStore(path)
@@ -265,45 +265,91 @@ func TestSetupAfterADamagedDatabaseOnlyFromTheServerItself(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a damaged database must not keep the server down: %v", err)
 	}
-	defer store.Close()
 	status := httptest.NewRecorder()
 	handleAuthStatus(store, status, httptest.NewRequest(http.MethodGet, "/api/auth/status", nil))
 	if !strings.Contains(status.Body.String(), `"locked":true`) || !strings.Contains(status.Body.String(), `"set":false`) {
 		t.Fatalf("status: %s", status.Body.String())
 	}
-	setup := func(remote, xff string) int {
-		req := httptest.NewRequest(http.MethodPost, "/api/auth/setup", strings.NewReader(`{"password":"attacker-pw-123"}`))
+	codeFile := dir + "/" + setupCodeFile
+	readCode := func() string {
+		t.Helper()
+		b, err := os.ReadFile(codeFile)
+		if err != nil {
+			t.Fatalf("the setup code file: %v", err)
+		}
+		if fi, _ := os.Stat(codeFile); fi == nil || fi.Mode().Perm() != 0o600 {
+			t.Fatalf("the setup code file must be 0600: %v", fi.Mode())
+		}
+		return strings.TrimSpace(string(b))
+	}
+	first := readCode()
+	if len(normalizeSetupCode(first)) != 12 {
+		t.Fatalf("a 12-character code: %q", first)
+	}
+	setup := func(st *Store, remote, xff, code string) (int, string) {
+		body, _ := json.Marshal(map[string]string{"password": "attacker-pw-123", "setup_code": code})
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/setup", bytes.NewReader(body))
 		req.RemoteAddr = remote
 		if xff != "" {
 			req.Header.Set("X-Forwarded-For", xff)
 		}
 		rr := httptest.NewRecorder()
-		handleAuthSetup(store, rr, req)
-		return rr.Code
+		handleAuthSetup(st, rr, req)
+		return rr.Code, rr.Body.String()
 	}
-	if c := setup("203.0.113.9:5555", ""); c != http.StatusForbidden {
-		t.Fatalf("a visitor set the password of a fresh database: %d", c)
-	}
-	if c := setup("203.0.113.9:5555", "127.0.0.1"); c != http.StatusForbidden {
-		t.Fatalf("a forwarded header claiming loopback must not count: %d", c)
+	for _, c := range []struct{ remote, xff, code, why string }{
+		{"203.0.113.9:5555", "", "", "a visitor without the code"},
+		{"203.0.113.9:5555", "127.0.0.1", "", "a forwarded header claiming loopback"},
+		{"127.0.0.1:5555", "", "", "the server's own address (every visitor behind a reverse proxy on the same machine)"},
+		{"127.0.0.1:5555", "", "ABCD-EFGH-JKLM", "a wrong code"},
+	} {
+		if code, body := setup(store, c.remote, c.xff, c.code); code != http.StatusForbidden || strings.Contains(body, "curl") || strings.Contains(body, "127.0.0.1") {
+			t.Fatalf("%s: %d %q", c.why, code, body)
+		}
 	}
 	if set, _ := store.CheckPasswordSet(); set {
 		t.Fatal("no password may have been set")
 	}
-	if c := setup("127.0.0.1:5555", ""); c != http.StatusOK {
-		t.Fatalf("from the server itself: %d", c)
+	// a restart while still locked issues a new code; the old one stops working
+	store.Close()
+	store, err = NewStore(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if store.SetupLocked() {
-		t.Fatal("the lock goes once a password is set")
+	defer store.Close()
+	second := readCode()
+	if second == first {
+		t.Fatal("a restart must issue a new code")
 	}
-	// and a genuinely new install still has its normal first run
-	fresh, err := NewStore(t.TempDir() + "/new.db")
+	if code, _ := setup(store, "203.0.113.9:5555", "", first); code != http.StatusForbidden {
+		t.Fatalf("the code of an earlier start: %d", code)
+	}
+	// the current code, typed loosely, from anywhere
+	loose := strings.ToLower(strings.ReplaceAll(second, "-", " "))
+	if code, body := setup(store, "203.0.113.9:5555", "", loose); code != http.StatusOK {
+		t.Fatalf("with the setup code: %d %s", code, body)
+	}
+	if store.SetupLocked() || store.SetupCodeMatches(second) {
+		t.Fatal("the lock and its code go once a password is set")
+	}
+	if _, err := os.Stat(codeFile); !os.IsNotExist(err) {
+		t.Fatalf("the code file goes too: %v", err)
+	}
+	// and a genuinely new install still has its normal first run, with no code
+	freshDir := t.TempDir()
+	fresh, err := NewStore(freshDir + "/new.db")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer fresh.Close()
 	if fresh.SetupLocked() {
 		t.Fatal("a new install is not locked")
+	}
+	if _, err := os.Stat(freshDir + "/" + setupCodeFile); !os.IsNotExist(err) {
+		t.Fatal("a new install has no setup code file")
+	}
+	if code, body := setup(fresh, "203.0.113.9:5555", "", ""); code != http.StatusOK {
+		t.Fatalf("a new install's first run: %d %s", code, body)
 	}
 }
 

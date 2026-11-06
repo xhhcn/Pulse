@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +37,10 @@ const (
 // Store represents the persistent storage
 type Store struct {
 	db *bolt.DB
+	// path of the database file: the setup code file goes beside it
+	path string
+	// live: the agents' latest records not yet written (live.go); nil = off
+	live *liveOverlay
 }
 
 // openBolt opens the bbolt database with the safer FreelistMapType and a
@@ -61,6 +68,13 @@ func openBolt(dbPath string) (*bolt.DB, error) {
 		return nil, err
 	}
 	db.MaxBatchDelay = pushBatchDelay
+	if liveFlushInterval > 0 && pushBatchDelay > 0 {
+		// only pushes with TCPing samples commit now: group them for longer
+		// (2 s: 13× fewer bytes than v1.3.69 on a 131-server copy, against 9×
+		// at 1 s; an agent waits at most 2 s more for that push's answer, its
+		// timeout is 8 s)
+		db.MaxBatchDelay = durationFromEnv("PULSE_TCPING_COMMIT_DELAY", 2*time.Second)
+	}
 	return db, nil
 }
 
@@ -185,13 +199,32 @@ func NewStore(dbPath string) (*Store, error) {
 
 	log.Printf("✅ Database initialized: %s", dbPath)
 
-	store := &Store{db: db}
+	store := &Store{db: db, path: dbPath}
+	if liveFlushInterval > 0 {
+		store.live = newLiveOverlay()
+	}
 	if quarantinedTo != "" {
 		if err := store.lockSetup(quarantinedTo); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("failed to lock the admin setup of the fresh database: %w", err)
 		}
-		log.Printf("🔒 Admin setup is locked: the database was replaced after it was found damaged, and the first visitor to set a password would own the site. Restore a backup, or set the password on this server itself: curl -X POST http://127.0.0.1:%s/api/auth/setup -H 'Content-Type: application/json' -d '{\"password\":\"...\"}'", portFromEnv())
+	}
+	// While the setup is locked (this start replaced a damaged database, or
+	// an earlier one did and no password has been set since), each start
+	// issues a new one-time setup code: the log and a 0600 file beside the
+	// database are the only places it appears.
+	if store.SetupLocked() {
+		if set, _ := store.CheckPasswordSet(); set {
+			_ = store.ClearSetupLock()
+		} else if code, file, err := store.issueSetupCode(); err != nil {
+			log.Printf("⚠️  Admin setup is locked and no setup code could be issued: %v", err)
+		} else {
+			where := ""
+			if file != "" {
+				where = " (also in " + file + ")"
+			}
+			log.Printf("🔒 Admin setup is locked: the database was replaced after it was found damaged, and the first visitor to set a password would own the site. Restore a backup, or set the password with the one-time setup code %s%s, on the sign-in page or with: curl -X POST http://127.0.0.1:%s/api/auth/setup -H 'Content-Type: application/json' -d '{\"password\":\"...\",\"setup_code\":\"%s\"}'. A restart issues a new code.", code, where, portFromEnv(), code)
+		}
 	}
 
 	// One-shot cleanup of orphan buckets left over from older code paths
@@ -528,6 +561,9 @@ func CompactBoltFileAfterClose(dbPath string) (beforeOut, afterOut int64, err er
 // Close closes the database
 func (s *Store) Close() error {
 	if s.db != nil {
+		if _, err := s.FlushLive(); err != nil {
+			log.Printf("⚠️  live records not written at close: %v", err)
+		}
 		return s.db.Close()
 	}
 	return nil
@@ -563,7 +599,7 @@ func (s *Store) Snapshot(w io.Writer) (int64, error) {
 
 // Upsert inserts or updates a system metric
 func (s *Store) Upsert(metric SystemMetric) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	err := s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(bucketName))
 		if bucket == nil {
 			return fmt.Errorf("bucket not found")
@@ -571,6 +607,10 @@ func (s *Store) Upsert(metric SystemMetric) error {
 
 		return putMetric(bucket, metric)
 	})
+	if err == nil {
+		s.live.drop(metric.ID) // a whole record written: nothing in memory is newer
+	}
+	return err
 }
 
 // putMetric serialises metric and stores it under its ID inside bucket.
@@ -594,7 +634,17 @@ func putMetric(bucket *bolt.Bucket, metric SystemMetric) error {
 // result or admin edit committed in between. buildMetricsSnapshot derives
 // the offline state from the age of UpdatedAt anyway.
 func (s *Store) MarkOffline(id string) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	// The in-memory record (live.go) goes down with the flag: the stored
+	// "last seen" is then the last report, not the last flush.
+	var mem SystemMetric
+	var gen uint64
+	haveMem := false
+	if s.live != nil {
+		mem, gen, haveMem = s.live.copyOf(id)
+	}
+	wrote := false
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		wrote = false
 		bucket := tx.Bucket([]byte(bucketName))
 		if bucket == nil {
 			return fmt.Errorf("bucket not found")
@@ -607,12 +657,21 @@ func (s *Store) MarkOffline(id string) error {
 		if err := json.Unmarshal(data, &current); err != nil {
 			return fmt.Errorf("failed to decode metric: %w", err)
 		}
-		if current.Alert {
+		if haveMem {
+			m := mem
+			mergeAdminOwned(&m, &current, allowedTCPingTargets(tx))
+			current = m
+		} else if current.Alert {
 			return nil
 		}
 		current.Alert = true
+		wrote = true
 		return putMetric(bucket, current)
 	})
+	if err == nil && wrote && haveMem {
+		s.live.dropIfGen(id, gen) // the stored record has it all now
+	}
+	return err
 }
 
 // SetTCPingLatest records the newest server-driven tcping sample for one
@@ -873,13 +932,17 @@ func (s *Store) PruneTCPingTargets(targets []string) error {
 // polling, legacy /api/metrics ingest). Admin-owned fields are taken from
 // the stored record atomically; see putAgentMetric.
 func (s *Store) UpsertFromAgent(metric SystemMetric) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	err := s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(bucketName))
 		if bucket == nil {
 			return fmt.Errorf("bucket not found")
 		}
 		return putAgentMetric(tx, bucket, metric)
 	})
+	if err == nil {
+		s.live.drop(metric.ID) // the store has the newest agent data now
+	}
+	return err
 }
 
 // List returns all system metrics sorted by order
@@ -892,12 +955,14 @@ func (s *Store) List() ([]SystemMetric, error) {
 			return fmt.Errorf("bucket not found")
 		}
 
+		allowed := lazyAllowed(tx)
 		return bucket.ForEach(func(k, v []byte) error {
 			var metric SystemMetric
 			if err := json.Unmarshal(v, &metric); err != nil {
 				log.Printf("⚠️ Failed to unmarshal metric %s: %v", string(k), err)
 				return nil // Skip corrupted entry
 			}
+			s.live.apply(&metric, allowed)
 			metrics = append(metrics, metric)
 			return nil
 		})
@@ -930,7 +995,11 @@ func (s *Store) Get(id string) (*SystemMetric, error) {
 			return fmt.Errorf("metric not found")
 		}
 
-		return json.Unmarshal(data, &metric)
+		if err := json.Unmarshal(data, &metric); err != nil {
+			return err
+		}
+		s.live.apply(&metric, lazyAllowed(tx))
+		return nil
 	})
 
 	if err != nil {
@@ -942,7 +1011,7 @@ func (s *Store) Get(id string) (*SystemMetric, error) {
 
 // Delete removes a system metric by ID
 func (s *Store) Delete(id string) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	err := s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(bucketName))
 		if bucket == nil {
 			return fmt.Errorf("bucket not found")
@@ -950,6 +1019,10 @@ func (s *Store) Delete(id string) error {
 
 		return bucket.Delete([]byte(id))
 	})
+	if err == nil {
+		s.live.drop(id)
+	}
+	return err
 }
 
 // Count returns the number of systems in the database
@@ -1078,6 +1151,9 @@ func (s *Store) SaveTCPingResult(result TCPingResult) error {
 // once: it only reads and writes inside tx, and the map it merges into
 // (metric.TCPingData) ends the same however often it runs.
 func (s *Store) SaveClientPushBatch(metric SystemMetric, tcpingResults []TCPingResult) error {
+	if s.live != nil {
+		return s.saveLivePush(metric, tcpingResults)
+	}
 	return s.db.Batch(func(tx *bolt.Tx) error {
 		systems := tx.Bucket([]byte(bucketName))
 		if systems == nil {
@@ -1713,11 +1789,93 @@ func (s *Store) SaveNavbarConfig(config *NavbarConfig) error {
 }
 
 // setupLockKey marks a database made empty because the previous one was
-// damaged: until a password is set from the server itself, the first-run
-// setup is refused (see handleAuthSetup). Without it an anonymous visitor (or
-// a bot watching /api/auth/status) could set the admin password, and with it
-// custom JS for every visitor.
+// damaged: until a password is set with the one-time setup code, the
+// first-run setup is refused (see handleAuthSetup). Without it an anonymous
+// visitor (or a bot watching /api/auth/status) could set the admin password,
+// and with it custom JS for every visitor. (v1.3.69 let the server's own
+// address through instead of a code, but behind a reverse proxy on the same
+// machine every visitor comes from that address.)
 const setupLockKey = "setup_locked"
+
+// setupCodeKey holds the SHA-256 of the current setup code; setupCodeFile
+// is the 0600 file beside the database that holds the code itself.
+const (
+	setupCodeKey  = "setup_code_sha256"
+	setupCodeFile = "setup-code.txt"
+	// 32 letters and digits without 0/O and 1/I: 12 of them are 60 bits
+	setupCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+)
+
+func newSetupCode() (string, error) {
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	out := make([]byte, 0, 14)
+	for i, c := range b {
+		if i > 0 && i%4 == 0 {
+			out = append(out, '-')
+		}
+		out = append(out, setupCodeAlphabet[int(c)%len(setupCodeAlphabet)])
+	}
+	return string(out), nil
+}
+
+// normalizeSetupCode: the code as typed, without case, spaces or dashes.
+func normalizeSetupCode(code string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '-' || r == ' ' || r == '\t' {
+			return -1
+		}
+		return r
+	}, strings.ToUpper(strings.TrimSpace(code)))
+}
+
+func setupCodeHash(code string) []byte {
+	sum := sha256.Sum256([]byte(normalizeSetupCode(code)))
+	return []byte(hex.EncodeToString(sum[:]))
+}
+
+// issueSetupCode makes a new setup code (an older one stops working), stores
+// its hash and writes it to setupCodeFile when the directory allows.
+func (s *Store) issueSetupCode() (code, file string, err error) {
+	if code, err = newSetupCode(); err != nil {
+		return "", "", err
+	}
+	if err = s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(configBucket))
+		if b == nil {
+			return fmt.Errorf("config bucket not found")
+		}
+		return b.Put([]byte(setupCodeKey), setupCodeHash(code))
+	}); err != nil {
+		return "", "", err
+	}
+	if s.path != "" {
+		file = filepath.Join(filepath.Dir(s.path), setupCodeFile)
+		_ = os.Remove(file)
+		if werr := os.WriteFile(file, []byte(code+"\n"), 0o600); werr != nil {
+			log.Printf("⚠️  could not write %s: %v", file, werr)
+			file = ""
+		}
+	}
+	return code, file, nil
+}
+
+// SetupCodeMatches reports whether code is the current setup code.
+func (s *Store) SetupCodeMatches(code string) bool {
+	if normalizeSetupCode(code) == "" {
+		return false
+	}
+	var want []byte
+	_ = s.db.View(func(tx *bolt.Tx) error {
+		if b := tx.Bucket([]byte(configBucket)); b != nil {
+			want = append([]byte(nil), b.Get([]byte(setupCodeKey))...)
+		}
+		return nil
+	})
+	return len(want) > 0 && subtle.ConstantTimeCompare(setupCodeHash(code), want) == 1
+}
 
 func (s *Store) lockSetup(damagedCopy string) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
@@ -1742,14 +1900,22 @@ func (s *Store) SetupLocked() bool {
 	return locked
 }
 
-// ClearSetupLock removes the lock once a password is set.
+// ClearSetupLock removes the lock, its code and the code's file once a
+// password is set.
 func (s *Store) ClearSetupLock() error {
-	return s.db.Update(func(tx *bolt.Tx) error {
+	err := s.db.Update(func(tx *bolt.Tx) error {
 		if b := tx.Bucket([]byte(configBucket)); b != nil {
-			return b.Delete([]byte(setupLockKey))
+			if err := b.Delete([]byte(setupLockKey)); err != nil {
+				return err
+			}
+			return b.Delete([]byte(setupCodeKey))
 		}
 		return nil
 	})
+	if err == nil && s.path != "" {
+		_ = os.Remove(filepath.Join(filepath.Dir(s.path), setupCodeFile))
+	}
+	return err
 }
 
 // SaveNavbarConfigAndSecret saves the navbar config and, when secret is not

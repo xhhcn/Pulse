@@ -486,6 +486,11 @@ const (
 	// bound a huge interval overflowed time.Duration into a negative value
 	// and time.NewTicker panicked, again on every restart.
 	maxTCPingIntervalSecs = 86400
+	// minTCPingIntervalSecs: below it the history outgrows what the server
+	// is built for (137 servers × 3 targets every 5 s are 7.1 M rows a day,
+	// about 2.6 GB; every second would be 13 GB). A saved shorter interval is
+	// refused; one already stored keeps working until the next save.
+	minTCPingIntervalSecs = 5
 )
 
 // iconNameRe is the iconify "set:name" form the agent emits (e.g.
@@ -1891,6 +1896,8 @@ func main() {
 	// Resource history: each server's minutes, the last 24 hours, from the
 	// start (自定义设置 → 资源历史 only shows them).
 	go startResourceHistory(rootCtx, store)
+	// the agents' live records, written once a minute (live.go)
+	go startLiveFlush(rootCtx, store)
 	go startIPCacheCleanup(rootCtx, ipCache)
 	go startTCPingCacheCleanup(rootCtx)
 
@@ -2677,8 +2684,9 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 		// Client operation - system must exist and verify secret if configured
 		if existing == nil {
 			// Client cannot create new systems - only update existing ones
-			// New systems must be created by admin first
-			http.Error(w, "system not found", http.StatusNotFound)
+			// New systems must be created by admin first. The same answer as a
+			// wrong secret, so the IDs that exist are not revealed.
+			http.Error(w, agentRejected, http.StatusUnauthorized)
 			return
 		}
 
@@ -2697,7 +2705,7 @@ func handleIngestMetric(store *Store, broker *SSEBroker, w http.ResponseWriter, 
 			}
 
 			if !secretEqual(providedSecret, existing.Secret) {
-				http.Error(w, "unauthorized: invalid secret", http.StatusUnauthorized)
+				http.Error(w, agentRejected, http.StatusUnauthorized)
 				return
 			}
 		}
@@ -2923,6 +2931,7 @@ func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistr
 	// Its resource history goes too (a small nested bucket), and any minute
 	// not yet written.
 	resourceRec.forget(id)
+	forgetPendingResources(id)
 	agentClocks.forget(id)
 	if err := store.DeleteResourceHistory(id); err != nil {
 		log.Printf("⚠️  resource history cleanup for deleted system %s failed: %v", id, err)
@@ -3088,7 +3097,7 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 	if existing.Secret != "" {
 		if payload.Secret == "" {
 			logThrottled("register:nosecret", "❌ Client registration failed: secret required for ID %q", payload.ID)
-			http.Error(w, "secret is required for authentication", http.StatusUnauthorized)
+			http.Error(w, agentRejected, http.StatusUnauthorized)
 			return
 		}
 		if !secretEqual(payload.Secret, existing.Secret) {
@@ -3525,12 +3534,18 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 		// unchanged retry would be taken for a duplicate and its samples
 		// dropped on both sides.
 		tcpingBatchForget(clientID, deliveredTCPing)
-		storeHealth.failed(time.Now(), err)
+		if !errors.Is(err, errStoreFailing) { // (a refusal is no new evidence)
+			storeHealth.failed(time.Now(), err)
+		}
 		http.Error(w, "failed to save metrics", http.StatusInternalServerError)
 		return
 	}
 	registry.UpdatePushState(clientID, now)
-	storeHealth.stored(time.Now())
+	// Only a commit shows that storage works; a push kept in memory (live.go)
+	// does not.
+	if store.live == nil || len(batchedResults) > 0 {
+		storeHealth.stored(time.Now())
+	}
 
 	if len(batchedResults) > 0 {
 		invalidateTCPingCache(clientID)
@@ -4844,9 +4859,10 @@ func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 	}
 
 	// SECURITY: Verify that the client_id exists and verify secret if configured
+	// (an unknown ID gets the answer a wrong secret gets: no ID is revealed)
 	existing, err := store.Get(payload.ClientID)
 	if err != nil || existing == nil {
-		http.Error(w, "client not found", http.StatusNotFound)
+		http.Error(w, agentRejected, http.StatusUnauthorized)
 		return
 	}
 
@@ -4862,7 +4878,7 @@ func handleTCPingResult(store *Store, w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !secretEqual(providedSecret, existing.Secret) {
-			http.Error(w, "unauthorized: invalid secret", http.StatusUnauthorized)
+			http.Error(w, agentRejected, http.StatusUnauthorized)
 			return
 		}
 	}
@@ -5489,8 +5505,8 @@ func handleSetTCPingConfig(store *Store, broker *SSEBroker, registry *ClientRegi
 	}
 
 	// Validate config
-	if config.IntervalSecs < 1 || config.IntervalSecs > maxTCPingIntervalSecs {
-		http.Error(w, fmt.Sprintf("interval_secs must be between 1 and %d", maxTCPingIntervalSecs), http.StatusBadRequest)
+	if config.IntervalSecs < minTCPingIntervalSecs || config.IntervalSecs > maxTCPingIntervalSecs {
+		http.Error(w, fmt.Sprintf("interval_secs must be between %d and %d", minTCPingIntervalSecs, maxTCPingIntervalSecs), http.StatusBadRequest)
 		return
 	}
 	// Allow empty targets list (default state)
@@ -6245,18 +6261,6 @@ func handleAuthStatus(store *Store, w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"set": set, "locked": !set && store.SetupLocked()})
 }
 
-// loopbackPeer: the request's own connection comes from this machine. The
-// TCP peer, never a forwarded header: a CDN or a client can claim any
-// X-Forwarded-For.
-func loopbackPeer(r *http.Request) bool {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
-
 // handleAuthSetup sets the admin password (first time only)
 func handleAuthSetup(store *Store, w http.ResponseWriter, r *http.Request) {
 	// Check if password is already set
@@ -6269,21 +6273,25 @@ func handleAuthSetup(store *Store, w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "password already set", http.StatusBadRequest)
 		return
 	}
-	// A database made empty after damage: only from the server itself.
-	if store.SetupLocked() && !loopbackPeer(r) {
-		http.Error(w, "setup is locked: the database was replaced after it was found damaged. Restore a backup, or set the password on the server itself: curl -X POST http://127.0.0.1:"+portFromEnv()+"/api/auth/setup -H 'Content-Type: application/json' -d '{\"password\":\"...\"}'", http.StatusForbidden)
-		return
-	}
-
 	defer r.Body.Close()
 	// Password JSON is tiny; 4 KB caps any unboundedness without affecting
 	// even the upper bound of a legitimate 128-char password.
 	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 	var payload struct {
-		Password string `json:"password"`
+		Password  string `json:"password"`
+		SetupCode string `json:"setup_code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+	// A database made empty after damage: only with the one-time code the
+	// server logged at start (and wrote beside the database). The address a
+	// request comes from proves nothing here: behind a reverse proxy on the
+	// same machine every visitor comes from 127.0.0.1.
+	if store.SetupLocked() && !store.SetupCodeMatches(payload.SetupCode) {
+		logThrottled("setup:locked", "🔒 A first-run setup without the right setup code was refused (the database was replaced after damage; the code is in this log at start and in %s beside the database)", setupCodeFile)
+		http.Error(w, "setup is locked: the database was replaced after it was found damaged; send setup_code, the one-time code in the server's log (and in setup-code.txt beside the database)", http.StatusForbidden)
 		return
 	}
 
@@ -6861,6 +6869,15 @@ func handleAdminBackup(store *Store, w http.ResponseWriter, r *http.Request) {
 	// can be several MB and buffering the whole body serves no purpose.
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("Cache-Control", "no-store")
+	// The admin page asks for it compressed (gz=1) and the browser unpacks
+	// it, so the file saved is the database as before: about half of a
+	// snapshot is free pages, and a 186 MB one came down as 21.5 MB at gzip
+	// level 1 (about 2 s of CPU). Scripts that do not ask get it plain.
+	compressed := r.URL.Query().Get("gz") == "1" && acceptsGzip(r)
+	if compressed {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Add("Vary", "Accept-Encoding")
+	}
 
 	// The snapshot is one read transaction for the whole download. A
 	// download that stops moving (a paused or dead client) used to hold it
@@ -6870,7 +6887,20 @@ func handleAdminBackup(store *Store, w http.ResponseWriter, r *http.Request) {
 	// one ends.
 	rc := http.NewResponseController(w)
 	defer rc.SetWriteDeadline(time.Time{})
-	n, err := store.Snapshot(stallLimitedWriter{w: w, rc: rc})
+	// the latest live records into the copy (live.go)
+	if _, ferr := store.FlushLive(); ferr != nil {
+		log.Printf("⚠️  backup: live records not written first: %v", ferr)
+	}
+	var out io.Writer = stallLimitedWriter{w: w, rc: rc}
+	var zw *gzip.Writer
+	if compressed {
+		zw, _ = gzip.NewWriterLevel(out, gzip.BestSpeed)
+		out = zw
+	}
+	n, err := store.Snapshot(out)
+	if err == nil && zw != nil {
+		err = zw.Close()
+	}
 	if err != nil {
 		// If streaming has already begun, headers are committed and we
 		// can't switch to a JSON error; log it so operators notice the
