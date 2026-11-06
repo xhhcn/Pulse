@@ -431,7 +431,12 @@ const apiBase = apiBaseProp ?? '';
     let doc;
     try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return null; }
     const root = doc.documentElement;
-    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return null;
+    // Names are compared on the element's namespace and local name: nodeName
+    // carries the prefix in an XML document, so <s:script> or <h:script>
+    // (xmlns:h = XHTML) read as "s:script" and were kept, and ran. Anything
+    // outside the SVG namespace goes.
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    if (!root || root.namespaceURI !== SVG_NS || root.localName !== 'svg' || doc.querySelector('parsererror')) return null;
     const banned = /^(script|foreignobject|iframe|object|embed|use|style|animate|set|animatetransform|animatemotion)$/i;
     // Every node, not only elements: comments, CDATA sections and processing
     // instructions are dropped as well.
@@ -441,11 +446,14 @@ const apiBase = apiBaseProp ?? '';
     while (node) {
       if (node.nodeType !== Node.ELEMENT_NODE) {
         if (node.nodeType !== Node.TEXT_NODE) toRemove.push(node);
-      } else if (banned.test(node.nodeName)) toRemove.push(node);
+      } else if (node.namespaceURI !== SVG_NS || banned.test(node.localName)) toRemove.push(node);
       else {
         Array.from(node.attributes).forEach((attr) => {
-          const n = attr.name.toLowerCase(), v = String(attr.value || '');
-          if (n.startsWith('on') || (/href|src/.test(n) && !/^#|^data:image\//i.test(v.trim()))) node.removeAttribute(attr.name);
+          const n = attr.localName.toLowerCase(), v = String(attr.value || '');
+          // event handlers; links and sources other than a #fragment or a data:
+          // image; url(…) of anything else (a paint server or a style fetched
+          // from another site, which learns who views the page)
+          if (n.startsWith('on') || (/href|src/.test(n) && !/^#|^data:image\//i.test(v.trim())) || /url\(\s*['"]?\s*(?!#|data:image\/)/i.test(v)) node.removeAttributeNode(attr);
         });
       }
       node = walker.nextNode();
@@ -1911,7 +1919,7 @@ const apiBase = apiBaseProp ?? '';
           <div class="tcping-head flex items-start justify-between gap-3 sm:gap-4 mb-3">
             <div class="min-w-0">
               <h2 class="text-sm sm:text-base font-semibold tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate-detail="tabResources">Resources</h2>
-              <div class="mt-1 text-xs sm:text-[13px] text-[#595959] dark:text-[#ababab]"><span data-translate-detail="resourceDesc">Minute averages</span></div>
+              <div class="mt-1 text-xs sm:text-[13px] text-[#595959] dark:text-[#ababab]"><span data-resource-desc data-translate-detail="resourceDesc">Minute averages</span></div>
             </div>
             <div class="tcping-tools" data-tcping-tools></div>
           </div>
@@ -1973,6 +1981,9 @@ const apiBase = apiBaseProp ?? '';
     'tabLatency': { en: 'Latency', zh: '延迟' },
     'tabResources': { en: 'Resources', zh: '资源' },
     'resourceDesc': { en: 'Minute averages kept by the server', zh: '服务端记录的每分钟平均值' },
+    'resourceDesc5': { en: '5-minute averages of the server\'s records', zh: '服务端记录的每 5 分钟平均值' },
+    'resourceDesc10': { en: '10-minute averages of the server\'s records', zh: '服务端记录的每 10 分钟平均值' },
+    'resourceDesc20': { en: '20-minute averages of the server\'s records', zh: '服务端记录的每 20 分钟平均值' },
     'resCpu': { en: 'CPU', zh: 'CPU' },
     'resCpuDesc': { en: 'Average usage', zh: '平均使用率' },
     'resMem': { en: 'Memory', zh: '内存' },
@@ -2139,7 +2150,8 @@ const apiBase = apiBaseProp ?? '';
   }
 
   // Listen for language changes
-  window.addEventListener('languagechange', updateTranslations);
+  // 'translate' only: initI18n turns the navbar's languagechange into it
+  // once the new language is set; listening to both ran every pass twice.
   window.addEventListener('translate', updateTranslations);
   
   // Update chart tooltip styles when theme changes
@@ -5275,16 +5287,50 @@ const apiBase = apiBaseProp ?? '';
   // a minute or more is missing (the server was offline, or the history was
   // switched off). A minute with no neighbour (the first after switching on,
   // a server that reported once) is marked: a line needs two, it gets a dot.
-  function resourceSeries(points, idx, factor = 1) {
+  function resourceSeries(points, idx, factor = 1, step = 60) {
     const out = [];
-    const apart = (i, j) => points[j][0] - points[i][0] > 150;
+    // a gap where a minute (or, averaged, a whole slot) is missing
+    const gap = step <= 60 ? 150 : step * 1.5;
+    const apart = (i, j) => points[j][0] - points[i][0] > gap;
     for (let i = 0; i < points.length; i++) {
-      if (i && apart(i - 1, i)) out.push({ x: points[i - 1][0] * 1000 + 60000, y: null });
+      if (i && apart(i - 1, i)) out.push({ x: points[i - 1][0] * 1000 + step * 1000, y: null });
       const lone = (!i || apart(i - 1, i)) && (i === points.length - 1 || apart(i, i + 1));
       const y = points[i][idx] * factor;
       out.push(lone ? { x: points[i][0] * 1000, y, lone: true } : { x: points[i][0] * 1000, y });
     }
     return out;
+  }
+  // As Beszel: about 72 points a chart whatever the span (its 24 h chart is
+  // 20-minute records), so a day reads as a curve, not 1440 minutes packed
+  // two to a pixel (a minute's spike also stretched the network axis until
+  // the rest of the day lay flat on it). Each point is the average of the
+  // minutes recorded in its slot, at their mean time (the slot in progress
+  // never lands in the future); 1 h keeps every minute.
+  const RESOURCE_STEP_S = { 1: 60, 6: 300, 12: 600, 24: 1200 };
+  const resourceStep = () => RESOURCE_STEP_S[tcpingRangeHours()] || 60;
+  function resourceBuckets(points, step) {
+    if (step <= 60 || !points || points.length < 2) return points;
+    const out = [];
+    let key = null, acc = null;
+    const flush = () => { if (acc) out.push(acc.sum.map((v, i) => (i === 0 ? Math.round(v / acc.n) : v / acc.n))); };
+    for (const p of points) {
+      const k = Math.floor(p[0] / step);
+      if (k !== key) { flush(); key = k; acc = { n: 0, sum: [0, 0, 0, 0, 0, 0] }; }
+      acc.n++;
+      for (let i = 0; i < 6; i++) acc.sum[i] += Number(p[i]) || 0;
+    }
+    flush();
+    return out;
+  }
+  // The line under the tabs says which average the charts show.
+  function syncResourceDesc() {
+    const step = resourceStep();
+    const key = step >= 1200 ? 'resourceDesc20' : step >= 600 ? 'resourceDesc10' : step >= 300 ? 'resourceDesc5' : 'resourceDesc';
+    const lang = getCurrentLanguage();
+    document.querySelectorAll('[data-pane-desc="resource"], [data-resource-desc]').forEach((el) => {
+      el.setAttribute('data-translate-detail', key);
+      el.textContent = translations[key][lang];
+    });
   }
   // The network chart's unit (1024-based): the one its highest minute reads
   // in, so the axis steps in round numbers of it (2, 5, 10 KB/s…) instead of
@@ -5296,7 +5342,7 @@ const apiBase = apiBaseProp ?? '';
     return TRAFFIC_UNITS.find(([, f], i) => i === TRAFFIC_UNITS.length - 1 || top * f < 1024);
   }
   const trimNumber = (v) => String(Number(v.toFixed(2)));
-  function resourceChartConfig(kind, points, dark) {
+  function resourceChartConfig(kind, points, dark, step = 60) {
     const c = RESOURCE_COLORS[dark ? 'dark' : 'light'];
     const lang = getCurrentLanguage();
     // Beszel's area charts: a 1 px line over its colour at 40 % (the network's
@@ -5306,10 +5352,10 @@ const apiBase = apiBaseProp ?? '';
     const ds = (label, data, color, alpha, formatValue) => ({ label, data, borderColor: color, backgroundColor: `${color}${alpha}`, fill: 'origin', borderWidth: 1, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 3, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, clip: { left: 0, top: 4, right: 0, bottom: 4 }, formatValue });
     const [unit, factor] = kind === 'net' ? trafficUnit(points) : ['', 1];
     const speed = (v) => formatTrafficSpeed(v / factor);
-    const datasets = kind === 'cpu' ? [ds('CPU', resourceSeries(points, 1), c.cpu, '66', pctLabel)]
-      : kind === 'mem' ? [ds(translations.resMem[lang], resourceSeries(points, 2), c.mem, '66', pctLabel)]
-      : kind === 'disk' ? [ds(translations.resDisk[lang], resourceSeries(points, 3), c.disk, '66', pctLabel)]
-      : [ds(translations.resNetIn[lang], resourceSeries(points, 4, factor), c.in, '33', speed), ds(translations.resNetOut[lang], resourceSeries(points, 5, factor), c.out, '33', speed)];
+    const datasets = kind === 'cpu' ? [ds('CPU', resourceSeries(points, 1, 1, step), c.cpu, '66', pctLabel)]
+      : kind === 'mem' ? [ds(translations.resMem[lang], resourceSeries(points, 2, 1, step), c.mem, '66', pctLabel)]
+      : kind === 'disk' ? [ds(translations.resDisk[lang], resourceSeries(points, 3, 1, step), c.disk, '66', pctLabel)]
+      : [ds(translations.resNetIn[lang], resourceSeries(points, 4, factor, step), c.in, '33', speed), ds(translations.resNetOut[lang], resourceSeries(points, 5, factor, step), c.out, '33', speed)];
     const bounds = tcpingAxisBounds(points[0][0] * 1000, points[points.length - 1][0] * 1000);
     const tick = { color: axisLabelColor(dark), font: { size: 12 } };
     const percentOfWhole = kind === 'mem' || kind === 'disk';
@@ -5353,8 +5399,11 @@ const apiBase = apiBaseProp ?? '';
     if (grid) grid.hidden = empty;
     if (empty) return;
     const dark = document.documentElement.classList.contains('dark');
+    const step = resourceStep();
+    const points = resourceBuckets(entry.points, step);
+    syncResourceDesc();
     pane.querySelectorAll('.resource-card').forEach((card) => {
-      try { entry.charts.push(new window.Chart(card.querySelector('canvas'), resourceChartConfig(card.dataset.resourceKind, entry.points, dark))); } catch (_) {}
+      try { entry.charts.push(new window.Chart(card.querySelector('canvas'), resourceChartConfig(card.dataset.resourceKind, points, dark, step))); } catch (_) {}
     });
     // the widest value axis for all four, so their plots (and times) line up
     const axis = Math.max(0, ...entry.charts.map((ch) => (ch.scales.y ? ch.scales.y.width : 0)));
@@ -5363,7 +5412,7 @@ const apiBase = apiBaseProp ?? '';
       ch.update('none');
     });
     const unitEl = pane.querySelector('[data-res-unit]');
-    if (unitEl) unitEl.textContent = trafficUnit(entry.points)[0];
+    if (unitEl) unitEl.textContent = trafficUnit(points)[0];
   }
   async function refreshResourcePane(systemId) {
     const entry = resourcePanes.get(systemId);
@@ -5905,9 +5954,10 @@ const apiBase = apiBaseProp ?? '';
           // The next-frame deferral is kept so the expand animation gets
           // its first paint before we kick off any heavy work.
           requestAnimationFrame(() => initializeTCPingChart(systemId));
-          
-          // Update translations when expanding
-          setTimeout(() => updateTranslations(), 0);
+          // (ensureDetails translated the panel when it was built, and a
+          // language switch translates every panel, open or not: the
+          // page-wide pass that ran here cost 47-81 ms at 4x CPU on each
+          // opening, at the start of the open animation)
           
           rowElement.setAttribute('aria-expanded', 'true');
         } else {
@@ -6874,12 +6924,15 @@ const apiBase = apiBaseProp ?? '';
       clearTimeout(sseWatchdogTimer);
     }
     sseWatchdogTimer = setTimeout(() => {
-      // No activity (not even the 15 s server keepalive) for 45 s — force
-      // a reconnect. Using the error path reuses the same backoff logic.
+      // No update for SSE_WATCHDOG_MS (they come every 3 s; the server's
+      // keepalive comments fire no event) — force a reconnect through the
+      // error path's backoff, and read the data once meanwhile: a stream a
+      // proxy holds open without passing anything left the table frozen.
       if (eventSource) {
         try { eventSource.close(); } catch (_) {}
         eventSource = null;
       }
+      checkAccessAfterStreamError();
       scheduleSSEReconnect();
     }, SSE_WATCHDOG_MS);
   }
@@ -6923,35 +6976,59 @@ const apiBase = apiBaseProp ?? '';
       sseReconnectTimer = null;
     }
 
-    // Share link token, or the admin session when privacy mode needs it
-    // (see sessionNeeded): EventSource cannot send headers.
+    // Share link token (it is in the page's own URL anyway), or the admin
+    // session when privacy mode needs it (see sessionNeeded). EventSource
+    // cannot send headers, so the session is traded for a single-use ticket
+    // first: the session itself in the URL (?admin_token=) went into the logs
+    // of every proxy and CDN on the way, where it was good for a day.
     const { shareToken, adminToken } = getAuthInfo();
-    
-    // Build SSE URL with token if available (EventSource doesn't support custom headers)
-    let sseUrl = `${apiBase}/api/events`;
+    const gen = ++sseConnectGen;
     if (shareToken) {
-      sseUrl += `?token=${encodeURIComponent(shareToken)}`;
+      openSSE(`${apiBase}/api/events?token=${encodeURIComponent(shareToken)}`);
     } else if (adminToken) {
-      // For admin token, we need to pass it via URL since EventSource doesn't support headers
-      // Note: This is less secure, but EventSource limitation
-      sseUrl += `?admin_token=${encodeURIComponent(adminToken)}`;
+      fetchStreamTicket(adminToken).then((ticket) => {
+        if (gen !== sseConnectGen || (ssePaused && document.hidden)) return;
+        openSSE(`${apiBase}/api/events?ticket=${encodeURIComponent(ticket)}`);
+      }, () => {
+        // the network or the session failed: the stream's backoff applies
+        if (gen === sseConnectGen) scheduleSSEReconnect();
+      });
+    } else {
+      openSSE(`${apiBase}/api/events`);
     }
+  }
 
+  let sseConnectGen = 0;
+  async function fetchStreamTicket(token) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 10_000);
+    try {
+      const res = await fetch(`${apiBase}/api/auth/stream-ticket`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store', signal: ctl.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || typeof data.ticket !== 'string' || !data.ticket) throw new Error('no ticket');
+      return data.ticket;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function openSSE(sseUrl) {
     primeGuardArmed = true;
     eventSource = new EventSource(sseUrl);
     markSSEAlive();
 
+    // 'connected' only says the request was answered: the backoff and the
+    // connection notice wait for data (updateHandler). A stream that a proxy
+    // cut right after it opened reconnected about once a second, forever,
+    // without a notice, while it was reset here.
     eventSource.addEventListener('connected', (e) => {
-      // Successfully (re)connected — reset the backoff counter so the next
-      // unrelated disconnect starts over at 1 s.
-      sseReconnectAttempt = 0;
       markSSEAlive();
-      noteStreamMessage();
     });
 
-    // onmessage fires for untyped messages AND for the server keepalive
-    // stream; use it purely to reset the watchdog. Typed events have their
-    // own listeners below.
+    // onmessage fires for untyped messages (the server's keepalive is an SSE
+    // comment, which fires no event); it only resets the watchdog. Typed
+    // events have their own listeners below.
     eventSource.onmessage = () => {
       markSSEAlive();
       noteStreamMessage();
@@ -6972,6 +7049,8 @@ const apiBase = apiBaseProp ?? '';
     //     signal, which will arrive within a few ms and supersede the
     //     fetched result.)
     const updateHandler = (e) => {
+      // data: the stream works, the next disconnect starts over at 1 s
+      sseReconnectAttempt = 0;
       markSSEAlive();
       noteStreamMessage();
       try {

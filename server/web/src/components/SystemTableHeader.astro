@@ -309,8 +309,8 @@ import Icon from './Icon.astro';
     });
   }
   
-  // Listen for language changes
-  window.addEventListener('languagechange', updateTranslations);
+  // Language changes: 'translate' below (initI18n dispatches it once the new
+  // language is set; listening to languagechange as well ran it twice)
   // 资源 | 延迟: the line under the title says what the numbers are
   window.addEventListener('listviewchange', (e) => {
     const desc = document.getElementById('all-systems-desc');

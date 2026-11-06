@@ -122,7 +122,12 @@ const { isAdmin = false, bare = false } = Astro.props;
     let doc;
     try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return null; }
     const root = doc.documentElement;
-    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return null;
+    // Names are compared on the element's namespace and local name: nodeName
+    // carries the prefix in an XML document, so <s:script> or <h:script>
+    // (xmlns:h = XHTML) read as "s:script" and were kept, and ran. Anything
+    // outside the SVG namespace goes.
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    if (!root || root.namespaceURI !== SVG_NS || root.localName !== 'svg' || doc.querySelector('parsererror')) return null;
     const banned = /^(script|foreignobject|iframe|object|embed|use|style|animate|set|animatetransform|animatemotion)$/i;
     // Every node, not only elements: comments, CDATA sections and processing
     // instructions are dropped as well.
@@ -132,11 +137,14 @@ const { isAdmin = false, bare = false } = Astro.props;
     while (node) {
       if (node.nodeType !== Node.ELEMENT_NODE) {
         if (node.nodeType !== Node.TEXT_NODE) toRemove.push(node);
-      } else if (banned.test(node.nodeName)) toRemove.push(node);
+      } else if (node.namespaceURI !== SVG_NS || banned.test(node.localName)) toRemove.push(node);
       else {
         Array.from(node.attributes).forEach((attr) => {
-          const n = attr.name.toLowerCase(), v = String(attr.value || '');
-          if (n.startsWith('on') || (/href|src/.test(n) && !/^#|^data:image\//i.test(v.trim()))) node.removeAttribute(attr.name);
+          const n = attr.localName.toLowerCase(), v = String(attr.value || '');
+          // event handlers; links and sources other than a #fragment or a data:
+          // image; url(…) of anything else (a paint server or a style fetched
+          // from another site, which learns who views the page)
+          if (n.startsWith('on') || (/href|src/.test(n) && !/^#|^data:image\//i.test(v.trim())) || /url\(\s*['"]?\s*(?!#|data:image\/)/i.test(v)) node.removeAttributeNode(attr);
         });
       }
       node = walker.nextNode();

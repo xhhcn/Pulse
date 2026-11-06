@@ -120,9 +120,11 @@
       submit: 'Login',
       setupPassword: 'Setup Password',
       setupSubtitle: 'Set up your admin password (first time only)',
+      setupLocked: 'The database was found damaged and replaced with an empty one. For safety the new password can only be set on the server itself (the server log says how), or restore a backup.',
       error: 'Error',
       invalidPassword: 'Invalid password',
       tooManyAttempts: 'Too many wrong passwords. Try again in {n} min.',
+      loginBusy: 'The server is checking other logins. Try again in a moment.',
       serverUnreachable: 'Could not reach the server, please try again',
       storageBlocked: 'This browser blocks site data for this page, so the login cannot be kept. Allow cookies and site data for this site.',
       passwordMismatch: 'Passwords do not match',
@@ -144,9 +146,11 @@
       submit: '登录',
       setupPassword: '设置密码',
       setupSubtitle: '设置您的管理员密码（仅首次）',
+      setupLocked: '数据库损坏，已换成新的空库。为安全起见，新密码只能在服务器本机上设置（方法见服务端日志），或恢复备份。',
       error: '错误',
       invalidPassword: '密码错误',
       tooManyAttempts: '密码错误次数过多，请 {n} 分钟后再试。',
+      loginBusy: '服务器正在处理其他登录，请稍后再试。',
       serverUnreachable: '无法连接服务器，请稍后再试',
       storageBlocked: '浏览器禁止了本站存储数据，无法保持登录。请允许本站使用 Cookie 和网站数据。',
       passwordMismatch: '密码不匹配',
@@ -238,6 +242,8 @@
   // told why instead of being asked for the admin panel, and one whose
   // share link stopped working (reason=link) is told that.
   let setupMode = false;
+  // the server replaced a damaged database: setup only from the server itself
+  let setupLocked = false;
   const loginParams = new URLSearchParams(window.location.search);
   const forDashboard = loginParams.get('redirect') === '/';
   const linkEnded = forDashboard && loginParams.get('reason') === 'link';
@@ -247,7 +253,7 @@
     const subtitle = document.querySelector('[data-translate-login="subtitle"]');
     const submit = document.querySelector('#login-submit [data-translate-login="submit"]');
     if (title) title.textContent = setupMode ? t.setupPassword : forDashboard ? t.visitorTitle : t.title;
-    if (subtitle) subtitle.textContent = setupMode ? t.setupSubtitle : linkEnded ? t.linkEnded : forDashboard ? t.visitorSubtitle : t.subtitle;
+    if (subtitle) subtitle.textContent = setupMode ? (setupLocked ? t.setupLocked : t.setupSubtitle) : linkEnded ? t.linkEnded : forDashboard ? t.visitorSubtitle : t.subtitle;
     if (submit) submit.textContent = setupMode ? t.setupPassword : t.submit;
   }
 
@@ -260,6 +266,7 @@
       const res = await fetch(`${apiBase}/api/auth/status`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
+        setupLocked = data.locked === true;
         return data.set === true;
       }
     } catch (err) {
@@ -324,6 +331,9 @@
       return translations[lang].serverUnreachable;
     }
     if (!res.ok) {
+      // 429: every password check was busy (a flood of logins), this one
+      // was not checked and is not counted
+      if (res.status === 429) return translations[lang].loginBusy;
       if (res.status === 401) {
         const until = noteLoginFailure();
         if (until) return translations[lang].tooManyAttempts.replace('{n}', String(Math.max(1, Math.ceil((until - Date.now()) / 60e3))));

@@ -1180,7 +1180,12 @@ const customCodePlaceholder = [
     let doc;
     try { doc = new DOMParser().parseFromString(markup, 'image/svg+xml'); } catch (_) { return null; }
     const root = doc.documentElement;
-    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return null;
+    // Names are compared on the element's namespace and local name: nodeName
+    // carries the prefix in an XML document, so <s:script> or <h:script>
+    // (xmlns:h = XHTML) read as "s:script" and were kept, and ran. Anything
+    // outside the SVG namespace goes.
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    if (!root || root.namespaceURI !== SVG_NS || root.localName !== 'svg' || doc.querySelector('parsererror')) return null;
     const banned = /^(script|foreignobject|iframe|object|embed|use|style|animate|set|animatetransform|animatemotion)$/i;
     // Every node, not only elements: comments, CDATA sections and processing
     // instructions are dropped as well.
@@ -1190,11 +1195,14 @@ const customCodePlaceholder = [
     while (node) {
       if (node.nodeType !== Node.ELEMENT_NODE) {
         if (node.nodeType !== Node.TEXT_NODE) toRemove.push(node);
-      } else if (banned.test(node.nodeName)) toRemove.push(node);
+      } else if (node.namespaceURI !== SVG_NS || banned.test(node.localName)) toRemove.push(node);
       else {
         Array.from(node.attributes).forEach((attr) => {
-          const n = attr.name.toLowerCase(), v = String(attr.value || '');
-          if (n.startsWith('on') || (/href|src/.test(n) && !/^#|^data:image\//i.test(v.trim()))) node.removeAttribute(attr.name);
+          const n = attr.localName.toLowerCase(), v = String(attr.value || '');
+          // event handlers; links and sources other than a #fragment or a data:
+          // image; url(…) of anything else (a paint server or a style fetched
+          // from another site, which learns who views the page)
+          if (n.startsWith('on') || (/href|src/.test(n) && !/^#|^data:image\//i.test(v.trim())) || /url\(\s*['"]?\s*(?!#|data:image\/)/i.test(v)) node.removeAttributeNode(attr);
         });
       }
       node = walker.nextNode();
@@ -4739,42 +4747,60 @@ const customCodePlaceholder = [
     setTimeout(connectSSE, base + jitter);
   }
 
+  // EventSource cannot send headers: the session is traded for a single-use
+  // ticket (POST /api/auth/stream-ticket) and the stream opened with that.
+  // The session itself in the URL (?admin_token=) went into the logs of
+  // every proxy and CDN on the way, where it was good for a day.
+  let sseConnectGen = 0;
+  async function fetchStreamTicket(token) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 10_000);
+    try {
+      const res = await fetch(`${apiBase}/api/auth/stream-ticket`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store', signal: ctl.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || typeof data.ticket !== 'string' || !data.ticket) throw new Error('no ticket');
+      return data.ticket;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   function connectSSE() {
     if (eventSource) {
       eventSource.close();
+      eventSource = null;
     }
     if (sseWatchdogTimer) {
       clearTimeout(sseWatchdogTimer);
       sseWatchdogTimer = null;
     }
-
-    // CRITICAL: pass the admin token via the `admin_token` query parameter
-    // so the server subscribes us with the SSEViewAdmin view.
-    //
-    // EventSource does NOT support custom request headers, so we cannot send
-    // the admin token via `Authorization: Bearer` like we do for other API
-    // calls — the only way to identify ourselves at SSE time is the URL.
-    //
-    // Without this query parameter, the server would treat us as a public
-    // subscriber and broadcast the masked snapshot (Secret / IPv4 / IPv6
-    // stripped). That makes the admin page's "copy secret" button show an
-    // empty value, and IP / agent fields appear blank. With the token
-    // included, the server tags our subscription as admin and every
-    // metric_updated push contains the full, authoritative row.
+    const gen = ++sseConnectGen;
+    // Without a session the stream is the public one (the page sends the
+    // visitor to the login first anyway). With one, the server needs to
+    // know us to send the admin view (Secret / IPv4 / IPv6 included).
     const adminToken = localStorage.getItem('admin_auth_token');
-    let sseUrl = `${apiBase}/api/events`;
-    if (adminToken) {
-      sseUrl += `?admin_token=${encodeURIComponent(adminToken)}`;
+    if (!adminToken) {
+      openSSE(`${apiBase}/api/events`);
+      return;
     }
+    fetchStreamTicket(adminToken).then((ticket) => {
+      if (gen === sseConnectGen) openSSE(`${apiBase}/api/events?ticket=${encodeURIComponent(ticket)}`);
+    }, () => {
+      // the network or the session failed: the stream's backoff applies
+      if (gen === sseConnectGen) scheduleSSEReconnect();
+    });
+  }
+
+  function openSSE(sseUrl) {
     adminPrimePending = true;
     eventSource = new EventSource(sseUrl);
     markSSEAlive();
 
+    // 'connected' only says the request was answered: the backoff is reset
+    // by data (the update listener), or a stream cut right after it opened
+    // reconnects about once a second, forever.
     eventSource.addEventListener('connected', (e) => {
-      // (Re)connected — reset backoff so a future independent disconnect
-      // starts over at 1 s.
-      sseReconnectAttempt = 0;
-      sseErrorStreak = 0;
       markSSEAlive();
     });
 
@@ -4793,6 +4819,9 @@ const customCodePlaceholder = [
     //   * order updates are handled locally by drag & drop, so we ignore
     //     order_updated here.
     eventSource.addEventListener('update', (e) => {
+      // data: the stream works, a future disconnect starts over at 1 s
+      sseReconnectAttempt = 0;
+      sseErrorStreak = 0;
       markSSEAlive();
       let update;
       try {

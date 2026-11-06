@@ -96,7 +96,8 @@ import Icon from './Icon.astro';
     });
   }
   
-  window.addEventListener('languagechange', updateTranslations);
+  // 'translate' only: initI18n turns the navbar's languagechange into it
+  // once the new language is set; listening to both ran every pass twice.
   window.addEventListener('translate', updateTranslations);
   
   if (document.readyState === 'loading') {
