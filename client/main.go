@@ -513,6 +513,8 @@ func main() {
 	serverBase = strings.TrimSuffix(envOr("SERVER_BASE", "http://localhost:8080"), "/")
 	clientPort := envOr("CLIENT_PORT", "9090")
 	secret = envOr("SECRET", "")
+	// df, lscpu, sh … need not inherit it
+	os.Unsetenv("SECRET")
 
 	// Record start time for uptime calculation
 	startTime = time.Now()
@@ -621,12 +623,15 @@ func getSharedHTTPClient() *http.Client {
 		// - DNS resolution timeout to handle slow DNS in China
 		sharedHTTPClient = &http.Client{
 			Timeout:       30 * time.Second, // Increased to 30s for high-latency cross-continent networks
-			CheckRedirect: refuseHTTPSDowngrade,
+			CheckRedirect: refuseRedirectAway,
 			Transport: &http.Transport{
 				DialContext: (&net.Dialer{
 					Timeout:   15 * time.Second,  // Increased to 15s for slow connections (DNS + TCP)
 					KeepAlive: 120 * time.Second, // Longer keep-alive for connection reuse
 				}).DialContext,
+				// A custom DialContext turns Go's HTTP/2 off unless asked for:
+				// see getPushHTTPClient.
+				ForceAttemptHTTP2:     true,
 				MaxIdleConns:          50,                // More idle connections for better reuse
 				MaxIdleConnsPerHost:   20,                // More per-host connections
 				IdleConnTimeout:       180 * time.Second, // Longer idle timeout
@@ -658,6 +663,21 @@ func refuseHTTPSDowngrade(req *http.Request, via []*http.Request) error {
 				return fmt.Errorf("refusing to follow a redirect from HTTPS to %s://%s", req.URL.Scheme, req.URL.Host)
 			}
 		}
+	}
+	return nil
+}
+
+// refuseRedirectAway is the policy of the clients that talk to the Pulse
+// server: refuseHTTPSDowngrade, and no redirect to another host. Go drops the
+// Authorization header when a redirect leaves the host, but on a 307/308 it
+// sends the body again, and the body of a push or a registration carries
+// SECRET too. A same-host redirect (http → https on the server) still works.
+func refuseRedirectAway(req *http.Request, via []*http.Request) error {
+	if err := refuseHTTPSDowngrade(req, via); err != nil {
+		return err
+	}
+	if len(via) > 0 && !strings.EqualFold(req.URL.Host, via[0].URL.Host) {
+		return fmt.Errorf("refusing to follow a redirect from %s to another host (%s)", via[0].URL.Host, req.URL.Host)
 	}
 	return nil
 }
@@ -766,6 +786,11 @@ func registerWithServer() {
 	// usually succeeds after a few seconds, and doubling would push the last
 	// attempts minutes out.
 	maxRetries := 10 // Increased from 5 to handle high-latency networks (e.g., China to overseas)
+	// after the first push (see firstPushDone), however that went
+	select {
+	case <-firstPushDone:
+	case <-time.After(15 * time.Second):
+	}
 	for i := 0; i < maxRetries; i++ {
 		time.Sleep(time.Duration(i+1) * time.Second) // Wait before retry
 
@@ -793,7 +818,7 @@ func registerWithServer() {
 		}
 
 		// Add secret if provided via environment variable
-		if secret := envOr("SECRET", ""); secret != "" {
+		if secret != "" {
 			payload["secret"] = secret
 		}
 
@@ -890,8 +915,8 @@ func startPeriodicRegistration() {
 		if ipv6 != "" {
 			payload["ipv6"] = ipv6
 		}
-		if s := envOr("SECRET", ""); s != "" {
-			payload["secret"] = s
+		if secret != "" {
+			payload["secret"] = secret
 		}
 
 		data, _ := json.Marshal(payload)
@@ -1269,12 +1294,19 @@ func getPushHTTPClient() *http.Client {
 	pushHTTPClientOnce.Do(func() {
 		pushHTTPClient = &http.Client{
 			Timeout:       8 * time.Second, // Must be < push interval × offline_threshold / push_interval
-			CheckRedirect: refuseHTTPSDowngrade,
+			CheckRedirect: refuseRedirectAway,
 			Transport: &http.Transport{
 				DialContext: (&net.Dialer{
 					Timeout:   6 * time.Second,
 					KeepAlive: 120 * time.Second,
 				}).DialContext,
+				// HTTP/2 where the server speaks it (Cloudflare does): a custom
+				// DialContext turns Go's HTTP/2 off unless asked for, and over
+				// HTTP/1.1 the headers of a push and its answer (about 1.1 KB
+				// through Cloudflare) outweigh the data. Measured through
+				// Cloudflare: 1,965 → 1,181 bytes a push. Plain-HTTP servers
+				// stay on HTTP/1.1.
+				ForceAttemptHTTP2:     true,
 				TLSHandshakeTimeout:   6 * time.Second,
 				ResponseHeaderTimeout: 6 * time.Second,
 				MaxIdleConns:          10,
@@ -1284,6 +1316,196 @@ func getPushHTTPClient() *http.Client {
 		}
 	})
 	return pushHTTPClient
+}
+
+// pushOutcome is how a push ended, which decides when the next one goes.
+type pushOutcome int
+
+const (
+	pushDelivered pushOutcome = iota // HTTP 200
+	pushRejected                     // 401/404: this ID or secret is not accepted here
+	pushFailed                       // no answer, a timeout, a 5xx…: the server or the way to it is in trouble
+)
+
+// While the server takes them, pushes go every pushInterval. After a failure
+// each next push waits twice as long, up to pushBackoffMax, so a struggling
+// server or CDN is not asked every 3 s, each time with the whole backlog; the
+// cap stays under the server's 30 s offline limit, so a server that is back
+// sees the agent at once. A rejected push cannot succeed until an admin acts
+// (an unknown ID, a wrong secret): once a minute.
+const (
+	pushInterval     = 3 * time.Second
+	pushBackoffMax   = 24 * time.Second
+	pushRejectedWait = time.Minute
+	// The first push goes this long after start (the CPU and traffic figures
+	// need an interval), and before the registration: see firstPushDone.
+	pushFirstDelay = 1500 * time.Millisecond
+)
+
+func nextPushWait(outcome pushOutcome, last time.Duration) time.Duration {
+	switch outcome {
+	case pushDelivered:
+		return pushInterval
+	case pushRejected:
+		return pushRejectedWait
+	}
+	w := 2 * last
+	if w < 2*pushInterval {
+		w = 2 * pushInterval
+	}
+	if w > pushBackoffMax {
+		w = pushBackoffMax
+	}
+	return w
+}
+
+// firstPushDone closes once the first push has been answered (or has failed).
+// The registration waits for it: a server that has a registration with an
+// address and no push yet polls http://<address>:<port>/metrics, and that
+// request carries SECRET in clear text. Pushed first, the agent is a push
+// client before it registers, and is never polled.
+var (
+	firstPushDone     = make(chan struct{})
+	firstPushDoneOnce sync.Once
+)
+
+func markFirstPushDone() { firstPushDoneOnce.Do(func() { close(firstPushDone) }) }
+
+// requeueTCPingResults puts drained results back in front of the queue.
+func requeueTCPingResults(results []ClientTCPingResult) {
+	if len(results) == 0 {
+		return
+	}
+	pendingTCPingResultsMu.Lock()
+	combined := append(results, pendingTCPingResults...)
+	if len(combined) > maxPendingTCPingResults {
+		combined = combined[len(combined)-maxPendingTCPingResults:]
+	}
+	pendingTCPingResults = combined
+	pendingTCPingResultsMu.Unlock()
+}
+
+// pushOnce collects the metrics, sends them with the queued TCPing results and
+// reads the answer. detail says why a push did not get through (for the log).
+func pushOnce(httpClient *http.Client) (pushOutcome, string) {
+	// Collect current system metrics. This loop owns the CPU/network delta
+	// samplers; the snapshot it publishes is what /metrics serves, so a
+	// pull never rebases those samplers mid-interval.
+	metrics := collectSystemMetrics()
+	storeMetricsSnapshot(metrics)
+
+	// Drain any pending TCPing results accumulated by startPushTCPingLoop.
+	// We drain into a local variable and put them back on any transient
+	// failure (marshal error, request error, 5xx) so a flaky network never
+	// loses a measurement. The one case where drained results are dropped
+	// on purpose is a 404/401 reply — see that branch below.
+	pendingTCPingResultsMu.Lock()
+	tcpingResults := pendingTCPingResults
+	pendingTCPingResults = nil
+	pendingTCPingResultsMu.Unlock()
+
+	// Build push payload (metric fields are inlined via embedding)
+	pushPayload := struct {
+		metricPayload
+		Secret        string               `json:"secret,omitempty"`
+		TCPingResults []ClientTCPingResult `json:"tcping_results,omitempty"`
+	}{
+		metricPayload: metrics,
+		TCPingResults: tcpingResults,
+	}
+	if secret != "" {
+		pushPayload.Secret = secret
+	}
+
+	data, err := json.Marshal(pushPayload)
+	if err != nil {
+		requeueTCPingResults(tcpingResults)
+		return pushFailed, "encoding the push: " + err.Error()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "POST", serverBase+"/api/clients/push", strings.NewReader(string(data)))
+	if err != nil {
+		requeueTCPingResults(tcpingResults)
+		return pushFailed, err.Error()
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "PulseClient/1.0")
+	if secret != "" {
+		req.Header.Set("Authorization", "Bearer "+secret)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		// Push failed — put TCPing results back so they are included in the next push
+		requeueTCPingResults(tcpingResults)
+		return pushFailed, err.Error()
+	}
+	defer resp.Body.Close()
+
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		// Parse updated TCPing config from server response (bounded to
+		// maxResponseBodyBytes like every other response the agent reads).
+		// json.NewDecoder reads the full small body into its buffer in one
+		// syscall, so resp.Body is at EOF after Decode; no extra drain needed.
+		var pushResp ClientPushResponse
+		if decErr := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBodyBytes)).Decode(&pushResp); decErr == nil {
+			applyPushTCPingConfig(pushResp.TCPingTargets, pushResp.TCPingIntervalSecs)
+		} else {
+			// Decode failed — drain remainder to enable connection reuse
+			io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck
+		}
+		return pushDelivered, ""
+	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized:
+		// The server does not know this client ID, or the secret is wrong.
+		// These results are discarded on purpose — this is the deliberate
+		// exception to "no result is lost on failure". Retrying cannot help
+		// (both conditions persist until an admin re-registers the client or
+		// fixes SECRET) and re-queueing would grow the backlog until the cap
+		// evicts the measurements anyway.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return pushRejected, fmt.Sprintf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	default:
+		// Transient server error — preserve TCPing results for next cycle
+		io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck // drain to enable connection reuse
+		requeueTCPingResults(tcpingResults)
+		return pushFailed, fmt.Sprintf("HTTP %d", resp.StatusCode)
+	}
+}
+
+// pushLog says in the agent's log when pushes stop getting through and when
+// they do again; a lasting rejection is repeated once an hour (an agent whose
+// system was deleted, or whose secret changed, used to push forever without
+// a word).
+type pushLog struct {
+	state    pushOutcome
+	since    time.Time
+	failures int
+	said     time.Time
+}
+
+func (l *pushLog) note(outcome pushOutcome, detail string, wait time.Duration, now time.Time) {
+	changed := outcome != l.state
+	switch {
+	case outcome == pushDelivered && changed:
+		log.Printf("✅ Pushes reach the server again (after %d failed, %s)", l.failures, now.Sub(l.since).Round(time.Second))
+	case outcome == pushFailed && changed:
+		log.Printf("⚠️  Push failed (%s); retrying with a growing pause, up to %s", detail, pushBackoffMax)
+	case outcome == pushRejected && (changed || now.Sub(l.said) >= time.Hour):
+		log.Printf("❌ The server rejected the push (%s): check AGENT_ID and SECRET against the system in the admin page; retrying every %s", detail, wait)
+		l.said = now
+	}
+	if changed {
+		l.state, l.since, l.failures = outcome, now, 0
+	}
+	if outcome != pushDelivered {
+		l.failures++
+	}
 }
 
 // startPushLoop pushes collected system metrics to the server every 3 seconds.
@@ -1299,135 +1521,19 @@ func startPushLoop() {
 	// and read the disks now, so the first push need not wait for df
 	go readDiskTotals()
 
-	// Short initial delay so the first registration can complete before we push.
-	time.Sleep(4 * time.Second)
-
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
+	time.Sleep(pushFirstDelay)
 
 	httpClient := getPushHTTPClient()
-
-	for range ticker.C {
-		// Collect current system metrics. This loop owns the CPU/network delta
-		// samplers; the snapshot it publishes is what /metrics serves, so a
-		// pull never rebases those samplers mid-interval.
-		metrics := collectSystemMetrics()
-		storeMetricsSnapshot(metrics)
-
-		// Drain any pending TCPing results accumulated by startPushTCPingLoop.
-		// We drain into a local variable and put them back on any transient
-		// failure (marshal error, request error, 5xx) so a flaky network never
-		// loses a measurement. The one case where drained results are dropped
-		// on purpose is a 404/401 reply — see that branch below.
-		pendingTCPingResultsMu.Lock()
-		tcpingResults := pendingTCPingResults
-		pendingTCPingResults = nil
-		pendingTCPingResultsMu.Unlock()
-
-		// Build push payload (metric fields are inlined via embedding)
-		pushPayload := struct {
-			metricPayload
-			Secret        string               `json:"secret,omitempty"`
-			TCPingResults []ClientTCPingResult `json:"tcping_results,omitempty"`
-		}{
-			metricPayload: metrics,
-			TCPingResults: tcpingResults,
-		}
-		if secret != "" {
-			pushPayload.Secret = secret
-		}
-
-		data, err := json.Marshal(pushPayload)
-		if err != nil {
-			// Put TCPing results back so they are not lost
-			if len(tcpingResults) > 0 {
-				pendingTCPingResultsMu.Lock()
-				combined := append(tcpingResults, pendingTCPingResults...)
-				if len(combined) > maxPendingTCPingResults {
-					combined = combined[len(combined)-maxPendingTCPingResults:]
-				}
-				pendingTCPingResults = combined
-				pendingTCPingResultsMu.Unlock()
-			}
-			continue
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		req, reqErr := http.NewRequestWithContext(ctx, "POST", serverBase+"/api/clients/push", strings.NewReader(string(data)))
-		if reqErr != nil {
-			cancel()
-			// Put TCPing results back
-			if len(tcpingResults) > 0 {
-				pendingTCPingResultsMu.Lock()
-				combined := append(tcpingResults, pendingTCPingResults...)
-				if len(combined) > maxPendingTCPingResults {
-					combined = combined[len(combined)-maxPendingTCPingResults:]
-				}
-				pendingTCPingResults = combined
-				pendingTCPingResultsMu.Unlock()
-			}
-			continue
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "PulseClient/1.0")
-		if secret != "" {
-			req.Header.Set("Authorization", "Bearer "+secret)
-		}
-
-		resp, doErr := httpClient.Do(req)
-		if doErr != nil {
-			if resp != nil {
-				resp.Body.Close()
-			}
-			cancel()
-			// Push failed — put TCPing results back so they are included in the next push
-			if len(tcpingResults) > 0 {
-				pendingTCPingResultsMu.Lock()
-				combined := append(tcpingResults, pendingTCPingResults...)
-				if len(combined) > maxPendingTCPingResults {
-					combined = combined[len(combined)-maxPendingTCPingResults:]
-				}
-				pendingTCPingResults = combined
-				pendingTCPingResultsMu.Unlock()
-			}
-			continue
-		}
-
-		if resp.StatusCode == http.StatusOK {
-			// Parse updated TCPing config from server response (bounded to
-			// maxResponseBodyBytes like every other response the agent reads).
-			// json.NewDecoder reads the full small body into its buffer in one
-			// syscall, so resp.Body is at EOF after Decode; no extra drain needed.
-			var pushResp ClientPushResponse
-			if decErr := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBodyBytes)).Decode(&pushResp); decErr == nil {
-				applyPushTCPingConfig(pushResp.TCPingTargets, pushResp.TCPingIntervalSecs)
-			} else {
-				// Decode failed — drain remainder to enable connection reuse
-				io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck
-			}
-		} else if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized {
-			// The server does not know this client ID, or the secret is wrong.
-			// These results are discarded on purpose — this is the deliberate
-			// exception to "no result is lost on failure". Retrying cannot help
-			// (both conditions persist until an admin re-registers the client or
-			// fixes SECRET) and re-queueing would grow the backlog until the cap
-			// evicts the measurements anyway.
-			io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck // drain to enable connection reuse
-		} else {
-			// Transient server error — preserve TCPing results for next cycle
-			io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes)) //nolint:errcheck // drain to enable connection reuse
-			if len(tcpingResults) > 0 {
-				pendingTCPingResultsMu.Lock()
-				combined := append(tcpingResults, pendingTCPingResults...)
-				if len(combined) > maxPendingTCPingResults {
-					combined = combined[len(combined)-maxPendingTCPingResults:]
-				}
-				pendingTCPingResults = combined
-				pendingTCPingResultsMu.Unlock()
-			}
-		}
-		resp.Body.Close()
-		cancel()
+	wait := pushInterval
+	logState := &pushLog{state: pushDelivered, since: time.Now()}
+	for {
+		began := time.Now()
+		outcome, detail := pushOnce(httpClient)
+		markFirstPushDone()
+		wait = nextPushWait(outcome, wait)
+		logState.note(outcome, detail, wait, time.Now())
+		// the rhythm is kept from the start of each push, as the 3 s ticker did
+		time.Sleep(time.Until(began.Add(wait)))
 	}
 }
 
@@ -1637,7 +1743,7 @@ func collectSystemMetrics() metricPayload {
 		NetOutMBps:         netOut,
 		TotalNetInBytes:    totalNetInBytes,
 		TotalNetOutBytes:   totalNetOutBytes,
-		AgentVersion:       "1.3.67",
+		AgentVersion:       "1.3.68",
 		Alert:              false, // Can be enhanced with actual alert logic
 	}
 }
@@ -2844,26 +2950,19 @@ func parseDfRoot(out string) (diskTotals, bool) {
 // container's use is its size less what is free in it.
 func partitionDiskTotals() diskTotals {
 	partitions, err := disk.Partitions(false)
-	if err != nil {
+	// On Windows a drive that cannot be read (a locked BitLocker volume, a
+	// dead share, a RAW partition with a letter) comes back as a warning
+	// next to the list of all the others: discarding the list showed 0 for
+	// the whole machine.
+	if err != nil && len(partitions) == 0 {
 		return diskTotals{}
+	}
+	if runtime.GOOS == "windows" {
+		return windowsDriveTotals(partitions, disk.Usage, localFixedDrive)
 	}
 	var t diskTotals
 	seenBaseDisks := make(map[string]bool) // macOS: APFS deduplication
 	for _, partition := range partitions {
-		if runtime.GOOS == "windows" {
-			// Only partitions with drive letters (C:, D:, etc.)
-			if len(partition.Mountpoint) < 2 || partition.Mountpoint[1] != ':' {
-				continue
-			}
-			usage, err := disk.Usage(partition.Mountpoint)
-			if err != nil || usage.Total == 0 {
-				continue
-			}
-			t.used += usage.Used
-			t.avail += usage.Free
-			t.size += usage.Total
-			continue
-		}
 		mp := partition.Mountpoint
 		if mp != "/" && !strings.HasPrefix(mp, "/Volumes/") {
 			continue
@@ -2881,6 +2980,28 @@ func partitionDiskTotals() diskTotals {
 			continue
 		}
 		t.used += usage.Total - usage.Free
+		t.avail += usage.Free
+		t.size += usage.Total
+	}
+	return t
+}
+
+// windowsDriveTotals adds up the drive letters (C:, D:…) on the machine's own
+// disks; one that cannot be read is left out, not the whole reading.
+func windowsDriveTotals(partitions []disk.PartitionStat, usageOf func(string) (*disk.UsageStat, error), fixed func(string) bool) diskTotals {
+	var t diskTotals
+	seen := make(map[string]bool)
+	for _, partition := range partitions {
+		mp := strings.ToUpper(partition.Mountpoint)
+		if len(mp) != 2 || mp[1] != ':' || seen[mp] || !fixed(mp) {
+			continue
+		}
+		seen[mp] = true
+		usage, err := usageOf(mp)
+		if err != nil || usage == nil || usage.Total == 0 {
+			continue
+		}
+		t.used += usage.Used
 		t.avail += usage.Free
 		t.size += usage.Total
 	}

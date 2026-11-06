@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"math"
 	"net"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/shirou/gopsutil/v3/disk"
 )
 
 // Disk: df's Use% (used / (used + avail)), ZFS pools counted once, a device
@@ -277,5 +280,28 @@ func TestMeasureTCPingOnceStampsDialStart(t *testing.T) {
 	}
 	if d := lostAt.Sub(okAt); d > 200*time.Millisecond || d < -200*time.Millisecond {
 		t.Fatalf("lost probe stamped %v after the answered one (the round took %v); want both at the dial start", d, took)
+	}
+}
+
+func TestWindowsDriveTotals(t *testing.T) {
+	parts := []disk.PartitionStat{{Mountpoint: "C:"}, {Mountpoint: "D:"}, {Mountpoint: "E:"}, {Mountpoint: "Z:"}, {Mountpoint: "c:"}, {Mountpoint: `\\?\Volume{x}\`}}
+	usage := map[string]*disk.UsageStat{
+		"C:": {Total: 100, Used: 60, Free: 40},
+		"E:": {Total: 50, Used: 50, Free: 0}, // a mounted ISO: always full
+		"Z:": {Total: 1000, Used: 10, Free: 990},
+	}
+	usageOf := func(mp string) (*disk.UsageStat, error) {
+		if u, ok := usage[mp]; ok {
+			return u, nil
+		}
+		return nil, errors.New("the device is not ready") // D: a locked BitLocker volume
+	}
+	fixed := func(mp string) bool { return mp == "C:" || mp == "D:" } // E: CD-ROM, Z: network
+	got := windowsDriveTotals(parts, usageOf, fixed)
+	if got != (diskTotals{used: 60, avail: 40, size: 100}) {
+		t.Fatalf("got %+v: only C: counts (D: unreadable, E: an ISO, Z: a share; c: is C: again)", got)
+	}
+	if got := windowsDriveTotals(parts, usageOf, func(string) bool { return true }); got.size != 1150 {
+		t.Fatalf("an unreadable drive must not zero the others: %+v", got)
 	}
 }
