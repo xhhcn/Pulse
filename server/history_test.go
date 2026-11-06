@@ -27,7 +27,7 @@ func TestHistorySwitchesDefaultOffAndPublic(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	for _, k := range []string{"resource_history", "latency_view"} {
+	for _, k := range []string{"resource_history", "resource_average", "latency_view"} {
 		if v, ok := got[k]; !ok || v != false {
 			t.Fatalf("%s should be present and false by default: %s", k, rr.Body.String())
 		}
@@ -37,8 +37,45 @@ func TestHistorySwitchesDefaultOffAndPublic(t *testing.T) {
 	handleGetNavbarConfig(store, rr, httptest.NewRequest(http.MethodGet, "/api/navbar/config", nil))
 	got = nil
 	_ = json.Unmarshal(rr.Body.Bytes(), &got)
-	if got["resource_history"] != true || got["latency_view"] != true {
+	if got["resource_history"] != true || got["latency_view"] != true || got["resource_average"] != false {
 		t.Fatalf("saved switches not public: %s", rr.Body.String())
+	}
+}
+
+// The averaged resource charts are their own switch, off by default (every
+// recorded minute), saved and public on its own.
+func TestResourceAverageSwitch(t *testing.T) {
+	store := newTestStore(t)
+	withAdminToken(t, "test-admin-token")
+	save := func(body map[string]interface{}) {
+		t.Helper()
+		rr := httptest.NewRecorder()
+		handleSetNavbarConfig(store, rr, adminRequest(t, http.MethodPost, "/api/navbar/config", body))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("save: %d %s", rr.Code, rr.Body.String())
+		}
+	}
+	public := func() map[string]interface{} {
+		t.Helper()
+		rr := httptest.NewRecorder()
+		handleGetNavbarConfig(store, rr, httptest.NewRequest(http.MethodGet, "/api/navbar/config", nil))
+		var got map[string]interface{}
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return got
+	}
+	save(map[string]interface{}{"text": "Pulse", "resource_history": true, "resource_average": true})
+	if got := public(); got["resource_average"] != true || got["resource_history"] != true {
+		t.Fatalf("switched on: %v", got)
+	}
+	if v, _ := public()["shared_secret"].(string); v != "" {
+		t.Fatal("the public config must not carry the shared secret")
+	}
+	// An older admin page sends no resource_average: the charts go back to minutes.
+	save(map[string]interface{}{"text": "Pulse", "resource_history": true})
+	if got := public(); got["resource_average"] != false || got["resource_history"] != true {
+		t.Fatalf("absent means off: %v", got)
 	}
 }
 

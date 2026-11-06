@@ -5209,6 +5209,7 @@ func handleGetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 			LossTimeline: config.LossTimeline, // Public: Pulse's loss band under the TCPing chart
 			// Public: Pulse's 资源 tab and 资源 | 延迟 switch (the page shows them only when on)
 			ResourceHistory: config.ResourceHistory,
+			ResourceAverage: config.ResourceAverage, // Public: the 资源 charts averaged (off: every minute)
 			LatencyView:     config.LatencyView,
 			HideTags:        config.HideTags,  // Public: Hotaru-compatible display flag
 			HideCards:       config.HideCards, // Public: Hotaru-compatible display flag
