@@ -545,7 +545,7 @@ const customCodePlaceholder = [
             <div class="flex items-center justify-between gap-3">
               <div class="flex-1">
                 <label for="page-size-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="pagesLabel">Pages</label>
-                <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="pagesDesc">Show the servers a page at a time, with a footer to turn the pages (as Beszel); in the card layout each page ends on a full row</p>
+                <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="pagesDesc">Show the servers a page at a time, with a footer to turn the pages; in the card layout each page ends on a full row</p>
               </div>
               <label class="relative inline-flex shrink-0 items-center cursor-pointer">
                 <input type="checkbox" id="page-size-toggle" class="sr-only peer">
@@ -579,16 +579,29 @@ const customCodePlaceholder = [
               <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
             </label>
           </div>
-          <!-- Resource history: the server records each server's minute averages for 24 h; a 资源 tab on the opened server's chart card (off by default) -->
-          <div class="flex items-center justify-between gap-3 p-4">
-            <div class="flex-1">
-              <label for="resource-history-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="resourceHistoryLabel">Resource History</label>
-              <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="resourceHistoryDesc">A Resources tab on opened servers: CPU, memory, disk and network. The last 24 hours are always kept; this shows them</p>
+          <!-- Resource history: the server records each server's minute averages for 24 h; a 资源 tab on the opened server's chart card (off by default).
+               Under it while it is on, 按时段平均 (resource_average, off by default: every recorded minute) -->
+          <div class="p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex-1">
+                <label for="resource-history-toggle" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="resourceHistoryLabel">Resource History</label>
+                <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="resourceHistoryDesc">A Resources tab on opened servers: CPU, memory, disk and network. The last 24 hours are always kept; this shows them</p>
+              </div>
+              <label class="relative inline-flex shrink-0 items-center cursor-pointer">
+                <input type="checkbox" id="resource-history-toggle" name="resource_history" class="sr-only peer">
+                <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              </label>
             </div>
-            <label class="relative inline-flex shrink-0 items-center cursor-pointer">
-              <input type="checkbox" id="resource-history-toggle" name="resource_history" class="sr-only peer">
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
-            </label>
+            <div id="resource-average-row" class="mt-3 hidden items-center justify-between gap-3">
+              <div class="flex-1">
+                <label for="resource-average-toggle" class="mb-1 block text-sm text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="resourceAverageLabel">Averaged Charts</label>
+                <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="resourceAverageDesc">The 6, 12 and 24 h charts show 5, 10 and 20-minute averages (about 72 points each) for smoother lines; off, every minute is shown as recorded</p>
+              </div>
+              <label class="relative inline-flex shrink-0 items-center cursor-pointer">
+                <input type="checkbox" id="resource-average-toggle" name="resource_average" class="sr-only peer">
+                <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              </label>
+            </div>
           </div>
           <!-- Latency view: a Resources | Latency switch on the dashboard, the servers by each TCPing target's last-hour average (off by default) -->
           <div class="flex items-center justify-between gap-3 p-4">
@@ -3797,6 +3810,8 @@ const customCodePlaceholder = [
         }
         const resourceHistoryToggle = document.getElementById('resource-history-toggle');
         if (resourceHistoryToggle) resourceHistoryToggle.checked = config.resource_history === true;
+        const resourceAverageToggle = document.getElementById('resource-average-toggle');
+        if (resourceAverageToggle) resourceAverageToggle.checked = config.resource_average === true;
         const latencyViewToggle = document.getElementById('latency-view-toggle');
         if (latencyViewToggle) latencyViewToggle.checked = config.latency_view === true;
         const lossTimelineToggle = document.getElementById('loss-timeline-toggle');
@@ -3804,6 +3819,7 @@ const customCodePlaceholder = [
           lossTimelineToggle.checked = config.loss_timeline === true;
         }
         showPageSize(Number(config.page_size) || 0);
+        syncResourceAverageRow();
         return true;
       }
     } catch (err) {
@@ -4358,6 +4374,16 @@ const customCodePlaceholder = [
   }
   document.getElementById('page-size-toggle')?.addEventListener('change', syncPageSizeRow);
 
+  // 资源历史 → 按时段平均: shown while the history is on (it only changes the
+  // 资源 tab's charts); its state is kept, and saved, either way.
+  function syncResourceAverageRow() {
+    const on = !!document.getElementById('resource-history-toggle')?.checked;
+    const row = document.getElementById('resource-average-row');
+    row?.classList.toggle('hidden', !on);
+    row?.classList.toggle('flex', on);
+  }
+  document.getElementById('resource-history-toggle')?.addEventListener('change', syncResourceAverageRow);
+
   // Handle navbar config form submission
   navbarConfigForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -4433,6 +4459,7 @@ const customCodePlaceholder = [
     const pageSizeInput = document.getElementById('page-size-input');
     const lossTimelineToggle = document.getElementById('loss-timeline-toggle');
     const resourceHistoryToggle = document.getElementById('resource-history-toggle');
+    const resourceAverageToggle = document.getElementById('resource-average-toggle');
     const latencyViewToggle = document.getElementById('latency-view-toggle');
     const data = {
       text: formData.get('text')?.trim() || 'Pulse',
@@ -4447,6 +4474,7 @@ const customCodePlaceholder = [
       page_size: pageSizeToggle?.checked ? Math.min(200, Math.max(1, parseInt(pageSizeInput?.value || '', 10) || 20)) : 0,
       loss_timeline: lossTimelineToggle?.checked || false,
       resource_history: resourceHistoryToggle?.checked || false,
+      resource_average: resourceAverageToggle?.checked || false,
       latency_view: latencyViewToggle?.checked || false,
     };
 
@@ -5033,12 +5061,14 @@ const customCodePlaceholder = [
     'stickyHeaderDesc': { en: 'Keep the column names at the top of the window while a long list scrolls', zh: '滚动长列表时，列名固定在页面顶部' },
     'cardLayoutLabel': { en: 'Card Layout', zh: '卡片布局' },
     'pagesLabel': { en: 'Pages', zh: '分页显示' },
-    'pagesDesc': { en: 'Show the servers a page at a time, with a footer to turn the pages (as Beszel); in the card layout each page ends on a full row', zh: '服务器按页显示，页脚可翻页（同 Beszel）；卡片布局下每页凑满整行，不留空格' },
+    'pagesDesc': { en: 'Show the servers a page at a time, with a footer to turn the pages; in the card layout each page ends on a full row', zh: '服务器按页显示，页脚可翻页；卡片布局下每页凑满整行，不留空格' },
     'pageSizeLabel': { en: 'Servers per page', zh: '每页显示' },
     'lossTimelineLabel': { en: 'Loss Timeline', zh: '丢包时间线' },
     'lossTimelineDesc': { en: 'A thin band under the TCPing chart, red where probes were lost, so a gap in the lines reads as lost probes or as no data', zh: '在 TCPing 图表下方加一条细带，红色处为丢包；图上断开的地方是丢包还是没有数据，一眼分清' },
     'resourceHistoryLabel': { en: 'Resource History', zh: '资源历史' },
     'resourceHistoryDesc': { en: "A Resources tab on opened servers: CPU, memory, disk and network. The last 24 hours are always kept; this shows them", zh: '展开服务器时多一个「资源」页（CPU、内存、磁盘、网络）。服务端始终保留最近 24 小时，开关只管显示' },
+    'resourceAverageLabel': { en: 'Averaged Charts', zh: '按时段平均' },
+    'resourceAverageDesc': { en: 'The 6, 12 and 24 h charts show 5, 10 and 20-minute averages (about 72 points each) for smoother lines; off, every minute is shown as recorded', zh: '6、12、24 小时图表分别按 5、10、20 分钟取平均（每张约 72 个点），曲线更平滑；关闭时逐分钟显示，数值精确' },
     'latencyViewLabel': { en: 'Latency View', zh: '延迟视图' },
     'latencyViewDesc': { en: "A Resources | Latency switch beside the filter: the servers by each TCPing target's last-hour latency and loss", zh: '筛选框旁多一个「资源 | 延迟」切换，按各 TCPing 目标近 1 小时的平均延迟和丢包比较服务器' },
     'cardLayoutDesc': { en: 'Show each server as a card instead of the table, on desktops and phones alike; visitors can still switch in the view menu for their visit', zh: '用卡片代替表格显示每台服务器，电脑和手机都一样；访客仍可在视图菜单中临时切换' },

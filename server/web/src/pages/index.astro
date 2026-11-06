@@ -234,6 +234,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
               // 自定义设置 → 资源历史 / 延迟视图 (both off by default)
               document.documentElement.classList.toggle('resource-history', config.resource_history === true);
               document.documentElement.classList.toggle('latency-view', config.latency_view === true);
+              // 自定义设置 → 资源历史 → 按时段平均 (off by default: every recorded minute)
+              document.documentElement.classList.toggle('resource-average', config.resource_average === true);
               // Dispatch event when config is ready
               window.dispatchEvent(new CustomEvent('navbarconfigready', { detail: config }));
             }
@@ -272,6 +274,8 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
             // 自定义设置 → 资源历史 / 延迟视图 (both off by default)
             document.documentElement.classList.toggle('resource-history', config.resource_history === true);
             document.documentElement.classList.toggle('latency-view', config.latency_view === true);
+            // 自定义设置 → 资源历史 → 按时段平均 (off by default: every recorded minute)
+            document.documentElement.classList.toggle('resource-average', config.resource_average === true);
             
             // Inject CSS if exists
             if (config.custom_css && config.custom_css.trim()) {

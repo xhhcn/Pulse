@@ -5300,14 +5300,16 @@ const apiBase = apiBaseProp ?? '';
     }
     return out;
   }
-  // As Beszel: about 72 points a chart whatever the span (its 24 h chart is
-  // 20-minute records), so a day reads as a curve, not 1440 minutes packed
-  // two to a pixel (a minute's spike also stretched the network axis until
-  // the rest of the day lay flat on it). Each point is the average of the
-  // minutes recorded in its slot, at their mean time (the slot in progress
-  // never lands in the future); 1 h keeps every minute.
+  // 自定义设置 → 资源历史 → 按时段平均 (html.resource-average, off by
+  // default): as Beszel, about 72 points a chart whatever the span (its 24 h
+  // chart is 20-minute records), so a day reads as a curve, not 1440 minutes
+  // packed two to a pixel (a minute's spike also stretches the network axis
+  // until the rest of the day lies flat on it). Each point is the average of
+  // the minutes recorded in its slot, at their mean time (the slot in
+  // progress never lands in the future); 1 h keeps every minute. Off, every
+  // range shows each recorded minute: the exact values, spikes included.
   const RESOURCE_STEP_S = { 1: 60, 6: 300, 12: 600, 24: 1200 };
-  const resourceStep = () => RESOURCE_STEP_S[tcpingRangeHours()] || 60;
+  const resourceStep = () => (document.documentElement.classList.contains('resource-average') ? RESOURCE_STEP_S[tcpingRangeHours()] || 60 : 60);
   function resourceBuckets(points, step) {
     if (step <= 60 || !points || points.length < 2) return points;
     const out = [];
