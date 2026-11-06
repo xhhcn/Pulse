@@ -146,87 +146,95 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows a review of the server, the web app and the agent (now 1.3.68). It closes security holes, keeps the server honest when its disk fills or its clock steps, and adds a switch for averaged resource charts.
+            v${{ steps.version.outputs.version }} follows another review of the server, the web app and the design. It fixes a v1.3.69 regression that froze the admin page after a server restart, writes about a twelfth as much to disk, and fixes a set of display problems.
+
+            ### Fixed (a v1.3.69 regression)
+
+            - After a server restart (each upgrade), or when a session ended while the page was open, the admin page and a private dashboard opened with the admin session stayed frozen on their last values. The refused stream ticket went unnoticed. They go to the sign-in page again, as before v1.3.69.
+
+            ### Storage
+
+            - The agents' live numbers are kept in memory and written once a minute, and also when a server goes offline, before a backup and at shutdown.
+              - TCPing samples are still written before a push is answered, now in groups of up to 2 s.
+              - Resource minutes are written every 10 minutes.
+              - Measured on a copy of 131 servers, side by side with v1.3.69: 236.6 → 18.9 KB/s, or 20.9 → 1.7 GB a day, with the same CPU.
+            - A clean stop loses nothing. A crash or a power cut can lose the last minute's "last seen" times and up to 10 minutes of resource minutes, but never TCPing history.
+            - Storage failures are still caught: while writes fail, pushes are refused and /healthz answers 503.
+            - `PULSE_LIVE_FLUSH=0` restores the previous writes.
 
             ### Security
 
-            - Web: an SVG logo or icon could run script. The sanitizer compared tag names with their prefix, so `<s:script>` (an SVG or XHTML namespace prefix) was kept; it ran in Chromium and WebKit, and on /admin it could read the session. Elements are now judged by namespace and local name, and `url(…)` to other sites is dropped. Shipped icons and logos come out unchanged (213 of 213).
-            - Server: a damaged database (both meta pages bad, or a truncated restore) was replaced by an empty one with the first-run setup open, so the first visitor could set the admin password. The setup now stays locked until it is done from the server itself; the log says how.
-            - Server: the login limit counted each IPv6 /64 on its own, so one /48 could buy 327,680 password checks per 15 minutes, more CPU than the server has.
-              - A /48 now also has a budget: 20 failures per 15 minutes.
-              - At most 2 checks run at once. A login that finds both busy is asked to retry; it is not counted.
-            - Server and web: the admin page (and a private dashboard viewed with the session) opened the live stream with the 24-hour session in its URL, which proxies and CDNs log. It now trades the session for a single-use ticket that is valid for 30 s.
-            - Server and agent: a newly registered agent could be polled over plain HTTP before its first push, with its secret in the request (seen in 2 of 2 starts). The server now waits 20 s before polling a new registration, and agent 1.3.68 pushes before it registers.
-            - Server: an unknown server ID and a wrong secret get the same answer, so the IDs that exist are not revealed. Error responses no longer carry internal error text.
-            - Agent 1.3.68:
-              - pushes and registrations follow no redirect to another host (their body carries the secret);
-              - child processes no longer inherit SECRET.
+            - Setting the password after a damaged database now needs the one-time setup code. The server prints it in its log at start and writes it to `setup-code.txt` beside the database; the sign-in page asks for it. v1.3.69 accepted the server's own address instead, but behind a reverse proxy on the same machine every visitor has that address.
+            - Three more agent endpoints answer an unknown server ID exactly as they answer a wrong secret: TCPing results, the legacy ingest, and registration without a secret.
+            - The TCPing interval cannot be set below 5 s. At 1 s, 137 servers would add about 13 GB of history a day.
 
-            ### Robustness
+            ### Dashboard
 
-            - Server: when the disk is full, every server used to stay online with frozen numbers, and nothing said so. Now:
-              - a push counts only once it is stored;
-              - a failed save is logged;
-              - /healthz answers 503 while pushes cannot be stored.
-            - Server: a step of the server's own clock (an NTP fix) no longer drops TCPing samples for two minutes. The agent clock estimates measure ages on the monotonic clock.
-            - Server: changing the shared secret writes the config and every system's secret in one transaction, touching only the secret. It was one commit per system, which could stop halfway and could undo edits made meanwhile.
-            - Server: a viewer that stops reading is dropped within about a minute. It used to hold its stream and kernel memory for 8 minutes or more.
-            - Server: the TCPing history cache keeps only the gzip copy, so every server's history fits. A client asking for each server in turn no longer makes each request a database read (about 40 ms of CPU each).
-            - Web: a stream that connects and then drops is retried with a growing pause, and the connection notice shows. It used to reconnect about once a second without a notice.
-            - Agent 1.3.68:
-              - after a failed push the next one waits 6, 12, then 24 s; it used to retry every 3 s, each time with the whole backlog;
-              - after a rejection (unknown ID, wrong secret) it pushes once a minute and says why in its log.
+            - 「运行时间」 no longer breaks onto two lines in the 1024–1119 px table.
+            - Network speeds of 100 MB/s and more no longer run into the uptime column: they show one decimal from 100, and the next unit before 1000.
+            - Phones: a lost connection is shown on the line under the title. The list no longer jumps down and back.
+            - English: switching to Latency no longer wraps the toolbar at 1024–1079 px.
+            - A long site name stays on one line in the navbar.
+            - Glass: the 资源 | 延迟 switches and the page buttons are frosted like the filter beside them.
+            - Cards: a server without a flag or OS logo gets that room back for its name.
+            - Speeds and uptimes use even-width figures at every width.
+            - Look:
+              - sorted and hovered column headers use the menus' accent;
+              - the footer lines up with the cards' content;
+              - the chart tooltip has a shadow again.
 
-            ### Design
+            ### Server details
 
-            - A new switch, Averaged Charts (自定义设置 → 资源历史 → 按时段平均), shows while Resource History is on. It is off by default, and the charts then show every recorded minute, as before. Switched on, they show averages, about 72 points a chart:
-              - 24 h: 20-minute averages;
-              - 12 h: 10-minute averages;
-              - 6 h: 5-minute averages;
-              - 1 h: every minute.
+            - A TCPing probe answered between lost ones is drawn as a dot. It was invisible, yet it set the axis and the average.
+            - An open chart now shows a stretch where every probe fails as it happens; it used to stand still until the first answer.
+            - A new server's first minute and first probe are drawn, on an axis of at least 10 minutes in whole minutes.
+            - 资源:
+              - a tab with no data or a failed read shows its note alone, without four blank cards;
+              - averaged points name the minutes they cover (03:20–03:40);
+              - each tooltip line names its value in full, such as 「CPU 使用率」 or 「CPU 平均使用率」 for an average, so a short name no longer sits far from its number;
+              - the newest dot is no longer cut in half.
+            - The 资源 charts come back after an admin changes the TCPing targets, and they and the latency view refresh when a tab is shown again.
+            - The time range menu highlights the chosen span when opened with the pointer.
 
-              The line under the tabs says which. A day then reads as a curve instead of 1,440 minutes packed two to a pixel, and one minute's spike no longer flattens the rest of the network chart.
+            ### Admin and sign-in
 
-            ### Performance
+            - Errors appear in the dialogs or as notices, never as the browser's alert box. Notices sit at the bottom right from 640 px, clear of the navbar.
+            - The share link row matches the dialog's other controls.
+            - A row's second line no longer starts a wrapped line with "·".
+            - The settings menu stays on screen on phones.
+            - Error text is darker: 5.7:1 contrast instead of 3.3:1.
 
-            - Agent 1.3.68 uses HTTP/2 where the server's CDN speaks it (Cloudflare does): 40 % fewer bytes per push.
-            - Web: a language switch translates the page once; it ran twice. Opening a row no longer runs a page-wide translation.
+            ### Also
 
-            ### Windows
-
-            - Agent 1.3.68: one unreadable drive (a locked BitLocker volume, a dead share) no longer zeroes the disk total, and only the machine's own fixed disks count (no network drives, USB sticks or ISOs).
+            - The resource history answers are cached: 8.1 → 0.5 ms of CPU a request.
+            - The admin page downloads backups compressed: 186 MB → about 22 MB for 131 servers. Scripts get them as before.
+            - Custom `<script>` tags keep their attributes, so trackers that read `data-*` (Umami, Plausible) work.
+            - A stream cut right after its first update backs off instead of reconnecting every second.
+            - Switching 延迟 → 资源 during a read no longer leaves a summary refresh running.
 
             ### Compatibility
 
-            - Agent 1.3.68 works with every v1.3 server, and every agent works with this server. Agents installed with auto-update move to 1.3.68 within a day.
-            - The server changes and the sanitizer fix are shared with Pulse-Hotaru. Hotaru's pages keep opening the stream with `admin_token`, which still works.
+            - Agents are unchanged (1.3.68). Pulse-Hotaru gets the server changes; its pages keep working as they are.
+            - A downgrade reads the database. Settings added since are dropped when saved, and the setup lock is not enforced.
 
             ### Verified
 
-            - Go, with the race detector:
-              - the locked setup after a damaged database (forwarded headers do not count as local);
-              - the /48 login budget and the 2-check limit;
-              - the shared-secret transaction;
-              - pushes counted only once stored, and /healthz;
-              - stream tickets (single use, 30 s, admin view only with a valid session);
-              - one answer for an unknown ID and a bad secret;
-              - gzip-only cache entries served byte-identical;
-              - agent clocks across server clock steps (−10 min to +1 h);
-              - the agent's push outcomes, backoff and logs;
-              - the Windows drive totals.
-            - Containers:
-              - a packet capture of agent start-up: the secret on the wire with v1.3.68 and agent 1.3.67 (2 of 2 starts), not with this server (agent 1.3.67) nor with agent 1.3.68;
-              - the agent against a server answering 503, hanging, 401 and 404;
-              - 50 stalled viewers: dropped within 90 s (v1.3.68: still open after 3 minutes);
-              - the new agent against the new server.
-            - The sanitizer: 11 crafted SVGs in Chromium, Firefox and WebKit (6, 4 and 7 unsafe before, 0 after), and every shipped icon.
+            - Go, with the race detector, including:
+              - the live state: admin edits between a push and a flush, kill -9 and clean stops, offline marking, clock steps, storage failures;
+              - the setup code;
+              - the uniform agent answers;
+              - the history cache;
+              - the compressed backup;
+              - the interval bounds.
+            - Side by side on copies of 131 servers:
+              - the write rates;
+              - an admin rename kept through pushes, a flush and a kill -9;
+              - TCPing history intact after kill -9;
+              - a clean stop within 5 s of the last push.
             - Chromium, Firefox and WebKit:
-              - the stream tickets on the admin page and a private dashboard;
-              - the connect-and-drop stream;
-              - the averaged-charts switch: off, the charts draw every minute as v1.3.68 did; on, the averages;
-              - the login messages;
-              - the logo on /, /login and /admin;
-              - a language switch;
+              - each display fix;
+              - header and column fit, 768–1920 px in zh and en;
+              - the stream and session scenarios (restart, ended session, privacy, share link, cut, stall, offline);
               - the regression suites.
 
             ### 📦 Docker Images
