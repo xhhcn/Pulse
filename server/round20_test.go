@@ -59,14 +59,15 @@ func TestLoginLimitHoldsForConcurrentGuesses(t *testing.T) {
 
 	var wg sync.WaitGroup
 	start := make(chan struct{})
-	var unauthorized int32
+	var refused int32
 	for i := 0; i < 40; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			if loginCode(store, "198.51.100.77:4000", fmt.Sprintf("guess-%02d", i)) == http.StatusUnauthorized {
-				atomic.AddInt32(&unauthorized, 1)
+			// 401 (checked or out of attempts) or 429 (no check free: not counted)
+			if c := loginCode(store, "198.51.100.77:4000", fmt.Sprintf("guess-%02d", i)); c == http.StatusUnauthorized || c == http.StatusTooManyRequests {
+				atomic.AddInt32(&refused, 1)
 			}
 		}(i)
 	}
@@ -75,8 +76,15 @@ func TestLoginLimitHoldsForConcurrentGuesses(t *testing.T) {
 	if n := atomic.LoadInt32(calls); n > loginMaxAttempts {
 		t.Fatalf("%d passwords were checked in one burst; the limit is %d", n, loginMaxAttempts)
 	}
-	if unauthorized != 40 {
-		t.Fatalf("%d of 40 wrong guesses were refused", unauthorized)
+	if refused != 40 {
+		t.Fatalf("%d of 40 wrong guesses were refused", refused)
+	}
+	// the address's remaining attempts, one at a time, until none is left
+	for i := 0; atomic.LoadInt32(calls) < loginMaxAttempts && i < 20; i++ {
+		loginCode(store, "198.51.100.77:4000", fmt.Sprintf("more-%02d", i))
+	}
+	if n := atomic.LoadInt32(calls); n != loginMaxAttempts {
+		t.Fatalf("%d passwords checked in all; the limit is %d", n, loginMaxAttempts)
 	}
 	if code := loginCode(store, "198.51.100.77:4000", "right-password"); code != http.StatusUnauthorized {
 		t.Fatalf("a locked address logged in: HTTP %d", code)

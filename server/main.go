@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -171,10 +172,31 @@ type TCPingHistoryResponse struct {
 // the struct also lets the entry be served read-locked without the encoder
 // touching shared state.
 type tcpingCacheEntry struct {
-	JSON     []byte // marshaled body of TCPingHistoryResponse, ready to ship
-	GZ       []byte // gzip of JSON, made once when cached; nil if not worth it
+	// The body of a TCPingHistoryResponse, ready to ship: its gzip copy when
+	// that pays (the usual case), the JSON only when there is none. Keeping
+	// both made an entry about ten times what it serves (one server's day on
+	// xhh.li: 549 KB of JSON and 60 KB gzipped), so the 32 MiB cache held
+	// about 60 of 137 servers' histories, and a client asking for each server
+	// in turn made every request a miss: a day read, encoded and compressed
+	// again, about 40 ms of CPU each, anonymously. Gzip only, all of them fit
+	// in about 16 MB; the rare client without gzip gets it unpacked (ms).
+	JSON     []byte
+	GZ       []byte
 	CachedAt time.Time
 	Size     int // len(JSON) + len(GZ), counted against tcpingCacheMaxBytes
+}
+
+// plain is the JSON body (unpacked from the gzip copy when only that is kept).
+func (e *tcpingCacheEntry) plain() ([]byte, error) {
+	if e.JSON != nil || e.GZ == nil {
+		return e.JSON, nil
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(e.GZ))
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+	return io.ReadAll(zr)
 }
 
 type tcpingCacheKey struct {
@@ -199,7 +221,8 @@ func getCachedTCPingResultsJSON(clientID, target string) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
-	return entry.JSON, true
+	body, err := entry.plain()
+	return body, err == nil
 }
 
 // getCachedTCPingEntry returns the live cache entry for client+target. The
@@ -252,14 +275,12 @@ func buildTCPingCacheEntry(response TCPingHistoryResponse) *tcpingCacheEntry {
 		// the caller by handleGetTCPingHistory; we only skip keeping a copy.
 		return nil
 	}
-	var gz []byte
 	if httpGzipEnabled && len(body) >= apiGzipMinSize {
-		gz = gzipBytes(body)
+		if gz := gzipBytes(body); gz != nil && len(gz) < len(body) {
+			return &tcpingCacheEntry{GZ: gz, Size: len(gz)}
+		}
 	}
-	if len(body)+len(gz) > tcpingCacheMaxBytes {
-		gz = nil
-	}
-	return &tcpingCacheEntry{JSON: body, GZ: gz, Size: len(body) + len(gz)}
+	return &tcpingCacheEntry{JSON: body, Size: len(body)}
 }
 
 // storeTCPingCacheEntry caches entry unless the client (or the whole cache)
@@ -608,6 +629,14 @@ const (
 	// goroutine and connection. 15 s is far above any realistic flush time
 	// for a payload of a few hundred KB.
 	sseWriteTimeout = 15 * time.Second
+	// sseSendBuffer caps the kernel send buffer of a stream's connection. A
+	// viewer that stops reading only trips sseWriteTimeout once a write
+	// blocks, and with Linux's auto-tuned buffer (2.5 MB measured) that took
+	// about 8 minutes at the stream's 5 KB/s, per connection, so an anonymous
+	// client could pin megabytes of kernel memory with each of its 200 streams.
+	// 128 KiB (Linux doubles it) holds a minute of stream and still moves
+	// 800 KB/s over a 300 ms link.
+	sseSendBuffer = 128 << 10
 )
 
 var errSSETooManySubscribers = fmt.Errorf("too many event stream subscribers")
@@ -1151,6 +1180,23 @@ type ClientInfo struct {
 	// successfully (in-memory only). The tcping loop uses it to tell a fresh
 	// UpdatedAt written by our own poll from one written by a push.
 	LastPollAt time.Time `json:"-"`
+	// RegisteredAt is when this entry was made (in-memory only): a client is
+	// not pulled until registerPollGrace has passed since (see pollWaits).
+	RegisteredAt time.Time `json:"-"`
+}
+
+// registerPollGrace: an agent registers about 1 s after it starts and pushes
+// a few seconds later; a pull in between (the server's poll loop saw an
+// address and no push yet) sent the agent's SECRET over plain HTTP, since a
+// pull URL is always http://. Measured on agent 1.3.67: the secret on the
+// wire in 2 of 2 starts. Waiting this long after a registration, an agent
+// that pushes is a push client before any pull; a pull-only agent is pulled
+// after it.
+const registerPollGrace = 20 * time.Second
+
+// pollWaits: the client has just registered, so it is not pulled yet.
+func pollWaits(c ClientInfo, now time.Time) bool {
+	return !c.PushMode && !c.RegisteredAt.IsZero() && now.Sub(c.RegisteredAt) < registerPollGrace
 }
 
 // ClientTCPingResult is a single TCPing measurement sent by the client in push mode.
@@ -1293,7 +1339,8 @@ func NewClientRegistry() *ClientRegistry {
 // buildURL constructs a proper HTTP URL for an IP address
 // IPv6 addresses must be enclosed in square brackets
 func buildURL(ip, port string) string {
-	if ip == "" {
+	if ip == "" || port == "" {
+		// (an empty port made "http://ip:", which Go dials on port 80)
 		return ""
 	}
 	// net.JoinHostPort brackets IPv6 literals. The port was validated at
@@ -1340,6 +1387,7 @@ func (r *ClientRegistry) Register(id, name, port, ip, ipv6 string) {
 	var lastPushAt time.Time
 	var lastPollAt time.Time
 	var cachedSecret string
+	registeredAt := time.Now()
 
 	if exists && existingClient != nil {
 		// --- WorkingURL: keep if it still matches a valid URL ---
@@ -1368,6 +1416,9 @@ func (r *ClientRegistry) Register(id, name, port, ip, ipv6 string) {
 		// between Register returning and that assignment, a concurrent pollClient
 		// could run with an empty secret, causing spurious 401 errors.
 		cachedSecret = existingClient.Secret
+		if !existingClient.RegisteredAt.IsZero() {
+			registeredAt = existingClient.RegisteredAt
+		}
 	}
 
 	r.clients[id] = &ClientInfo{
@@ -1383,6 +1434,8 @@ func (r *ClientRegistry) Register(id, name, port, ip, ipv6 string) {
 		LastPushAt: lastPushAt,
 		LastPollAt: lastPollAt,
 		Secret:     cachedSecret, // caller (handleClientRegister) will overwrite with DB value
+
+		RegisteredAt: registeredAt,
 	}
 
 	// Log the "no reachable URL" condition once per transition, not on every
@@ -1439,8 +1492,19 @@ func (r *ClientRegistry) UpdateWorkingURL(id, workingURL string) {
 	}
 }
 
+// MarkPushMode marks a client as pushing (never polled) without counting a
+// push: handleClientPush calls it on arrival and UpdatePushState once the
+// push is stored, so a push the disk refused does not keep the row online.
+func (r *ClientRegistry) MarkPushMode(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if client, exists := r.clients[id]; exists && client != nil {
+		client.PushMode = true
+	}
+}
+
 // UpdatePushState marks a client as using push mode and records the push timestamp
-// Called by handleClientPush each time a push payload is successfully received
+// Called by handleClientPush each time a push payload has been stored
 func (r *ClientRegistry) UpdatePushState(id string, lastPushAt time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1748,6 +1812,9 @@ func main() {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
+	mux.HandleFunc("/api/auth/stream-ticket", func(w http.ResponseWriter, r *http.Request) {
+		handleStreamTicket(w, r)
+	})
 	mux.HandleFunc("/api/auth/logout", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			handleAuthLogout(w, r)
@@ -1869,6 +1936,10 @@ func main() {
 		// request so long-lived handlers (notably /api/events SSE) observe
 		// rootCtx cancellation and return promptly during shutdown.
 		BaseContext: func(net.Listener) context.Context { return rootCtx },
+		// the connection, for handleSSE (see sseSendBuffer)
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			return context.WithValue(ctx, connCtxKey{}, c)
+		},
 	}
 
 	serverErrCh := make(chan error, 1)
@@ -1935,8 +2006,13 @@ func main() {
 	log.Println("👋 Shutdown complete")
 }
 
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+type connCtxKey struct{}
+
+// limitStreamSendBuffer applies sseSendBuffer to the request's TCP connection.
+func limitStreamSendBuffer(r *http.Request) {
+	if c, ok := r.Context().Value(connCtxKey{}).(*net.TCPConn); ok {
+		_ = c.SetWriteBuffer(sseSendBuffer)
+	}
 }
 
 func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.Request) {
@@ -1973,6 +2049,10 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 		if adminToken := r.URL.Query().Get("admin_token"); adminToken != "" && authTokenValid(adminToken) {
 			isAdmin = true
 			sessionToken = adminToken
+		} else if token, ok := redeemStreamTicket(r.URL.Query().Get("ticket"), time.Now()); ok && authTokenValid(token) {
+			// the page's session, traded for a single-use ticket (streamticket.go)
+			isAdmin = true
+			sessionToken = token
 		}
 	}
 
@@ -2015,6 +2095,7 @@ func handleSSE(store *Store, broker *SSEBroker, w http.ResponseWriter, r *http.R
 	// flushes, returning false as soon as the peer stops draining so the
 	// handler exits instead of blocking forever (see sseWriteTimeout).
 	rc := http.NewResponseController(w)
+	limitStreamSendBuffer(r)
 	// The deadline is absolute and net/http only re-arms it per request when
 	// Server.WriteTimeout is set (it is not, on purpose). Clear it on exit so
 	// a keep-alive connection reused for a later request is not left with a
@@ -2882,6 +2963,17 @@ var (
 	logThrottleLast = map[string]time.Time{}
 )
 
+// saveClientPush stores one push (tests replace it to make the disk fail).
+var saveClientPush = func(store *Store, metric SystemMetric, results []TCPingResult) error {
+	return store.SaveClientPushBatch(metric, results)
+}
+
+// agentRejected is the one answer to a registration or push with an unknown
+// server ID or a wrong secret. A 404 for an unknown ID and a 401 for a known
+// one told anyone which IDs exist (they are small integers), privacy mode or
+// not; the server's log still says which it was.
+const agentRejected = "invalid server ID or secret: add the server in the admin page and give the agent its ID and secret"
+
 func logThrottled(key, format string, args ...interface{}) {
 	logThrottleMu.Lock()
 	defer logThrottleMu.Unlock()
@@ -2988,7 +3080,7 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 	existing, err := store.Get(payload.ID)
 	if err != nil || existing == nil {
 		logThrottled("register:unknown", "❌ Client registration failed: server ID %q not found in database", payload.ID)
-		http.Error(w, fmt.Sprintf("server id '%s' not found in database. Please add the server in admin page first", payload.ID), http.StatusNotFound)
+		http.Error(w, agentRejected, http.StatusUnauthorized)
 		return
 	}
 
@@ -3001,7 +3093,7 @@ func handleClientRegister(store *Store, registry *ClientRegistry, w http.Respons
 		}
 		if !secretEqual(payload.Secret, existing.Secret) {
 			logThrottled("register:badsecret", "❌ Client registration failed: invalid secret for ID %q", payload.ID)
-			http.Error(w, "invalid secret", http.StatusUnauthorized)
+			http.Error(w, agentRejected, http.StatusUnauthorized)
 			return
 		}
 	}
@@ -3139,7 +3231,8 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	// Verify system exists in database (must be pre-added by admin)
 	existing, err := store.Get(clientID)
 	if err != nil || existing == nil {
-		http.Error(w, fmt.Sprintf("server id '%s' not found", clientID), http.StatusNotFound)
+		logThrottled("push:unknown", "❌ Push refused: server ID %q not found in database", clientID)
+		http.Error(w, agentRejected, http.StatusUnauthorized)
 		return
 	}
 
@@ -3154,7 +3247,7 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 			providedSecret = payload.Secret
 		}
 		if !secretEqual(providedSecret, existing.Secret) {
-			http.Error(w, "invalid secret", http.StatusUnauthorized)
+			http.Error(w, agentRejected, http.StatusUnauthorized)
 			return
 		}
 	}
@@ -3195,7 +3288,8 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 		// concurrent Register calls that would replace the ClientInfo pointer.
 		registry.UpdateSecret(clientID, existing.Secret)
 	}
-	registry.UpdatePushState(clientID, now)
+	// a pushing client is never polled; the push itself counts once stored
+	registry.MarkPushMode(clientID)
 
 	// Resolve location without ever blocking the push (see resolveLocation).
 	var locationIP string
@@ -3247,7 +3341,9 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 		return ok
 	}
 
-	nowUTC := time.Now().UTC()
+	// clockNow keeps the monotonic reading (UTC() drops it): see agentClocks
+	clockNow := time.Now()
+	nowUTC := clockNow.UTC()
 	// Agents queue up to 500 measurements while the server is unreachable and
 	// deliver them on the next successful push, each stamped with its real
 	// MeasuredAt. Those stamps are kept so an outage shows as a gap instead of
@@ -3265,7 +3361,7 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	if !newest.IsZero() {
 		newest = newest.UTC()
 	}
-	skew, exactStamps := agentClocks.shift(clientID, nowUTC, newest, existing.UpdatedAt, tcpingConfig.IntervalSecs)
+	skew, exactStamps := agentClocks.shift(clientID, clockNow, newest, existing.UpdatedAt, tcpingConfig.IntervalSecs)
 	// An agent re-sends the identical batch when its previous push timed out
 	// after the server had already committed it. When the batch was shifted
 	// by its own age the stored timestamps differ between the two deliveries,
@@ -3424,14 +3520,17 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 		HideTCPing:         existing.HideTCPing,
 	}
 
-	if err := store.SaveClientPushBatch(metric, batchedResults); err != nil {
+	if err := saveClientPush(store, metric, batchedResults); err != nil {
 		// Nothing was stored: forget the batch's signature, or the agent's
 		// unchanged retry would be taken for a duplicate and its samples
 		// dropped on both sides.
 		tcpingBatchForget(clientID, deliveredTCPing)
+		storeHealth.failed(time.Now(), err)
 		http.Error(w, "failed to save metrics", http.StatusInternalServerError)
 		return
 	}
+	registry.UpdatePushState(clientID, now)
+	storeHealth.stored(time.Now())
 
 	if len(batchedResults) > 0 {
 		invalidateTCPingCache(clientID)
@@ -3575,6 +3674,9 @@ func startClientPolling(ctx context.Context, store *Store, broker *SSEBroker, re
 
 			// Pull-mode clients: skip those with no reachable URL.
 			if client.URL == "" && client.URL6 == "" {
+				continue
+			}
+			if pollWaits(client, time.Now()) {
 				continue
 			}
 
@@ -4849,7 +4951,8 @@ func handleGetTCPingConfig(store *Store, w http.ResponseWriter, r *http.Request)
 
 	config, err := store.GetTCPingConfig()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get config: %v", err), http.StatusInternalServerError)
+		logThrottled("500:get config", "⚠️  failed to get config: %v", err)
+		http.Error(w, "failed to get config", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, config)
@@ -4907,7 +5010,8 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 		}
 		results, err := store.GetTCPingResultsSince(clientID, target, since)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to get history: %v", err), http.StatusInternalServerError)
+			logThrottled("500:get history", "⚠️  failed to get history: %v", err)
+			http.Error(w, "failed to get history", http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, http.StatusOK, TCPingHistoryResponse{Results: results, Stats: calculateTCPingStats(results)})
@@ -5050,7 +5154,17 @@ func loadTCPingHistoryShared(key tcpingHistoryFlightKey, load func() tcpingHisto
 
 // writeCachedTCPingEntry ships a cached history body.
 func writeCachedTCPingEntry(w http.ResponseWriter, r *http.Request, entry *tcpingCacheEntry) {
-	writeCachedBody(w, r, entry.JSON, entry.GZ)
+	if entry.GZ != nil && gzipAllowed(r) {
+		writeCachedBody(w, r, nil, entry.GZ)
+		return
+	}
+	body, err := entry.plain()
+	if err != nil {
+		logThrottled("500:unpack history", "⚠️  failed to unpack a cached history: %v", err)
+		http.Error(w, "failed to get history", http.StatusInternalServerError)
+		return
+	}
+	writeCachedJSON(w, http.StatusOK, body)
 }
 
 // writeCachedBody ships a cached JSON body: its gzip copy when there is one
@@ -5073,7 +5187,8 @@ func handleGetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 	// It's used by the frontend to display custom navbar text and logo
 	config, err := store.GetNavbarConfig()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get navbar config: %v", err), http.StatusInternalServerError)
+		logThrottled("500:get navbar config", "⚠️  failed to get navbar config: %v", err)
+		http.Error(w, "failed to get navbar config", http.StatusInternalServerError)
 		return
 	}
 
@@ -5148,26 +5263,25 @@ func handleSetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 	// Check if SharedSecret has changed
 	secretChanged := currentConfig != nil && currentConfig.SharedSecret != "" && config.SharedSecret != "" && currentConfig.SharedSecret != config.SharedSecret
 
-	// Save the new navbar config
-	if err := store.SaveNavbarConfig(&config); err != nil {
-		http.Error(w, fmt.Sprintf("failed to save navbar config: %v", err), http.StatusInternalServerError)
+	// Save the new navbar config; a changed shared secret goes to every
+	// system in the same transaction (see SaveNavbarConfigAndSecret)
+	applySecret := ""
+	if secretChanged {
+		applySecret = config.SharedSecret
+	}
+	changed, err := store.SaveNavbarConfigAndSecret(&config, applySecret)
+	if err != nil {
+		logThrottled("500:save navbar config", "⚠️  failed to save navbar config: %v", err)
+		http.Error(w, "failed to save navbar config", http.StatusInternalServerError)
 		return
 	}
-	// If SharedSecret changed, update all existing systems to use the new shared secret
 	if secretChanged {
-		systems, err := store.List()
-		if err != nil {
-			log.Printf("⚠️ Warning: Failed to list systems when updating shared secret: %v", err)
-		} else {
-			for _, system := range systems {
-				// Update each system's secret to the new shared secret
-				system.Secret = config.SharedSecret
-				if err := store.Upsert(system); err != nil {
-					log.Printf("⚠️ Warning: Failed to update secret for system %s: %v", system.ID, err)
-				}
+		if globalClientRegistry != nil {
+			for _, id := range changed {
+				globalClientRegistry.UpdateSecret(id, config.SharedSecret)
 			}
-			log.Printf("✅ Updated shared secret and applied to %d systems", len(systems))
 		}
+		log.Printf("✅ Updated shared secret and applied to %d systems", len(changed))
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "navbar config saved"})
@@ -5176,7 +5290,8 @@ func handleSetNavbarConfig(store *Store, w http.ResponseWriter, r *http.Request)
 func handleGetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request) {
 	config, err := store.GetPrivacyConfig()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get privacy config: %v", err), http.StatusInternalServerError)
+		logThrottled("500:get privacy config", "⚠️  failed to get privacy config: %v", err)
+		http.Error(w, "failed to get privacy config", http.StatusInternalServerError)
 		return
 	}
 
@@ -5274,7 +5389,8 @@ func handleSetPrivacyConfig(store *Store, w http.ResponseWriter, r *http.Request
 	}
 
 	if err := store.SavePrivacyConfig(&config); err != nil {
-		http.Error(w, fmt.Sprintf("failed to save privacy config: %v", err), http.StatusInternalServerError)
+		logThrottled("500:save privacy config", "⚠️  failed to save privacy config: %v", err)
+		http.Error(w, "failed to save privacy config", http.StatusInternalServerError)
 		return
 	}
 
@@ -5322,7 +5438,8 @@ func handleVerifyShareToken(store *Store, w http.ResponseWriter, r *http.Request
 
 	config, err := store.GetPrivacyConfig()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get privacy config: %v", err), http.StatusInternalServerError)
+		logThrottled("500:get privacy config", "⚠️  failed to get privacy config: %v", err)
+		http.Error(w, "failed to get privacy config", http.StatusInternalServerError)
 		return
 	}
 
@@ -5480,7 +5597,8 @@ func handleSetTCPingConfig(store *Store, broker *SSEBroker, registry *ClientRegi
 	}
 
 	if err := store.SaveTCPingConfig(&config); err != nil {
-		http.Error(w, fmt.Sprintf("failed to save config: %v", err), http.StatusInternalServerError)
+		logThrottled("500:save config", "⚠️  failed to save config: %v", err)
+		http.Error(w, "failed to save config", http.StatusInternalServerError)
 		return
 	}
 
@@ -5767,7 +5885,7 @@ func startTCPingPolling(ctx context.Context, registry *ClientRegistry, store *St
 
 			// Push-mode clients run TCPing locally and include results in their push payload.
 			// The server must NOT send TCPing requests to these clients.
-			if client.PushMode {
+			if client.PushMode || pollWaits(client, time.Now()) {
 				continue
 			}
 
@@ -6123,7 +6241,19 @@ func handleAuthStatus(store *Store, w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"set": set})
+	writeJSON(w, http.StatusOK, map[string]bool{"set": set, "locked": !set && store.SetupLocked()})
+}
+
+// loopbackPeer: the request's own connection comes from this machine. The
+// TCP peer, never a forwarded header: a CDN or a client can claim any
+// X-Forwarded-For.
+func loopbackPeer(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // handleAuthSetup sets the admin password (first time only)
@@ -6136,6 +6266,11 @@ func handleAuthSetup(store *Store, w http.ResponseWriter, r *http.Request) {
 	}
 	if set {
 		http.Error(w, "password already set", http.StatusBadRequest)
+		return
+	}
+	// A database made empty after damage: only from the server itself.
+	if store.SetupLocked() && !loopbackPeer(r) {
+		http.Error(w, "setup is locked: the database was replaced after it was found damaged. Restore a backup, or set the password on the server itself: curl -X POST http://127.0.0.1:"+portFromEnv()+"/api/auth/setup -H 'Content-Type: application/json' -d '{\"password\":\"...\"}'", http.StatusForbidden)
 		return
 	}
 
@@ -6173,6 +6308,9 @@ func handleAuthSetup(store *Store, w http.ResponseWriter, r *http.Request) {
 	if !created {
 		http.Error(w, "password already set", http.StatusBadRequest)
 		return
+	}
+	if err := store.ClearSetupLock(); err != nil {
+		log.Printf("⚠️  could not clear the setup lock: %v", err)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
@@ -6322,7 +6460,18 @@ func getClientIP(r *http.Request) string {
 const (
 	loginMaxAttempts = 5
 	loginLockout     = 15 * time.Minute
+	// An IPv6 /48 holds 65,536 /64s, each its own address above: 5 guesses
+	// each made a /48 worth 327,680 bcrypt checks per 15 minutes, more CPU
+	// than the server has (200 /64s ran 1000 checks: 3.6 cores for 19 s). The
+	// /48 as a whole may fail loginMaxAttempts48 times as well.
+	loginMaxAttempts48 = 20
+	// Password checks run at most this many at a time; a login that finds
+	// them all busy is told to retry instead of queueing, so a flood of
+	// guesses from anywhere cannot take the whole CPU.
+	loginConcurrentChecks = 2
 )
+
+var loginSlots = make(chan struct{}, loginConcurrentChecks)
 
 // loginVerify checks a password; tests replace it to watch the limiter.
 var loginVerify = func(store *Store, password string) (bool, error) {
@@ -6342,7 +6491,9 @@ func loginLocked(key string) bool {
 // loginMaxAttempts: counting only after the slow bcrypt check let a burst
 // of concurrent requests all pass the limit together. It reports false
 // when the address is locked or has no attempt left.
-func reserveLoginAttempt(key string) bool {
+func reserveLoginAttempt(key string) bool { return reserveLoginAttemptMax(key, loginMaxAttempts) }
+
+func reserveLoginAttemptMax(key string, max int) bool {
 	loginAttemptsMu.Lock()
 	defer loginAttemptsMu.Unlock()
 	now := time.Now()
@@ -6357,7 +6508,7 @@ func reserveLoginAttempt(key string) bool {
 	if now.Sub(attempt.lastAttempt) > loginLockout {
 		attempt.count = 0
 	}
-	if attempt.count >= loginMaxAttempts {
+	if attempt.count >= max {
 		return false
 	}
 	attempt.count++
@@ -6368,7 +6519,9 @@ func reserveLoginAttempt(key string) bool {
 // finishLoginAttempt settles a reserved attempt: a right password clears the
 // address, a wrong one keeps its count and locks the address once none is
 // left.
-func finishLoginAttempt(key string, valid bool) {
+func finishLoginAttempt(key string, valid bool) { finishLoginAttemptMax(key, valid, loginMaxAttempts) }
+
+func finishLoginAttemptMax(key string, valid bool, max int) {
 	loginAttemptsMu.Lock()
 	defer loginAttemptsMu.Unlock()
 	attempt := loginAttempts[key]
@@ -6380,7 +6533,7 @@ func finishLoginAttempt(key string, valid bool) {
 		attempt.lockedUntil = time.Time{}
 		return
 	}
-	if attempt.count >= loginMaxAttempts {
+	if attempt.count >= max {
 		attempt.lockedUntil = time.Now().Add(loginLockout)
 	}
 }
@@ -6400,8 +6553,10 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 	// SECURITY: Rate limiting to prevent brute force attacks. A locked
 	// address is answered before its body is read, with the message a wrong
 	// password gets, so the lockout is not disclosed.
-	limitKey := rateLimitKey(getClientIP(r))
-	if loginLocked(limitKey) {
+	clientIP := getClientIP(r)
+	limitKey := rateLimitKey(clientIP)
+	wideKey := rateLimitKey48(clientIP) // "" for IPv4
+	if loginLocked(limitKey) || (wideKey != "" && loginLocked(wideKey)) {
 		http.Error(w, "invalid password", http.StatusUnauthorized)
 		return
 	}
@@ -6434,13 +6589,36 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid password", http.StatusUnauthorized)
 		return
 	}
-	valid, err := loginVerify(store, payload.Password)
-	if err != nil {
+	if wideKey != "" && !reserveLoginAttemptMax(wideKey, loginMaxAttempts48) {
 		releaseLoginAttempt(limitKey)
+		http.Error(w, "invalid password", http.StatusUnauthorized)
+		return
+	}
+	release := func() {
+		releaseLoginAttempt(limitKey)
+		if wideKey != "" {
+			releaseLoginAttempt(wideKey)
+		}
+	}
+	select {
+	case loginSlots <- struct{}{}:
+	default:
+		release() // not a guess: it was never checked
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "too many logins at once, try again", http.StatusTooManyRequests)
+		return
+	}
+	valid, err := loginVerify(store, payload.Password)
+	<-loginSlots
+	if err != nil {
+		release()
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	finishLoginAttempt(limitKey, valid)
+	if wideKey != "" {
+		finishLoginAttemptMax(wideKey, valid, loginMaxAttempts48)
+	}
 	if !valid {
 		// Return same error message to avoid information disclosure
 		http.Error(w, "invalid password", http.StatusUnauthorized)
@@ -6469,6 +6647,15 @@ func handleAuthLogin(store *Store, w http.ResponseWriter, r *http.Request) {
 // against. An IPv6 host usually holds a whole /64, so a single address per
 // attempt would never reach a lockout, and every new address added an entry
 // to the limiter maps; the /64 is counted as one client.
+// rateLimitKey48 is the IPv6 /48 an address belongs to, "" for IPv4.
+func rateLimitKey48(clientIP string) string {
+	ip := net.ParseIP(clientIP)
+	if ip == nil || ip.To4() != nil {
+		return ""
+	}
+	return ip.Mask(net.CIDRMask(48, 128)).String() + "/48"
+}
+
 func rateLimitKey(clientIP string) string {
 	ip := net.ParseIP(clientIP)
 	if ip == nil || ip.To4() != nil {

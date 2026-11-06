@@ -40,6 +40,7 @@ type simStored struct {
 type simResult struct {
 	stored     [3][]simStored
 	duplicates int           // a measurement stored twice
+	dropped    int           // samples the push handler would refuse (beyond 2 min ahead or a day old)
 	maxErr     time.Duration // stored stamp − real dial start, worst case (after the first minutes and outside the outage)
 	changes    int           // how often the shift applied to the agent's batches changed by more than 1 s
 	maxChange  time.Duration // the largest such change
@@ -55,6 +56,8 @@ type simOptions struct {
 	outageFor    time.Duration // ... for this long, and restarted (estimates forgotten)
 	lostReplyPct float64       // pushes whose reply is lost after the server stored them
 	strict       bool          // judge the samples around the outage too
+	serverStepAt time.Duration // the server's own clock steps by serverStep here (0: never)
+	serverStep   time.Duration
 }
 
 // oldShift is the rule before agentClocks: each batch on its own.
@@ -126,6 +129,14 @@ func simulateAgent(t *testing.T, o simOptions) simResult {
 		batch := queue
 		queue = nil
 		recv := push.Add(time.Duration(50+rng.Intn(350)) * time.Millisecond)
+		// the server's clock: wall (steps with serverStep) and monotonic (never)
+		serverWall := func(t time.Time) time.Time {
+			if o.serverStepAt > 0 && !t.Before(start.Add(o.serverStepAt)) {
+				return t.Add(o.serverStep)
+			}
+			return t
+		}
+		wall, mono := serverWall(recv), recv.Sub(start)
 		if inOutage(recv) {
 			queue = append(batch, queue...) // connection refused: kept for the next push
 			continue
@@ -144,9 +155,9 @@ func simulateAgent(t *testing.T, o simOptions) simResult {
 		var skew time.Duration
 		var exact bool
 		if o.useOldRule {
-			skew, exact = oldShift(recv, newest, o.interval)
+			skew, exact = oldShift(wall, newest, o.interval)
 		} else {
-			skew, exact = tracker.shift("sim", recv, newest, lastReport, int(o.interval/time.Second))
+			skew, exact = tracker.shiftAt("sim", wall, mono, newest, lastReport, int(o.interval/time.Second))
 		}
 		if len(batch) > 0 {
 			if d := (skew - lastShift).Abs(); haveShift && d > time.Second && recv.After(warm) && (o.outageAt == 0 || recv.Before(start.Add(o.outageAt)) || recv.After(start.Add(o.outageAt+o.outageFor+3*o.interval))) {
@@ -164,7 +175,8 @@ func simulateAgent(t *testing.T, o simOptions) simResult {
 		}
 		for _, s := range batch {
 			at := s.stamp.Add(skew)
-			if recv.Sub(at) > 24*time.Hour || at.After(recv.Add(maxTCPingFuture)) {
+			if wall.Sub(at) > 24*time.Hour || at.After(wall.Add(maxTCPingFuture)) {
+				res.dropped++
 				continue
 			}
 			if exact {
@@ -180,13 +192,15 @@ func simulateAgent(t *testing.T, o simOptions) simResult {
 			storedIDs[s.id] = true
 			res.stored[s.target] = append(res.stored[s.target], simStored{at: at, id: s.id, real: s.real})
 			nearOutage := o.outageAt > 0 && !o.strict && s.real.After(start.Add(o.outageAt-o.interval)) && s.real.Before(start.Add(o.outageAt+o.outageFor+3*o.interval))
-			if s.real.After(warm) && !nearOutage {
-				if e := at.Sub(s.real); e > res.maxErr || -e > res.maxErr {
+			nearStep := o.serverStepAt > 0 && s.real.After(start.Add(o.serverStepAt-3*time.Minute)) && s.real.Before(start.Add(o.serverStepAt+3*time.Minute))
+			if s.real.After(warm) && !nearOutage && !nearStep {
+				// placed on the server's clock as it reads at the probe
+				if e := at.Sub(serverWall(s.real)); e > res.maxErr || -e > res.maxErr {
 					res.maxErr = time.Duration(math.Abs(float64(e)))
 				}
 			}
 		}
-		lastReport = recv
+		lastReport = wall
 		if len(batch) > 0 && rng.Float64()*100 < o.lostReplyPct {
 			// stored, but the agent never saw the reply: after its 8 s
 			// timeout it sends these again with the next push
@@ -296,6 +310,42 @@ func TestAgentClockShortServerRestartLeavesNoTrace(t *testing.T) {
 		if r.duplicates != 0 || pairs != 0 || gaps != 0 || r.maxErr > 6500*time.Millisecond {
 			t.Errorf("agent clock %v: duplicates %d pairs %d gaps %d worst placement %v", off, r.duplicates, pairs, gaps, r.maxErr)
 		}
+	}
+}
+
+func TestAgentClockServerClockStep(t *testing.T) {
+	// The server's own clock steps (NTP fixing it): no sample may be dropped,
+	// and after the step the samples sit on the new clock. On wall-clock ages
+	// a step back of 135 s (xhh.li, 2026-11-06) made every push look older
+	// than the last one for 135 s: no observation, the old correction kept,
+	// and every sample landed past the 2 min bound and was dropped.
+	for _, step := range []time.Duration{-135 * time.Second, 135 * time.Second, -30 * time.Second, -10 * time.Minute, time.Hour} {
+		for i, off := range []time.Duration{0, -101900 * time.Millisecond, 23600 * time.Millisecond} {
+			o := simOptions{offset: off, interval: time.Minute, hours: 2, seed: int64(700 + i), serverStepAt: time.Hour, serverStep: step, lostReplyPct: 1}
+			r := simulateAgent(t, o)
+			n := len(r.stored[0]) + len(r.stored[1]) + len(r.stored[2])
+			if r.dropped != 0 || r.duplicates != 0 || r.maxErr > 6500*time.Millisecond || n < 3*118 {
+				t.Errorf("server step %v, agent clock %v: dropped %d duplicates %d worst placement %v samples %d", step, off, r.dropped, r.duplicates, r.maxErr, n)
+			}
+		}
+	}
+	// the old wall-clock ages, for the record: the step back drops samples
+	tr := newAgentClockTracker()
+	at, newest := time.Date(2026, 11, 6, 1, 0, 0, 0, time.UTC), time.Time{}
+	for i := 0; i < 40; i++ {
+		at = at.Add(3 * time.Second)
+		if i%20 == 19 {
+			newest = at.Add(-time.Second)
+		}
+		tr.shiftAt("old", at, at.Sub(tr.epoch), newest, time.Time{}, 60)
+	}
+	// stepping the wall clock back while the monotonic one goes on: still fresh
+	stepped := at.Add(3*time.Second - 135*time.Second)
+	if _, ok := tr.correctionAt("old", stepped, at.Add(3*time.Second).Sub(tr.epoch), stepped.Add(-time.Second), time.Minute); !ok {
+		t.Fatal("a stepped server clock lost the estimate")
+	}
+	if s := tr.clients["old"]; s.obs[len(s.obs)-1].off != time.Second {
+		t.Fatalf("the push after the step must be an observation of 1 s, got %+v", s.obs)
 	}
 }
 
@@ -450,8 +500,8 @@ func TestAgentClockPushesOutOfOrder(t *testing.T) {
 	now := time.Now().UTC()
 	tr.correction("a", now.Add(6*time.Second), time.Time{}, time.Minute)
 	tr.correction("a", now.Add(3*time.Second), time.Time{}, time.Minute) // a slow request finishing late
-	if got := tr.clients["a"].lastPush; !got.Equal(now.Add(6 * time.Second)) {
-		t.Fatalf("lastPush went back to %v", got)
+	if got, want := tr.clients["a"].lastPush, now.Add(6*time.Second).Sub(tr.epoch); got != want {
+		t.Fatalf("lastPush went back to %v (want %v)", got, want)
 	}
 	tr.forget("a")
 	if _, ok := tr.clients["a"]; ok {

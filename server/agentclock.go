@@ -55,13 +55,21 @@ const (
 	agentClockSetBack = 8 * time.Second
 )
 
+// Time on two clocks. Offsets are wall-clock differences (the server's clock
+// against the agent's stamps); how long ago something happened (is a push
+// fresh, is an observation stale) is measured on the monotonic clock, so a
+// step of the server's own clock (NTP fixing it, as on xhh.li on 2026-11-06)
+// neither stops the observations nor keeps an outdated correction: with
+// wall-clock ages a step back of 2 min made every push look older than the
+// one before for 2 min, and all TCPing samples were dropped meanwhile.
 type agentClockObs struct {
-	at  time.Time     // server time of the observation
-	off time.Duration // receive time − newest MeasuredAt
+	at  time.Duration // when it was made, monotonic
+	off time.Duration // receive time − newest MeasuredAt (wall clocks)
 }
 
 type agentClockState struct {
-	lastPush   time.Time // server time of the client's latest push
+	lastPush   time.Duration // the client's latest push, monotonic
+	hasPush    bool
 	lastNewest time.Time // newest MeasuredAt seen from the client (agent clock)
 	obs        []agentClockObs
 	corr       time.Duration
@@ -70,11 +78,12 @@ type agentClockState struct {
 
 type agentClockTracker struct {
 	mu      sync.Mutex
+	epoch   time.Time // monotonic reference
 	clients map[string]*agentClockState
 }
 
 func newAgentClockTracker() *agentClockTracker {
-	return &agentClockTracker{clients: make(map[string]*agentClockState)}
+	return &agentClockTracker{epoch: time.Now(), clients: make(map[string]*agentClockState)}
 }
 
 // agentClocks is the tracker of the push handler.
@@ -82,10 +91,16 @@ var agentClocks = newAgentClockTracker()
 
 // correction is told about every push of a client, with or without samples
 // (the freshness of the next push depends on it): now is the server's receive
-// time and newest the batch's newest MeasuredAt, zero when there is none. It
-// returns the offset to add to the batch's stamps, and ok false when the
-// client has no estimate yet.
+// time (time.Now(), with its monotonic reading) and newest the batch's newest
+// MeasuredAt, zero when there is none. It returns the offset to add to the
+// batch's stamps, and ok false when the client has no estimate yet.
 func (t *agentClockTracker) correction(clientID string, now, newest time.Time, interval time.Duration) (corr time.Duration, ok bool) {
+	return t.correctionAt(clientID, now, now.Sub(t.epoch), newest, interval)
+}
+
+// correctionAt is correction with the two clocks given apart: wall for the
+// offsets, mono for ages.
+func (t *agentClockTracker) correctionAt(clientID string, wall time.Time, mono time.Duration, newest time.Time, interval time.Duration) (corr time.Duration, ok bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	s := t.clients[clientID]
@@ -93,8 +108,8 @@ func (t *agentClockTracker) correction(clientID string, now, newest time.Time, i
 		s = &agentClockState{}
 		t.clients[clientID] = s
 	}
-	since := now.Sub(s.lastPush)
-	fresh := !s.lastPush.IsZero() && since >= 0 && since <= agentClockFreshPush
+	since := mono - s.lastPush
+	fresh := s.hasPush && since >= 0 && since <= agentClockFreshPush
 	// A newest stamp far below the newest seen (two rounds) is not a re-send
 	// or a late request (seconds at most): the agent's clock went back.
 	stepBack := 2 * interval
@@ -104,19 +119,19 @@ func (t *agentClockTracker) correction(clientID string, now, newest time.Time, i
 	setBack := !s.lastNewest.IsZero() && newest.Before(s.lastNewest.Add(-stepBack))
 	if !newest.IsZero() && (newest.After(s.lastNewest) || setBack) {
 		if fresh {
-			off := now.Sub(newest)
+			off := wall.Sub(newest)
 			if len(s.obs) > 0 && off > minClockObs(s.obs)+agentClockJump {
 				s.obs = s.obs[:0]
 			}
-			s.obs = append(s.obs, agentClockObs{at: now, off: off})
+			s.obs = append(s.obs, agentClockObs{at: mono, off: off})
 			if len(s.obs) > agentClockWindow {
 				s.obs = append(s.obs[:0], s.obs[len(s.obs)-agentClockWindow:]...)
 			}
 		}
 		s.lastNewest = newest
 	}
-	if now.After(s.lastPush) {
-		s.lastPush = now
+	if !s.hasPush || mono > s.lastPush {
+		s.lastPush, s.hasPush = mono, true
 	}
 
 	maxAge := agentClockMaxAge
@@ -125,7 +140,7 @@ func (t *agentClockTracker) correction(clientID string, now, newest time.Time, i
 	}
 	kept := s.obs[:0]
 	for _, o := range s.obs {
-		if now.Sub(o.at) <= maxAge {
+		if mono-o.at <= maxAge {
 			kept = append(kept, o)
 		}
 	}
@@ -161,9 +176,13 @@ func (t *agentClockTracker) correction(clientID string, now, newest time.Time, i
 // one to one from the agent's, so that a re-sent sample may be skipped as one
 // already stored.
 func (t *agentClockTracker) shift(clientID string, now, newest, prevReport time.Time, intervalSecs int) (skew time.Duration, exact bool) {
+	return t.shiftAt(clientID, now, now.Sub(t.epoch), newest, prevReport, intervalSecs)
+}
+
+func (t *agentClockTracker) shiftAt(clientID string, now time.Time, mono time.Duration, newest, prevReport time.Time, intervalSecs int) (skew time.Duration, exact bool) {
 	interval := time.Duration(intervalSecs) * time.Second
-	t.seed(clientID, prevReport)
-	if corr, ok := t.correction(clientID, now, newest, interval); ok {
+	t.seed(clientID, prevReport, now, mono)
+	if corr, ok := t.correctionAt(clientID, now, mono, newest, interval); ok {
 		return corr, true
 	}
 	if newest.IsZero() {
@@ -189,14 +208,15 @@ func (t *agentClockTracker) shift(clientID string, now, newest, prevReport time.
 // seed starts a client the tracker has not seen since the server started from
 // the stored time of its previous report, so that its first push after a short
 // restart counts as fresh and is placed by an estimate, not the old rule.
-func (t *agentClockTracker) seed(clientID string, prevReport time.Time) {
+func (t *agentClockTracker) seed(clientID string, prevReport, now time.Time, mono time.Duration) {
 	if prevReport.IsZero() {
 		return
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if _, ok := t.clients[clientID]; !ok {
-		t.clients[clientID] = &agentClockState{lastPush: prevReport}
+		// that report as far back on the monotonic clock as it is on the wall
+		t.clients[clientID] = &agentClockState{lastPush: mono - now.Sub(prevReport), hasPush: true}
 	}
 }
 

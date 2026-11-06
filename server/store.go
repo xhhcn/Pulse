@@ -139,6 +139,7 @@ func NewStore(dbPath string) (*Store, error) {
 	// still come up. The corrupt file is preserved as <path>.corrupt-<ts> for
 	// manual recovery with the `bbolt` CLI.
 	db, err := openBolt(dbPath)
+	quarantinedTo := ""
 	if err != nil {
 		if isDBCorruptionError(err) {
 			log.Printf("⚠️  Detected corrupt bbolt database at %s: %v", dbPath, err)
@@ -147,6 +148,7 @@ func NewStore(dbPath string) (*Store, error) {
 				return nil, qerr
 			}
 			log.Printf("🗂️  Corrupt database moved aside to %s. Starting with a fresh database.", backupPath)
+			quarantinedTo = backupPath
 			db, err = openBolt(dbPath)
 			if err != nil {
 				return nil, fmt.Errorf("failed to open database after quarantine: %w", err)
@@ -184,6 +186,13 @@ func NewStore(dbPath string) (*Store, error) {
 	log.Printf("✅ Database initialized: %s", dbPath)
 
 	store := &Store{db: db}
+	if quarantinedTo != "" {
+		if err := store.lockSetup(quarantinedTo); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("failed to lock the admin setup of the fresh database: %w", err)
+		}
+		log.Printf("🔒 Admin setup is locked: the database was replaced after it was found damaged, and the first visitor to set a password would own the site. Restore a backup, or set the password on this server itself: curl -X POST http://127.0.0.1:%s/api/auth/setup -H 'Content-Type: application/json' -d '{\"password\":\"...\"}'", portFromEnv())
+	}
 
 	// One-shot cleanup of orphan buckets left over from older code paths
 	// (a v1 secondary-index experiment that was rolled back to the cursor-seek
@@ -1697,6 +1706,114 @@ func (s *Store) SaveNavbarConfig(config *NavbarConfig) error {
 
 		return bucket.Put([]byte(navbarConfigKey), data)
 	})
+}
+
+// setupLockKey marks a database made empty because the previous one was
+// damaged: until a password is set from the server itself, the first-run
+// setup is refused (see handleAuthSetup). Without it an anonymous visitor (or
+// a bot watching /api/auth/status) could set the admin password, and with it
+// custom JS for every visitor.
+const setupLockKey = "setup_locked"
+
+func (s *Store) lockSetup(damagedCopy string) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(configBucket))
+		if b == nil {
+			return fmt.Errorf("config bucket not found")
+		}
+		v, _ := json.Marshal(map[string]string{"at": time.Now().UTC().Format(time.RFC3339), "damaged_copy": damagedCopy})
+		return b.Put([]byte(setupLockKey), v)
+	})
+}
+
+// SetupLocked reports whether the first-run setup is locked.
+func (s *Store) SetupLocked() bool {
+	locked := false
+	_ = s.db.View(func(tx *bolt.Tx) error {
+		if b := tx.Bucket([]byte(configBucket)); b != nil {
+			locked = b.Get([]byte(setupLockKey)) != nil
+		}
+		return nil
+	})
+	return locked
+}
+
+// ClearSetupLock removes the lock once a password is set.
+func (s *Store) ClearSetupLock() error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		if b := tx.Bucket([]byte(configBucket)); b != nil {
+			return b.Delete([]byte(setupLockKey))
+		}
+		return nil
+	})
+}
+
+// SaveNavbarConfigAndSecret saves the navbar config and, when secret is not
+// empty, gives every system that secret, in one transaction: either all of
+// it is written or none. It used to be one commit per system after the config
+// (131 on the QA server): a crash in between left the config with the new
+// shared secret and most systems with the old one, saving again did not
+// repair it, and each commit wrote back the whole record as read before the
+// loop, undoing a push or an admin edit (or a deletion) made meanwhile. Only
+// the Secret of each stored record changes here, and the ID of every system
+// whose secret changed is returned.
+func (s *Store) SaveNavbarConfigAndSecret(config *NavbarConfig, secret string) ([]string, error) {
+	var changed []string
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		changed = changed[:0]
+		cfg := tx.Bucket([]byte(configBucket))
+		if cfg == nil {
+			return fmt.Errorf("config bucket not found")
+		}
+		data, err := json.Marshal(config)
+		if err != nil {
+			return fmt.Errorf("failed to marshal config: %w", err)
+		}
+		if err := cfg.Put([]byte(navbarConfigKey), data); err != nil {
+			return err
+		}
+		if secret == "" {
+			return nil
+		}
+		systems := tx.Bucket([]byte(bucketName))
+		if systems == nil {
+			return fmt.Errorf("bucket not found")
+		}
+		type update struct {
+			key  []byte
+			data []byte
+		}
+		var updates []update
+		if err := systems.ForEach(func(k, v []byte) error {
+			var m SystemMetric
+			if err := json.Unmarshal(v, &m); err != nil {
+				return nil // not a system record: left alone, as List skips it
+			}
+			if m.Secret == secret {
+				return nil
+			}
+			m.Secret = secret
+			b, err := json.Marshal(m)
+			if err != nil {
+				return err
+			}
+			updates = append(updates, update{append([]byte(nil), k...), b})
+			changed = append(changed, m.ID)
+			return nil
+		}); err != nil {
+			return err
+		}
+		for _, u := range updates { // (no Put while ForEach walks the bucket)
+			if err := systems.Put(u.key, u.data); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return changed, nil
 }
 
 // PrivacyConfig represents the privacy configuration
