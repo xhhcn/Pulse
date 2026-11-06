@@ -13,6 +13,8 @@ import (
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
+	// Each test starts without agent clock estimates (no test runs in parallel).
+	agentClocks = newAgentClockTracker()
 	store, err := NewStore(filepath.Join(t.TempDir(), "metrics.db"))
 	if err != nil {
 		t.Fatalf("NewStore() error = %v", err)

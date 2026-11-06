@@ -2842,6 +2842,7 @@ func handleDeleteMetric(store *Store, broker *SSEBroker, registry *ClientRegistr
 	// Its resource history goes too (a small nested bucket), and any minute
 	// not yet written.
 	resourceRec.forget(id)
+	agentClocks.forget(id)
 	if err := store.DeleteResourceHistory(id); err != nil {
 		log.Printf("⚠️  resource history cleanup for deleted system %s failed: %v", id, err)
 	}
@@ -3251,34 +3252,25 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 	// deliver them on the next successful push, each stamped with its real
 	// MeasuredAt. Those stamps are kept so an outage shows as a gap instead of
 	// a burst of fake "now" points (the previous behaviour). The agent clock is
-	// not trusted blindly, though: the newest stamp in a batch is at most one
-	// push cycle old on a healthy clock, so a larger distance from now is
-	// clock skew and the whole batch is shifted by that offset. Samples older
-	// than the retention window after adjustment are dropped.
+	// not trusted blindly, though: the server keeps an estimate of each
+	// agent's clock offset (agentClocks) and moves the samples of an agent
+	// whose clock is off onto the server clock, always by the same amount.
+	// Samples older than the retention window after adjustment are dropped.
 	var newest time.Time
 	for _, tr := range payload.TCPingResults {
 		if tr.MeasuredAt.After(newest) {
 			newest = tr.MeasuredAt
 		}
 	}
-	// The "too old" bound scales with the configured interval: with a 5 min
-	// interval the newest queued sample of a post-outage backlog is
-	// legitimately up to 5 min old, and treating that as skew shifted the
-	// whole backlog onto "now" and disabled idempotent storage.
-	skewPast := 2 * time.Minute
-	if iv := 2 * time.Duration(tcpingConfig.IntervalSecs) * time.Second; iv > skewPast {
-		skewPast = iv
-	}
-	var skew time.Duration
 	if !newest.IsZero() {
-		if d := nowUTC.Sub(newest.UTC()); d > skewPast || d < -30*time.Second {
-			skew = d
-		}
+		newest = newest.UTC()
 	}
+	skew, exactStamps := agentClocks.shift(clientID, nowUTC, newest, existing.UpdatedAt, tcpingConfig.IntervalSecs)
 	// An agent re-sends the identical batch when its previous push timed out
-	// after the server had already committed it. With skew != 0 the stored
-	// timestamps differ between the two deliveries, so the idempotent key
-	// cannot catch the retry; a per-client signature of the raw batch does.
+	// after the server had already committed it. When the batch was shifted
+	// by its own age the stored timestamps differ between the two deliveries,
+	// so the idempotent key cannot catch the retry; a per-client signature of
+	// the raw batch does.
 	deliveredTCPing := payload.TCPingResults
 	if tcpingBatchSeen(clientID, deliveredTCPing) {
 		payload.TCPingResults = nil
@@ -3307,8 +3299,8 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 		}
 	}
 	const maxPast = 24 * time.Hour
-	// sanitize returns the timestamp to store, whether it is the agent's own
-	// unmodified stamp (only then is it safe to use as an idempotency key), and
+	// sanitize returns the timestamp to store, whether it maps one to one from
+	// the agent's stamp (only then is it safe to use as an idempotency key), and
 	// whether the sample is worth keeping at all. Bounded on both sides: a
 	// stamp far in the future (a broken or hostile clock the skew correction
 	// cannot rescue) would otherwise become an unreplaceable "latest" entry
@@ -3321,7 +3313,7 @@ func handleClientPush(store *Store, registry *ClientRegistry, ipCache *IPCountry
 		if nowUTC.Sub(ts) > maxPast || ts.After(nowUTC.Add(maxTCPingFuture)) {
 			return time.Time{}, false, false
 		}
-		return ts, skew == 0, true
+		return ts, exactStamps, true
 	}
 
 	var batchedResults []TCPingResult

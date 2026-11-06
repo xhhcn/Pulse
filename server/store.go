@@ -970,11 +970,13 @@ type TCPingResult struct {
 	Target    string    `json:"target"`  // Target address (e.g., "8.8.8.8:53")
 	Latency   *float64  `json:"latency"` // Latency in milliseconds (nil for timeout/failure)
 	Timestamp time.Time `json:"timestamp"`
-	// ExactTimestamp is set by handleClientPush when Timestamp is the agent's
-	// own unmodified measurement time. Only then does (timestamp, client,
+	// ExactTimestamp is set by handleClientPush when Timestamp maps one to one
+	// from the agent's measurement time: unmodified, or moved by the agent's
+	// steady clock correction (agentClocks). Only then does (timestamp, client,
 	// target) identify one measurement, so only then may a batch write skip an
-	// existing record as a re-send. Server-stamped or clock-adjusted samples
-	// go through the sequence-number path and are never dropped.
+	// existing record as a re-send. Server-stamped samples and batches shifted
+	// by their own age go through the sequence-number path and are never
+	// dropped.
 	ExactTimestamp bool `json:"-"`
 }
 
