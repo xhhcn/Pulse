@@ -108,6 +108,14 @@ html.dark #system-table-header-row .sort-header:focus-visible {
 .toolbar-icon-btn[aria-expanded="true"] { background-color: rgba(243, 239, 236, 0.7); }
 html.dark .toolbar-icon-btn:hover,
 html.dark .toolbar-icon-btn[aria-expanded="true"] { background-color: rgba(40, 40, 40, 0.5); }
+/* The page buttons are the same outline buttons: the same hover (the glass
+   theme has its own, further down). */
+#systems-pagination .pagination-btn:not(:disabled):hover { background-color: rgba(243, 239, 236, 0.7); }
+html.dark #systems-pagination .pagination-btn:not(:disabled):hover { background-color: rgba(40, 40, 40, 0.5); }
+/* An unselected tab (资源 | 延迟 above the list, 延迟 | 资源 in a server's
+   details) darkens its label under the pointer, as Beszel's tabs. */
+:is(.list-view-tab, .chart-tab):not([aria-selected="true"]):hover { color: #1d1d20; }
+html.dark :is(.list-view-tab, .chart-tab):not([aria-selected="true"]):hover { color: #f5f5f5; }
 /* Beszel's outline button with text (the admin page's settings menu and
    add-service buttons): the same control with an icon and a label. */
 .toolbar-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; font-size: 14px; font-weight: 500; line-height: 20px; white-space: nowrap; }
@@ -143,16 +151,18 @@ html.dark .admin-menu { border-color: #2c2c2c; background-color: #171717; }
 @keyframes pulse-menu-in { from { opacity: 0; transform: translateY(-8px) scale(0.95); } }
 .admin-menu-item {
   display: flex; width: 100%; align-items: center; gap: 10px;
-  padding: 7px 10px; border-radius: 8.8px;
-  font-size: 14px; line-height: 20px; color: #1d1d20; text-align: left; white-space: nowrap; cursor: pointer;
+  /* the dashboard's view menu and Beszel's dropdown items: 15.2 px text,
+     34.8 px rows, the warm accent under the pointer */
+  padding: 6px 10px; border-radius: 8.8px;
+  font-size: 0.95rem; line-height: 1.5; color: #1d1d20; text-align: left; white-space: nowrap; cursor: pointer;
 }
 .admin-menu-item svg { width: 16px; height: 16px; flex: none; color: #595959; }
 .admin-menu-item:hover,
-.admin-menu-item:focus-visible { background-color: #f0f0f0; outline: none; }
+.admin-menu-item:focus-visible { background-color: rgba(243, 239, 236, 0.7); outline: none; }
 html.dark .admin-menu-item { color: #f5f5f5; }
 html.dark .admin-menu-item svg { color: #ababab; }
 html.dark .admin-menu-item:hover,
-html.dark .admin-menu-item:focus-visible { background-color: #282828; }
+html.dark .admin-menu-item:focus-visible { background-color: rgba(40, 40, 40, 0.7); }
 .admin-menu-item:disabled { opacity: 0.5; pointer-events: none; }
 .admin-menu-sep { height: 1px; margin: 4px -4px; background-color: #f0f0f0; }
 html.dark .admin-menu-sep { background-color: #292929; }
@@ -1153,4 +1163,23 @@ html.dark .os-icon[data-icon="devicon:fedora"] svg [fill="#294172"] { fill: #51a
   #all-systems-desc-lost { display: flex; visibility: hidden; }
   html.stream-lost #all-systems-desc { visibility: hidden; }
   html.stream-lost #all-systems-desc-lost { visibility: visible; }
+}
+
+/* Windows contrast themes (forced colours) drop box-shadow, which draws
+   most focus rings here, and paint every background in the theme's own
+   colour. Focus shows as an outline in the theme's highlight colour; the
+   data colours (the legend's and readout's keys, the usage bars, the status
+   dots) keep their own, as the chart lines on the canvas do; the chosen tab,
+   the pressed offline chip and the switches are outlined. */
+@media (forced-colors: active) {
+  :focus-visible { outline: 2px solid Highlight !important; outline-offset: 2px !important; }
+  :is(.view-menu-item, .admin-menu-item, .system-row > [data-system-id]):focus-visible { outline-offset: -2px !important; }
+  :is([data-tcping-dot], .tcping-tooltip-key, .res-key, .lat-key, .status-dot) { forced-color-adjust: none; }
+  .progress-track { forced-color-adjust: none; background-color: transparent !important; outline: 1px solid CanvasText; outline-offset: -1px; }
+  :is(.list-view-tab, .chart-tab)[aria-selected="true"],
+  [data-tcping-tabs] > button[aria-pressed="true"],
+  #summary-offline-chip[aria-pressed="true"] { outline: 1px solid CanvasText; outline-offset: -1px; }
+  input.peer.sr-only + div { border: 1px solid CanvasText; }
+  input.peer.sr-only:checked + div { background-color: Highlight; }
+  input.peer.sr-only:checked + div::after { background-color: HighlightText; border-color: HighlightText; }
 }

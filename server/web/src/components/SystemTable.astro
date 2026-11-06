@@ -840,11 +840,27 @@ const apiBase = apiBaseProp ?? '';
       const mark = btn.querySelector('.sort-indicator');
       if (mark) mark.innerHTML = active ? (field ? arrow : DOT) : '';
     });
+    // The sorted column says so to screen readers in its button's name
+    // ("CPU，降序"): aria-sort belongs to a table's column header, and on the
+    // header's plain div it was never read. (The first call comes before the
+    // translations are defined, with nothing sorted; the next 'translate'
+    // fills the text in.)
+    const stateText = () => {
+      try { return translations[currentSort.direction === 'asc' ? 'sortStateAsc' : 'sortStateDesc'][getCurrentLanguage()]; } catch (_) { return ''; }
+    };
     document.querySelectorAll('.sort-header').forEach((btn) => {
       const active = btn.dataset.sort === currentSort.field;
       btn.dataset.active = active ? 'true' : 'false';
       const cell = btn.parentElement;
-      if (cell) cell.setAttribute('aria-sort', active ? (currentSort.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+      if (cell) cell.removeAttribute('aria-sort');
+      let state = btn.querySelector('.sort-state');
+      if (!state) {
+        state = document.createElement('span');
+        state.className = 'sort-state sr-only';
+        btn.appendChild(state);
+      }
+      const text = active ? stateText() : '';
+      if (state.textContent !== text) state.textContent = text;
       const mark = btn.querySelector('.sort-header-arrow');
       if (mark) mark.innerHTML = active ? arrow : ARROW_UP_DOWN;
     });
@@ -1590,7 +1606,7 @@ const apiBase = apiBaseProp ?? '';
                   const totalNetIn = item.total_net_in_bytes || 0;
                   const formattedIn = formatTotalTraffic(totalNetIn);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="in" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="in" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
                     </svg>
@@ -1602,7 +1618,7 @@ const apiBase = apiBaseProp ?? '';
                   const totalNetOut = item.total_net_out_bytes || 0;
                   const formattedOut = formatTotalTraffic(totalNetOut);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="out" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="out" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>
                     </svg>
@@ -1614,7 +1630,7 @@ const apiBase = apiBaseProp ?? '';
                   const netInSpeed = item.net_in_mb_s || 0;
                   const formattedSpeed = formatTrafficSpeed(netInSpeed);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="in" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="in" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="m7 13 5 5 5-5"/><path d="m7 6 5 5 5-5"/>
                     </svg>
@@ -1626,7 +1642,7 @@ const apiBase = apiBaseProp ?? '';
                   const netOutSpeed = item.net_out_mb_s || 0;
                   const formattedSpeed = formatTrafficSpeed(netOutSpeed);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="out" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="out" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="m17 11-5-5-5 5"/><path d="m17 18-5-5-5 5"/>
                     </svg>
@@ -1682,7 +1698,7 @@ const apiBase = apiBaseProp ?? '';
                   const label = tag.slice(4).trim();
                   const safeLabel = escapeHtml(label);
                   return `
-                  <span class="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] sm:text-xs font-medium text-white" style="background-image: ${gradient};" data-color-tag="${colorKey}" data-color-tag-label="${escapeHtmlAttr(label)}">
+                  <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium text-white" style="background-image: ${gradient};" data-color-tag="${colorKey}" data-color-tag-label="${escapeHtmlAttr(label)}">
                     ${safeLabel}
                   </span>
                   `;
@@ -1690,7 +1706,7 @@ const apiBase = apiBaseProp ?? '';
                 
                 // Regular tag
                 return `
-                <span class="inline-flex items-center rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#f5f5f5]">
+                <span class="inline-flex items-center rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#f5f5f5]">
                   ${safeTag}
                 </span>
               `;
@@ -1732,7 +1748,7 @@ const apiBase = apiBaseProp ?? '';
     <div class="system-row${isOffline ? ' is-offline' : ''}" data-system-id="${safeId}">
       <div class="group grid items-center gap-1.5 px-3 sm:px-4 md:px-6 py-2 sm:py-3 hover:bg-[#222]/50 dark:hover:bg-[#222]/50 hover:bg-[#f5f5f5] cursor-pointer" data-system-id="${safeId}" role="button" tabindex="0" aria-expanded="false" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(104px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(78px,0.9fr) minmax(85px,1fr) minmax(80px,1fr);">
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
-          <span class="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${statusDotColor(item)} shrink-0"></span>
+          <span class="status-dot h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${statusDotColor(item)} shrink-0"></span>
           <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap" title="${safeNameAttr}">${safeName}</span>${isOffline ? statusChip(item) : ''}
           <button class="copy-btn text-[#595959] dark:text-[#ababab] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" tabindex="-1" aria-hidden="true" data-link-id="${safeId}" title="${translations.copyServerLink[getCurrentLanguage()]}" data-translate-title="copyServerLink">
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
@@ -1866,8 +1882,8 @@ const apiBase = apiBaseProp ?? '';
             </div>
             <!-- The time range picker, added once the chart is drawn. No
                  statistics here (Beszel's chart cards carry none): the legend
-                 gives each target's average, the loss band the losses (or the
-                 legend, where the band is off). -->
+                 gives each target's average and loss, the loss band when the
+                 probes were lost. -->
             <div class="tcping-tools" data-tcping-tools></div>
         </div>
           <div data-chart-pane="latency">
@@ -2006,7 +2022,10 @@ const apiBase = apiBaseProp ?? '';
     'resEmpty': { en: 'Nothing recorded yet: the server keeps a sample of each server every minute; check back in a minute or two.', zh: '还没有记录：服务端每分钟记录一次，过一两分钟再看。' },
     'latHeadTitle': { en: '{name}: average latency and loss over the last hour', zh: '{name}：近 1 小时平均延迟与丢包' },
     'resUnavailable': { en: 'The resource history could not be loaded; trying again in a minute.', zh: '资源历史暂时读取不到，一分钟后再试。' },
-    'tcpingTabLoss': { en: '· {pct} lost', zh: '· 丢包 {pct}' },
+    'tcpingTabLoss': { en: '{pct} lost', zh: '丢包 {pct}' },
+    // after the sorted column's name, for screen readers only
+    'sortStateAsc': { en: ', ascending', zh: '，升序' },
+    'sortStateDesc': { en: ', descending', zh: '，降序' },
     'loadFailed': { en: "Couldn't load the server list", zh: '无法加载服务器列表' },
     'loadRetrying': { en: 'Retrying automatically…', zh: '正在自动重试…' },
     'tcpingChartDesc': { en: 'TCP handshake time of every probe', zh: '每次探测的 TCP 握手时间' },
@@ -2163,6 +2182,7 @@ const apiBase = apiBaseProp ?? '';
   // 'translate' only: initI18n turns the navbar's languagechange into it
   // once the new language is set; listening to both ran every pass twice.
   window.addEventListener('translate', updateTranslations);
+  window.addEventListener('translate', () => updateSortUI());
   
   // Update chart tooltip styles when theme changes
   window.addEventListener('themechange', (e) => {
@@ -2172,14 +2192,42 @@ const apiBase = apiBaseProp ?? '';
   
   // Beszel's chart colours: axis text in its muted-foreground, horizontal
   // grid lines in its border at half strength, the cursor in its border.
+  // In a Windows contrast theme (forced colours) the page around the canvas
+  // takes the theme's colours, the canvas keeps its own: its text, grid and
+  // cursor take the theme's text, grey and highlight colours instead (the
+  // lines keep theirs, which the legend's keys keep too).
+  const forcedColorsQuery = window.matchMedia ? window.matchMedia('(forced-colors: active)') : null;
+  const systemColors = new Map();
+  function systemColor(name) {
+    if (!systemColors.has(name)) {
+      const probe = document.createElement('span');
+      probe.style.display = 'none';
+      probe.style.color = name;
+      document.body.appendChild(probe);
+      systemColors.set(name, getComputedStyle(probe).color);
+      probe.remove();
+    }
+    return systemColors.get(name);
+  }
+  const forcedColors = () => !!(forcedColorsQuery && forcedColorsQuery.matches);
   function axisLabelColor(isDarkMode) {
+    if (forcedColors()) return systemColor('CanvasText');
     return isDarkMode ? '#a7aaae' : '#5c5957';
   }
   function gridLineColor(isDarkMode) {
+    if (forcedColors()) return systemColor('GrayText');
     return isDarkMode ? 'rgba(42, 43, 45, 0.5)' : 'rgba(221, 218, 215, 0.5)';
   }
   function cursorLineColor(isDarkMode) {
+    if (forcedColors()) return systemColor('Highlight');
     return isDarkMode ? '#2a2b2d' : '#dddad7';
+  }
+  if (forcedColorsQuery && forcedColorsQuery.addEventListener) {
+    forcedColorsQuery.addEventListener('change', () => {
+      systemColors.clear();
+      updateChartTooltipStyles(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+      resourcePanes.forEach((_, id) => drawResourceCharts(id));
+    });
   }
 
   // Time-axis ticks on round steps (5 min … 12 h, counted from local
@@ -2222,6 +2270,33 @@ const apiBase = apiBaseProp ?? '';
     if (ticks.length >= 2) scale.ticks = ticks;
   }
 
+  // The latency axis's data range: every line's, or the selected target's
+  // alone (its answers inside the time span; Chart.js counts only those for
+  // the others as well). A selected target with no answer in the span keeps
+  // every line's range.
+  function tcpingValueLimits(scale) {
+    const chart = scale.chart;
+    const picked = chart.data.datasets.filter((d) => d.role === 'selected');
+    if (picked.length) {
+      const x = chart.options.scales.x;
+      const from = Number.isFinite(x.min) ? x.min : -Infinity;
+      const to = Number.isFinite(x.max) ? x.max : Infinity;
+      let lo = Infinity, hi = -Infinity;
+      picked.forEach((d) => d.data.forEach((q) => {
+        if (!q || q.y === null || q.y === undefined || q.x < from || q.x > to) return;
+        if (q.y < lo) lo = q.y;
+        if (q.y > hi) hi = q.y;
+      }));
+      if (lo <= hi) {
+        scale.$dataMin = lo;
+        scale.$dataMax = hi;
+        return;
+      }
+    }
+    scale.$dataMin = scale.min;
+    scale.$dataMax = scale.max;
+  }
+
   // Latency-axis ticks: round steps (1, 2 or 5 × 10ⁿ ms, and 25, 250…), at
   // most six labels, fitted to the lines (Beszel's ["auto", "auto"] domain
   // for response times) and never below 0 ms. Above the highest point the
@@ -2246,6 +2321,30 @@ const apiBase = apiBaseProp ?? '';
         scale.ticks = Array.from({ length: spaces + 1 }, (_, i) => ({ value: round(bottom + i * step) }));
         scale.min = round(bottom);
         scale.max = round(top);
+        return;
+      }
+    }
+  }
+
+  // The network chart's axis: download above zero, upload below, one round
+  // step for both sides (1, 2, 2.5 or 5 × a power of ten), a quarter of room
+  // beyond each side's peak as on the latency axis, at most six spaces in all.
+  // A side without traffic keeps one step, so the zero line never sits on
+  // the plot's edge.
+  function mirroredTicks(scale) {
+    const up = Math.max(0, scale.$dataMax);
+    const down = Math.max(0, -scale.$dataMin);
+    const peak = Math.max(up, down, 0.01);
+    for (let exp = Math.floor(Math.log10(peak / 6)); exp < 12; exp++) {
+      for (const m of exp >= 1 ? [1, 2, 2.5, 5] : [1, 2, 5]) {
+        const step = m * 10 ** exp;
+        const above = Math.max(1, Math.ceil(up / 0.8 / step - 1e-9));
+        const below = Math.max(1, Math.ceil(down / 0.8 / step - 1e-9));
+        if (above + below > 6) continue;
+        const round = (v) => Number(v.toFixed(Math.max(0, -exp)));
+        scale.ticks = Array.from({ length: above + below + 1 }, (_, i) => ({ value: round((i - below) * step) }));
+        scale.min = round(-below * step);
+        scale.max = round(above * step);
         return;
       }
     }
@@ -2529,7 +2628,7 @@ const apiBase = apiBaseProp ?? '';
         if (statusDot) {
           // Offline/paused state: red, waiting for its client: grey, online: green
           // Preserve responsive classes: h-1.5 w-1.5 sm:h-2 sm:w-2
-          statusDot.className = `h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${statusDotColor(item)} shrink-0`;
+          statusDot.className = `status-dot h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${statusDotColor(item)} shrink-0`;
         }
         const rowEl = systemCell.closest('.system-row');
         if (rowEl) rowEl.classList.toggle('is-offline', !!item.alert);
@@ -3073,6 +3172,33 @@ const apiBase = apiBaseProp ?? '';
     }
     return flags;
   }
+  // The time between a target's probes (the median of its newest 64
+  // gaps; kept until the probes change), and the pointer's reach on the plot:
+  // 0.6 of that in pixels plus one (probes drift by seconds), at least 5 px,
+  // at most 40.
+  function tcpingProbeMs(chart) {
+    let longest = null;
+    chart.data.datasets.forEach((d) => { if (d.data && (!longest || d.data.length > longest.length)) longest = d.data; });
+    if (!longest || longest.length < 2) return 60000;
+    const newest = longest[longest.length - 1];
+    if (chart.$probeN === longest.length && chart.$probeLast === newest.x && chart.$probeMs) return chart.$probeMs;
+    const gaps = [];
+    for (let i = longest.length - 1; i > 0 && gaps.length < 64; i--) {
+      const d = longest[i].x - longest[i - 1].x;
+      if (d > 0) gaps.push(d);
+    }
+    gaps.sort((a, b) => a - b);
+    chart.$probeMs = gaps.length ? gaps[gaps.length >> 1] : 60000;
+    chart.$probeN = longest.length;
+    chart.$probeLast = newest.x;
+    return chart.$probeMs;
+  }
+  function tcpingReach(chart) {
+    const xs = chart.scales && chart.scales.x;
+    if (!xs || !(xs.max > xs.min) || !(xs.width > 0)) return 5;
+    const px = (tcpingProbeMs(chart) * xs.width) / (xs.max - xs.min);
+    return Math.max(5, Math.min(40, Math.ceil(px * 0.6) + 1));
+  }
   const tcpingPointRadius = (points) => {
     const lone = tcpingLoneProbes(points);
     return lone ? (c) => (lone[c.dataIndex] ? 2 : 0) : 0;
@@ -3355,6 +3481,37 @@ const apiBase = apiBaseProp ?? '';
       }
     }
     
+    // The probes under the pointer, for the readout and the hover dots
+    // alike: each target's nearest probe within 0.6 of the spacing between
+    // its probes (at least 5 px; a timed-out probe counts, its row says so).
+    // Chart.js's 'x' mode took probes within 5 px only, so on the 1-hour span
+    // the readout dropped out between probes while the 'nearest' hover dots
+    // stayed lit, and in a stretch without samples the dots lit up at its far
+    // end with no readout.
+    const modes = ChartClass.Interaction && ChartClass.Interaction.modes;
+    if (modes && !modes.tcpingNear) {
+      modes.tcpingNear = (chart, e) => {
+        const h = ChartClass.helpers;
+        const pos = e && 'native' in e ? { x: e.x, y: e.y } : (h && h.getRelativePosition ? h.getRelativePosition(e, chart) : { x: e.x, y: e.y });
+        const reach = tcpingReach(chart);
+        const items = [];
+        chart.getSortedVisibleDatasetMetas().forEach((meta) => {
+          const pts = meta.data;
+          if (!pts || !pts.length) return;
+          let lo = 0, hi = pts.length - 1;
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (pts[mid].x < pos.x) lo = mid + 1; else hi = mid;
+          }
+          if (lo > 0 && Math.abs(pts[lo - 1].x - pos.x) <= Math.abs(pts[lo].x - pos.x)) lo -= 1;
+          const el = pts[lo];
+          if (!el || !Number.isFinite(el.x) || Math.abs(el.x - pos.x) > reach) return;
+          items.push({ element: el, datasetIndex: meta.index, index: lo });
+        });
+        return items;
+      };
+    }
+
     // 自定义设置 → 丢包时间线: a band under the plot, red where a shown target
     // lost a probe (the selected target alone while one is picked), each mark
     // as long as one probe interval; "丢包" in the axis column beside it. A
@@ -3542,27 +3699,30 @@ const apiBase = apiBaseProp ?? '';
   // the second and third line into the same blue for red-green colour-blind
   // readers (OKLab ΔE 0.9 under deuteranopia), and the green read as the
   // "online" colour. These three stay apart from one another under
-  // protanopia and deuteranopia (ΔE 13.8 or more), the other five from
-  // their neighbours. Each theme has its own steps, all at least 3:1 on
-  // its card (#f8f8f8 / #1a1a1a).
+  // protanopia and deuteranopia (ΔE 13.8 or more). The fourth is fuchsia:
+  // the violet it replaces was the first line's blue again under
+  // deuteranopia (ΔE 0.4); the first four now stay apart pairwise (light
+  // ΔE 9.7, dark 6.1 with the names beside them), and every colour from
+  // its neighbours (12.4 or more; 15.8 or more with normal vision). Each
+  // theme has its own steps, all at least 3:1 on its card.
   const TCPING_LINE_COLORS_LIGHT = [
     '#2563eb', // blue-600
     '#ea580c', // orange-600
     '#0d9488', // teal-600
-    '#7c3aed', // violet-600
-    '#0891b2', // cyan-600
-    '#9333ea', // purple-600
+    '#a21caf', // fuchsia-700
     '#db2777', // pink-600
+    '#9333ea', // purple-600
+    '#0891b2', // cyan-600
     '#4f46e5', // indigo-600
   ];
   const TCPING_LINE_COLORS_DARK = [
     '#3b82f6', // blue-500
     '#ea580c', // orange-600
     '#0d9488', // teal-600
-    '#7c3aed', // violet-600
-    '#0891b2', // cyan-600
-    '#9333ea', // purple-600
+    '#c026d3', // fuchsia-600
     '#db2777', // pink-600
+    '#9333ea', // purple-600
+    '#0891b2', // cyan-600
     '#6366f1', // indigo-500
   ];
   const tcpingLineColor = (index, dark = document.documentElement.classList.contains('dark')) => {
@@ -3617,14 +3777,17 @@ const apiBase = apiBaseProp ?? '';
       listed.add(key);
       const value = item.parsed.y;
       const timedOut = value === null || value === undefined;
+      const order = dataset.targetIndex !== undefined ? dataset.targetIndex : item.datasetIndex;
       if (dataset.formatValue) {
-        if (!timedOut) rows.push({ color: dataset.borderColor, name: dataset.label || '', y: value, value: dataset.formatValue(value), muted: false });
+        if (!timedOut) rows.push({ color: dataset.borderColor, name: dataset.label || '', order, value: dataset.formatValue(value), muted: false });
         return;
       }
-      rows.push({ color: dataset.borderColor, name: dataset.label || '', y: timedOut ? -1 : value, value: timedOut ? translations.tcpingTimeout[lang] : `${value.toFixed(2)} ms`, muted: timedOut });
+      rows.push({ color: dataset.borderColor, name: dataset.label || '', order, value: timedOut ? translations.tcpingTimeout[lang] : `${value.toFixed(2)} ms`, muted: timedOut });
     });
-    // Highest first, as Beszel sorts its temperature tooltip.
-    rows.sort((a, b) => b.y - a.y);
+    // In the legend's order, as Beszel's monitor tooltip: each row keeps its
+    // place while the pointer moves (sorted by value, they swapped places at
+    // almost every probe), and a timed-out target says so in its own place.
+    rows.sort((a, b) => a.order - b.order);
     (tooltip.footer || []).forEach((line) => {
       const at = line.lastIndexOf(': ');
       if (at > 0) rows.push({ color: null, name: line.slice(0, at), value: line.slice(at + 2), muted: true });
@@ -3700,7 +3863,7 @@ const apiBase = apiBaseProp ?? '';
   // the same box.
   const TCPING_TAB_BASE = 'inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded-md cursor-pointer transition-colors';
   const TCPING_TAB_ACTIVE = 'bg-black/[0.06] dark:bg-white/10 text-[#151515] dark:text-[#f5f5f5]';
-  const TCPING_TAB_INACTIVE = 'bg-transparent text-[#595959] dark:text-[#ababab] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]';
+  const TCPING_TAB_INACTIVE = 'bg-transparent text-[#595959] dark:text-[#ababab] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]';
   // A skipped target is de-emphasised with an explicit muted grey rather than
   // `opacity-50`. Blending the normal colours to 50% measures 2.38:1 in light
   // mode (#525252 over the card's #ffffff) and 2.73:1 in dark (#a3a3a3 over
@@ -3716,7 +3879,7 @@ const apiBase = apiBaseProp ?? '';
   // resolve by stylesheet order, not by the order they appear in the
   // attribute, so layering would be a coin flip.
   const TCPING_TAB_SKIPPED_ACTIVE = 'bg-black/[0.06] dark:bg-white/10 text-[#333333] dark:text-[#9a9a9a]';
-  const TCPING_TAB_SKIPPED_INACTIVE = 'bg-transparent text-[#6b6b6b] dark:text-[#8a8a8a] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]';
+  const TCPING_TAB_SKIPPED_INACTIVE = 'bg-transparent text-[#6b6b6b] dark:text-[#8a8a8a] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70';
 
   function applyTCPingTabAppearance(tab, isActive, isSkipped) {
     const variant = isSkipped
@@ -3793,15 +3956,16 @@ const apiBase = apiBaseProp ?? '';
       dot.setAttribute('data-tcping-dot', '');
       dot.setAttribute('aria-hidden', 'true');
       dot.className = 'inline-block w-2 h-2 shrink-0 rounded-[2px]';
-      // The target's own average over the span shown after its name, and,
-      // where the loss band is off, its loss when it lost probes
-      // (updateTCPingTabAverages).
+      // The target's own average over the span shown after its name, and
+      // its loss where it counts, in the 延迟 view's red
+      // (updateTCPingTabAverages). Each stays on one line; on a phone the
+      // legend wraps between targets.
       const average = document.createElement('span');
       average.setAttribute('data-tcping-tab-avg', '');
-      average.className = 'tabular-nums text-[#595959] dark:text-[#ababab] empty:hidden';
+      average.className = 'tabular-nums whitespace-nowrap text-[#595959] dark:text-[#ababab] empty:hidden';
       const loss = document.createElement('span');
       loss.setAttribute('data-tcping-tab-loss', '');
-      loss.className = 'tabular-nums text-[#595959] dark:text-[#ababab] empty:hidden';
+      loss.className = 'tcping-tab-loss tabular-nums whitespace-nowrap text-[#b91c1c] dark:text-[#fca5a5] empty:hidden';
       tab.append(dot, document.createTextNode(target.name || target.address), average, loss);
       tab.dataset.target = target.address;
       tab.dataset.targetName = target.name || target.address;
@@ -4660,7 +4824,8 @@ const apiBase = apiBaseProp ?? '';
             display: false
           },
           tooltip: {
-            mode: 'x', // Use 'x' mode instead of 'index' to handle datasets with different start times
+            // each target's probe nearest the pointer (registerPulseChartPlugins)
+            mode: 'tcpingNear',
             intersect: false,
             // Drawn as HTML (tcpingTooltipExternal), Beszel's tooltip card.
             enabled: false,
@@ -4862,10 +5027,13 @@ const apiBase = apiBaseProp ?? '';
             }
           },
           // Fitted to the lines with room above them, never below 0 ms
-          // (latencyTicks, from the visible lines' own range).
+          // (latencyTicks, from the visible lines' own range). While a target
+          // is selected, to its line alone: a far slower target no longer
+          // squeezes it into the bottom of the plot; the faded others stay
+          // behind it, cut at the plot's edges.
           y: {
             beginAtZero: false,
-            afterDataLimits: (scale) => { scale.$dataMin = scale.min; scale.$dataMax = scale.max; },
+            afterDataLimits: tcpingValueLimits,
             afterBuildTicks: latencyTicks,
             ticks: {
               color: axisLabelColor(isDarkMode),
@@ -4890,9 +5058,9 @@ const apiBase = apiBaseProp ?? '';
             }
           }
         },
+        // the hover dots on the probes the readout lists
         interaction: {
-          mode: 'nearest',
-          axis: 'x',
+          mode: 'tcpingNear',
           intersect: false
         },
         onHover: function(event, activeElements) {
@@ -4902,7 +5070,9 @@ const apiBase = apiBaseProp ?? '';
       }
     });
     presize = null;
-    chart.options.animation = ChartClass.defaults.animation;
+    // Animation back on after the build (the hover dot grows, the readout
+    // glides), except for a visitor who asked for reduced motion.
+    chart.options.animation = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : ChartClass.defaults.animation;
     // The page's first chart runs Chart.js cold (not yet optimised by the JS
     // engine) and takes about three times as long as later ones.
     const buildMs = performance.now() - builtAt;
@@ -5151,6 +5321,8 @@ const apiBase = apiBaseProp ?? '';
     });
     
     chart.update('none');
+    // the selected target's loss in the legend, however small
+    updateTCPingTabAverages(systemId);
 
     // Recalculate statistics based on selected target
     calculateAndUpdateStats(systemId, selectedTarget);
@@ -5456,14 +5628,18 @@ const apiBase = apiBaseProp ?? '';
     // the edge (minutes before the span's start would reach into the axis).
     const ds = (label, data, color, alpha, formatValue) => ({ label, data, borderColor: color, backgroundColor: `${color}${alpha}`, fill: 'origin', borderWidth: 1, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 3, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, clip: { left: 0, top: 4, right: 3, bottom: 4 }, formatValue });
     const [unit, factor] = kind === 'net' ? trafficUnit(points) : ['', 1];
-    const speed = (v) => formatTrafficSpeed(v / factor);
+    // the network's upload is drawn below the zero line (negative values):
+    // the readout and the axis give it unsigned
+    const speed = (v) => formatTrafficSpeed(Math.abs(v) / factor);
     // the tooltip's names (one line each): "CPU 使用率", or for averaged
     // points "CPU 平均使用率", which also fills the line beside the wider span
     const tip = (k) => translations[step > 60 ? `${k}Avg` : k][lang];
     const datasets = kind === 'cpu' ? [ds(tip('resCpuTip'), resourceSeries(points, 1, 1, step), c.cpu, '66', pctLabel)]
       : kind === 'mem' ? [ds(tip('resMemTip'), resourceSeries(points, 2, 1, step), c.mem, '66', pctLabel)]
       : kind === 'disk' ? [ds(tip('resDiskTip'), resourceSeries(points, 3, 1, step), c.disk, '66', pctLabel)]
-      : [ds(tip('resNetIn'), resourceSeries(points, 4, factor, step), c.in, '33', speed), ds(tip('resNetOut'), resourceSeries(points, 5, factor, step), c.out, '33', speed)];
+      // download above the zero line, upload mirrored below it: of similar
+      // size, the two lines knotted into one band and their fills mixed
+      : [ds(tip('resNetIn'), resourceSeries(points, 4, factor, step), c.in, '33', speed), ds(tip('resNetOut'), resourceSeries(points, 5, -factor, step), c.out, '33', speed)];
     const bounds = tcpingAxisBounds(points[0][0] * 1000, points[points.length - 1][0] * 1000);
     const tick = { color: axisLabelColor(dark), font: { size: 12 } };
     const percentOfWhole = kind === 'mem' || kind === 'disk';
@@ -5483,13 +5659,19 @@ const apiBase = apiBaseProp ?? '';
             ticks: { ...tick, maxRotation: 0, minRotation: 0, maxTicksLimit: 12, autoSkip: true, autoSkipPadding: 12, padding: 3 },
             grid: { display: true, drawOnChartArea: false, drawTicks: true, tickLength: 6, tickColor: '#666666', tickWidth: 1 },
             border: { display: false }, afterBuildTicks: roundTimeTicks },
-          // memory and disk as a share of the whole (0–100 %); CPU and the
-          // network fitted to their own range, as the latency axis
+          // memory and disk as a share of the whole (0–100 %); CPU fitted to
+          // its own range, as the latency axis; the network to each side of
+          // its zero line (download up, upload down), labelled unsigned, the
+          // zero line a step darker than the grid
           y: percentOfWhole
             ? { min: 0, max: 100, ticks: { ...tick, stepSize: 50, callback: (v) => `${v}%` }, grid: { color: gridLineColor(dark) }, border: { display: false } }
-            : { beginAtZero: true, afterDataLimits: (scale) => { scale.$dataMin = 0; scale.$dataMax = Math.max(scale.max, 1); }, afterBuildTicks: latencyTicks,
-              // the network's unit is in its card's line: its labels stay as narrow as the others'
-              ticks: { ...tick, maxTicksLimit: 6, callback: (v) => (kind === 'cpu' ? `${v}%` : trimNumber(v)) }, grid: { color: gridLineColor(dark) }, border: { display: false } },
+            : kind === 'net'
+              ? { afterDataLimits: (scale) => { scale.$dataMin = Math.min(scale.min, 0); scale.$dataMax = Math.max(scale.max, 0); }, afterBuildTicks: mirroredTicks,
+                // the unit is in the card's line: the labels stay as narrow as the others'
+                ticks: { ...tick, maxTicksLimit: 7, callback: (v) => trimNumber(Math.abs(v)) },
+                grid: { color: (ctx) => (ctx.tick && ctx.tick.value === 0 ? cursorLineColor(dark) : gridLineColor(dark)) }, border: { display: false } }
+              : { beginAtZero: true, afterDataLimits: (scale) => { scale.$dataMin = 0; scale.$dataMax = Math.max(scale.max, 1); }, afterBuildTicks: latencyTicks,
+                ticks: { ...tick, maxTicksLimit: 6, callback: (v) => `${v}%` }, grid: { color: gridLineColor(dark) }, border: { display: false } },
         },
       },
     };
@@ -5813,13 +5995,23 @@ const apiBase = apiBaseProp ?? '';
   });
   window.addEventListener('resize', () => applyLatencyTemplate());
 
+  // The legend names a target's loss where it counts: 1 % or more of its
+  // probes in the span and at least two of them (a route in trouble, or one
+  // that lost them all; one lost probe is bridged on the line as well), or
+  // any loss of the selected target. Smaller losses stay on the loss band,
+  // in the readout ("超时") and in the 延迟 view: with every target's
+  // 0.07 % spelt out, five or ten targets made the legend several lines
+  // long on a phone.
+  const TCPING_LEGEND_LOSS_MIN_PCT = 1;
+  const TCPING_LEGEND_LOSS_MIN_PROBES = 2;
   function updateTCPingTabAverages(systemId) {
     const entry = tcpingCharts.get(`${systemId}_all`);
     const strip = document.querySelector(`[data-tcping-tabs="${cssEscape(String(systemId))}"]`);
     if (!entry || !entry.chart || !strip) return;
     const from = tcpingSpanStart(entry.chart);
-    const bandOn = document.documentElement.classList.contains('loss-timeline');
     const lang = getCurrentLanguage();
+    const active = tcpingActiveTargets.get(systemId);
+    const selected = active ? active.target : null;
     entry.chart.data.datasets.forEach((dataset) => {
       let sum = 0, n = 0, probes = 0;
       dataset.data.forEach((point) => {
@@ -5835,7 +6027,11 @@ const apiBase = apiBaseProp ?? '';
       const lossCell = tab.querySelector('[data-tcping-tab-loss]');
       const lost = probes - n;
       const pct = probes ? (lost / probes) * 100 : 0;
-      const lossText = !bandOn && n && lost > 0 ? translations.tcpingTabLoss[lang].replace('{pct}', lossPercent(pct)) : '';
+      // In both band modes: the band shows when, the legend who and how
+      // much. A target that lost every probe in the span has no average, so
+      // its loss is all there is to say ("CM · 丢包 100%"), not a bare name.
+      const named = (pct >= TCPING_LEGEND_LOSS_MIN_PCT && lost >= TCPING_LEGEND_LOSS_MIN_PROBES) || dataset.targetAddress === selected;
+      const lossText = lost > 0 && named ? translations.tcpingTabLoss[lang].replace('{pct}', lossPercent(pct)) : '';
       if (lossCell && lossCell.textContent !== lossText) lossCell.textContent = lossText;
     });
   }
@@ -6732,7 +6928,7 @@ const apiBase = apiBaseProp ?? '';
     const { total, offline, awaiting = 0 } = systemsSummary;
     const chip = 'inline-flex items-center gap-1.5 rounded-full px-2 py-1';
     const quiet = `${chip} bg-black/5 dark:bg-white/[0.06] text-[#595959] dark:text-[#d4d4d4]`;
-    const dot = (c) => `<span class="h-1.5 w-1.5 rounded-full ${c}"></span>`;
+    const dot = (c) => `<span class="status-dot h-1.5 w-1.5 rounded-full ${c}"></span>`;
     let html = `<span class="${quiet}">${total} ${translations.summaryTotal[lang]}</span>`
       + `<span class="${quiet}">${dot('bg-[#3db866]')}${total - offline - awaiting} ${translations.summaryOnline[lang]}</span>`;
     // The offline count is a button: it shows only the offline servers (the
@@ -8216,12 +8412,29 @@ const apiBase = apiBaseProp ?? '';
   }
   .tcping-tooltip-title { font-weight: 500; padding-bottom: 2px; }
   .tcping-tooltip-row { display: flex; align-items: center; gap: 8px; }
-  .tcping-tooltip-key { width: 10px; height: 10px; flex: none; border-radius: 2px; }
+  /* Beszel's line key: a 4 × 12 bar in the series' colour */
+  .tcping-tooltip-key { width: 4px; height: 12px; flex: none; border-radius: 2px; }
   .tcping-tooltip-name { flex: 1; color: #595959; }
   html.dark .tcping-tooltip-name { color: #ababab; }
   .tcping-tooltip-value { font-weight: 500; font-variant-numeric: tabular-nums; }
   .tcping-tooltip-value.is-muted { font-weight: 400; color: #595959; }
   html.dark .tcping-tooltip-value.is-muted { color: #ababab; }
+  /* Touch screens (no hover, a coarse pointer; not a desktop whose pointer
+     the browser cannot tell): the copy-link button after a server's name
+     shows on hover only, yet an invisible 10 × 17 px button took the taps
+     meant for the row (it copied the link and left the row closed). A
+     closed row has none; an opened row shows it, with a 24 × 31 px target
+     (a box of its own, so the icon keeps its place on the name's line),
+     grown into the empty line after it rather than over the name. */
+  @media (hover: none) and (pointer: coarse) {
+    #systems-body .system-row > [data-system-id]:not([aria-expanded="true"]) .copy-btn { visibility: hidden; }
+    #systems-body .system-row > [data-system-id][aria-expanded="true"] .copy-btn { opacity: 1; position: relative; }
+    #systems-body .system-row > [data-system-id][aria-expanded="true"] .copy-btn::after { content: ''; position: absolute; inset: -7px -12px -7px -2px; }
+  }
+  /* the legend's loss after the average: a muted dot with even space on
+     both sides (the button's 6 px gap before it) */
+  .tcping-tab-loss::before { content: '·'; margin-right: 6px; color: #595959; }
+  html.dark .tcping-tab-loss::before { color: #ababab; }
 
   /* A new TCPing chart draws in from left to right, oldest to newest:
      Chart.js renders it once and a soft-edged mask sweeps across the canvas
@@ -8323,8 +8536,8 @@ const apiBase = apiBaseProp ?? '';
      band's, was 3.8:1 on white as 12 px text */
   .lat-loss { color: #b91c1c; font-size: 0.86em; }
   html.dark .lat-loss { color: #fca5a5; }
-  .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #a3a3a3; }
-  html.dark .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #737373; }
+  .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #595959; }
+  html.dark .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #ababab; }
   #system-table-header-row .lat-head-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* a target keeps its colour while sorted (its only link to the chart):
      the arrow comes after the name */

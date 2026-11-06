@@ -21,7 +21,7 @@
       </div>
 
       <!-- Error message -->
-      <div id="login-error" class="hidden mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/50 animate-scale-in">
+      <div id="login-error" role="alert" class="hidden mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/50 animate-scale-in">
         <p class="text-sm text-red-700 dark:text-red-400" id="login-error-text"></p>
       </div>
 
@@ -91,7 +91,7 @@
           <button
             type="submit"
             id="login-submit"
-            class="w-full h-10 px-4 inline-flex items-center justify-center gap-2 rounded-[10.8px] bg-[#171717] hover:bg-[#2a2a2a] text-white dark:bg-[#f5f5f5] dark:hover:bg-[#e0e0e0] dark:text-[#171717] text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#a3a3a3] dark:focus-visible:ring-offset-[#1a1a1a]"
+            class="w-full h-10 px-4 inline-flex items-center justify-center gap-2 rounded-[10.8px] bg-[#171717] hover:bg-[#2a2a2a] text-white dark:bg-[#f5f5f5] dark:hover:bg-[#e0e0e0] dark:text-[#171717] text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#837e79] dark:focus-visible:ring-[#cacbce] dark:focus-visible:ring-offset-[#1a1a1a]"
           >
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg>
             <span data-translate-login="submit">Login</span>
@@ -403,14 +403,32 @@
     }
   }
 
-  function showError(message) {
+  // An error stays until the visitor types again (or sends the form): the
+  // setup-code note is two sentences and a file name to go and find, and it
+  // used to vanish after 5 s. Screen readers announce it (role="alert"), and
+  // the field it is about is marked invalid and points at it.
+  const ERROR_FIELDS = ['password', 'confirm-password', 'setup-code'];
+  function hideError() {
+    const errorDiv = document.getElementById('login-error');
+    if (errorDiv) errorDiv.classList.add('hidden');
+    ERROR_FIELDS.forEach((id) => {
+      const field = document.getElementById(id);
+      if (!field) return;
+      field.removeAttribute('aria-invalid');
+      field.removeAttribute('aria-describedby');
+    });
+  }
+  function showError(message, fieldId = 'password') {
     const errorDiv = document.getElementById('login-error');
     const errorText = document.getElementById('login-error-text');
+    hideError();
     errorText.textContent = message;
     errorDiv.classList.remove('hidden');
-    setTimeout(() => {
-      errorDiv.classList.add('hidden');
-    }, 5000);
+    const field = document.getElementById(fieldId);
+    if (field) {
+      field.setAttribute('aria-invalid', 'true');
+      field.setAttribute('aria-describedby', 'login-error-text');
+    }
   }
 
   function showSuccess(message) {
@@ -537,9 +555,11 @@
     // re-enable it in finally so a failed login doesn't permanently
     // lock the user out of retrying.
     let submitInFlight = false;
+    form.addEventListener('input', hideError);
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (submitInFlight) return;
+      hideError();
 
       const password = passwordField.value.trim();
       const confirmPassword = confirmPasswordInput.value.trim();
@@ -560,7 +580,7 @@
           // Setup password
           if (password !== confirmPassword) {
             const lang = getCurrentLanguage();
-            showError(translations[lang].passwordMismatch);
+            showError(translations[lang].passwordMismatch, 'confirm-password');
             return;
           }
 
@@ -597,7 +617,7 @@
                 showError(retry);
               }
             } else {
-              showError(errorMsg);
+              showError(errorMsg, errorMsg === translations[getCurrentLanguage()].setupCodeWrong ? 'setup-code' : 'password');
             }
           }
         } else {

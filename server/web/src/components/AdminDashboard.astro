@@ -99,14 +99,14 @@ const customCodePlaceholder = [
     <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="add-new-system-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="addNewSystem">Add New System</h2>
-        <button id="close-add-modal-btn" class="rounded-lg p-1 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
-          <Icon name="x" size={20} />
+        <button id="close-add-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+          <Icon name="x" size={16} />
         </button>
       </div>
 
       <form id="add-system-form" class="space-y-4">
         <div>
-          <label for="add-system-name-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="systemName">System Name</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <label for="add-system-name-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="systemName">System Name</span> <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></label>
           <input id="add-system-name-input"
             type="text"
             name="name"
@@ -178,8 +178,8 @@ const customCodePlaceholder = [
     <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="edit-system-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="editSystem">Edit System</h2>
-        <button id="close-edit-modal-btn" class="rounded-lg p-1 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
-          <Icon name="x" size={20} />
+        <button id="close-edit-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+          <Icon name="x" size={16} />
         </button>
       </div>
 
@@ -187,7 +187,7 @@ const customCodePlaceholder = [
         <input type="hidden" name="original-id" value="" />
         
         <div>
-          <label for="edit-system-name-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="systemName">System Name</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <label for="edit-system-name-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="systemName">System Name</span> <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></label>
           <input id="edit-system-name-input"
             type="text"
             name="name"
@@ -214,24 +214,24 @@ const customCodePlaceholder = [
         <!-- Per-system visibility toggles (admin-only; agents never touch them),
              in one list as the settings dialog's display switches -->
         <div class="rounded-[10.8px] border border-[#dadada]/60 dark:border-[#2c2c2c]/60 divide-y divide-[#dadada]/60 dark:divide-[#2c2c2c]/60">
-          <div class="flex items-center justify-between gap-3 px-3 py-2.5">
+          <div class="flex items-center justify-between gap-3 p-4">
             <div class="flex-1 pr-3">
-              <label for="edit-show-on-home" class="block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="showOnHomeLabel">首页展示该服务器</label>
+              <label for="edit-show-on-home" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="showOnHomeLabel">首页展示该服务器</label>
               <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showOnHomeDesc">关闭后首页不再展示该服务器，API 与管理页仍然可见。</p>
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="edit-show-on-home" name="show_on_home" class="sr-only peer" checked>
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
             </label>
           </div>
-          <div class="flex items-center justify-between gap-3 px-3 py-2.5">
+          <div class="flex items-center justify-between gap-3 p-4">
             <div class="flex-1 pr-3">
-              <label for="edit-show-tcping" class="block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="showTcpingLabel">展示 TCPing</label>
+              <label for="edit-show-tcping" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="showTcpingLabel">展示 TCPing</label>
               <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="showTcpingDesc">关闭后首页不再展示该服务器的 TCPing 图表。</p>
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="edit-show-tcping" name="show_tcping" class="sr-only peer" checked>
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
             </label>
           </div>
         </div>
@@ -309,8 +309,8 @@ const customCodePlaceholder = [
       <!-- Header - Fixed -->
       <div class="flex items-center justify-between p-4 pb-0 sm:p-6 sm:pb-0 shrink-0">
         <h2 id="tcping-config-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="tcpingSettings">TCPing Settings</h2>
-        <button id="close-tcping-config-modal-btn" class="rounded-lg p-1 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
-          <Icon name="x" size={20} />
+        <button id="close-tcping-config-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+          <Icon name="x" size={16} />
         </button>
       </div>
 
@@ -319,7 +319,7 @@ const customCodePlaceholder = [
         <form id="tcping-config-form" class="space-y-4">
           <div>
             <label for="tcping-interval" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]">
-              <span data-translate="pollingInterval">Polling Interval</span> <span class="text-red-500 dark:text-red-400">*</span>
+              <span data-translate="pollingInterval">Polling Interval</span> <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span>
             </label>
             <div class="flex items-center gap-2">
               <input
@@ -338,7 +338,7 @@ const customCodePlaceholder = [
 
           <div>
             <p class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]">
-              <span data-translate="tcpingTargets">TCPing Targets</span> <span class="text-red-500 dark:text-red-400">*</span>
+              <span data-translate="tcpingTargets">TCPing Targets</span> <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span>
             </p>
             <div class="mb-1.5 hidden sm:grid grid-cols-[7rem_minmax(0,1fr)_2.5rem] gap-2 text-xs font-medium text-[#595959] dark:text-[#ababab]" aria-hidden="true">
               <span data-translate="targetNameLabel">Name</span><span data-translate="targetAddressLabel">Address:port</span>
@@ -388,14 +388,14 @@ const customCodePlaceholder = [
     <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="change-password-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="changePassword">Change Password</h2>
-        <button id="close-change-password-modal-btn" class="rounded-lg p-1 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
-          <Icon name="x" size={20} />
+        <button id="close-change-password-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+          <Icon name="x" size={16} />
         </button>
       </div>
 
       <form id="change-password-form" class="space-y-4">
         <div>
-          <label for="current-password-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="currentPassword">Current Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <label for="current-password-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="currentPassword">Current Password</span> <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></label>
           <input id="current-password-input"
             type="password"
             name="currentPassword"
@@ -408,7 +408,7 @@ const customCodePlaceholder = [
         </div>
 
         <div>
-          <label for="new-password-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="newPassword">New Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <label for="new-password-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="newPassword">New Password</span> <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></label>
           <input id="new-password-input"
             type="password"
             name="newPassword"
@@ -422,7 +422,7 @@ const customCodePlaceholder = [
         </div>
 
         <div>
-          <label for="confirm-new-password-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="confirmNewPassword">Confirm New Password</span> <span class="text-red-500 dark:text-red-400">*</span></label>
+          <label for="confirm-new-password-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="confirmNewPassword">Confirm New Password</span> <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></label>
           <input id="confirm-new-password-input"
             type="password"
             name="confirmNewPassword"
@@ -460,8 +460,8 @@ const customCodePlaceholder = [
     <div class="mx-4 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 pb-0 shadow-lg" data-modal-content>
       <div class="mb-5 flex items-center justify-between">
         <h2 id="navbar-config-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="customizationSettings">Customization Settings</h2>
-        <button id="close-navbar-config-modal-btn" class="rounded-lg p-1 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
-          <Icon name="x" size={20} />
+        <button id="close-navbar-config-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+          <Icon name="x" size={16} />
         </button>
       </div>
 
@@ -507,7 +507,7 @@ const customCodePlaceholder = [
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="show-traffic-toggle" name="show_traffic" class="sr-only peer">
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
             </label>
           </div>
           <div class="flex items-center justify-between gap-3 p-4">
@@ -517,7 +517,7 @@ const customCodePlaceholder = [
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="show-glass-toggle" name="show_glass" class="sr-only peer">
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
             </label>
           </div>
           <div class="flex items-center justify-between gap-3 p-4">
@@ -527,7 +527,7 @@ const customCodePlaceholder = [
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="sticky-header-toggle" name="sticky_header" class="sr-only peer">
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
             </label>
           </div>
           <div class="flex items-center justify-between gap-3 p-4">
@@ -537,7 +537,7 @@ const customCodePlaceholder = [
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="card-layout-toggle" name="card_layout" class="sr-only peer">
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
             </label>
           </div>
           <!-- Pages: the dashboard a page at a time (page_size; 0 keeps one list) -->
@@ -549,7 +549,7 @@ const customCodePlaceholder = [
               </div>
               <label class="relative inline-flex shrink-0 items-center cursor-pointer">
                 <input type="checkbox" id="page-size-toggle" class="sr-only peer">
-                <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+                <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
               </label>
             </div>
             <div id="page-size-row" class="mt-3 hidden items-center gap-3">
@@ -576,7 +576,7 @@ const customCodePlaceholder = [
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="loss-timeline-toggle" name="loss_timeline" class="sr-only peer">
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
             </label>
           </div>
           <!-- Resource history: the server records each server's minute averages for 24 h; a 资源 tab on the opened server's chart card (off by default).
@@ -589,7 +589,7 @@ const customCodePlaceholder = [
               </div>
               <label class="relative inline-flex shrink-0 items-center cursor-pointer">
                 <input type="checkbox" id="resource-history-toggle" name="resource_history" class="sr-only peer">
-                <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+                <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
               </label>
             </div>
             <div id="resource-average-row" class="mt-3 hidden items-center justify-between gap-3">
@@ -599,7 +599,7 @@ const customCodePlaceholder = [
               </div>
               <label class="relative inline-flex shrink-0 items-center cursor-pointer">
                 <input type="checkbox" id="resource-average-toggle" name="resource_average" class="sr-only peer">
-                <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+                <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
               </label>
             </div>
           </div>
@@ -611,7 +611,7 @@ const customCodePlaceholder = [
             </div>
             <label class="relative inline-flex shrink-0 items-center cursor-pointer">
               <input type="checkbox" id="latency-view-toggle" name="latency_view" class="sr-only peer">
-              <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+              <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
             </label>
           </div>
           </div>
@@ -726,28 +726,28 @@ const customCodePlaceholder = [
     <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="privacy-config-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="privacySettings">Privacy Settings</h2>
-        <button id="close-privacy-config-modal-btn" class="rounded-lg p-1 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
-          <Icon name="x" size={20} />
+        <button id="close-privacy-config-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+          <Icon name="x" size={16} />
         </button>
       </div>
 
       <form id="privacy-config-form" class="space-y-4">
         <!-- Privacy Mode Toggle -->
-        <div class="flex items-center justify-between rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
+        <div class="flex items-center justify-between gap-3 rounded-[10.8px] border border-[#dadada]/60 dark:border-[#2c2c2c]/60 p-4">
           <div class="flex-1">
-            <label for="privacy-enabled" class="block text-sm font-medium text-[#1d1d20] dark:text-[#d4d4d4] mb-1" data-translate="enablePrivacyMode">Enable Privacy Mode</label>
+            <label for="privacy-enabled" class="mb-1 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="enablePrivacyMode">Enable Privacy Mode</label>
             <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="privacyModeDesc">When on, visitors sign in before they see the dashboard. The admin page always requires signing in.</p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer">
+          <label class="relative inline-flex shrink-0 items-center cursor-pointer">
             <input type="checkbox" id="privacy-enabled" name="enabled" class="sr-only peer">
-            <div class="w-11 h-6 bg-[#d4d4d4] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717] dark:peer-checked:after:border-[#171717]"></div>
+            <div class="w-11 h-6 bg-[#bcb9b6] dark:bg-[#404040] peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-[#837e79] dark:peer-focus-visible:ring-[#cacbce] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white dark:peer-focus-visible:ring-offset-[#1a1a1a] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_1px_2px_-1px_rgba(0,0,0,0.2)] after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#171717] dark:peer-checked:bg-[#f5f5f5] dark:peer-checked:after:bg-[#171717]"></div>
           </label>
         </div>
 
         <!-- Temporary Share Section -->
-        <div id="share-section" class="space-y-3 rounded-lg border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#222] dark:bg-[#222] bg-white p-4">
+        <div id="share-section" class="space-y-3 rounded-[10.8px] border border-[#dadada]/60 dark:border-[#2c2c2c]/60 p-4">
           <div>
-            <label class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="temporaryShare">Temporary Share</label>
+            <h3 class="mb-1.5 text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="temporaryShare">Temporary Share</h3>
             <p class="text-xs text-[#595959] dark:text-[#ababab]" data-translate="temporaryShareDesc">A time-limited link that opens the dashboard without signing in (not the admin page).</p>
           </div>
 
@@ -1757,7 +1757,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv4:</span>
                   <span class="system-ipv4 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(system.ipv4 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(system.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4" aria-label="Copy IPv4 address">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(system.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1773,7 +1773,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv6:</span>
                   <span class="system-ipv6 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs" title="${escapeHtmlAttr(system.ipv6 || '')}">${escapeHtml(system.ipv6 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(system.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6" aria-label="Copy IPv6 address">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(system.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -2014,7 +2014,7 @@ const customCodePlaceholder = [
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv4:</span>
                 <span class="system-ipv4 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
-                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
+                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                   <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -2050,7 +2050,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv4:</span>
                   <span class="system-ipv4 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -2147,7 +2147,7 @@ const customCodePlaceholder = [
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv6:</span>
                 <span class="system-ipv6 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs" title="${escapeHtmlAttr(item.ipv6 || '')}">${escapeHtml(item.ipv6 || '')}</span>
-                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
+                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                   <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -2171,7 +2171,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv6:</span>
                   <span class="system-ipv6 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs" title="${escapeHtmlAttr(item.ipv6 || '')}">${escapeHtml(item.ipv6 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#282828] dark:hover:bg-[#282828] hover:bg-[#f0f0f0] transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
