@@ -146,24 +146,18 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows a design review of the charts and the interface. The latency legend names the routes that lose probes, a selected target gets its own latency axis, and the network chart draws upload below the zero line. Windows contrast themes, screen readers and touch screens are better served.
+            v${{ steps.version.outputs.version }} follows a design review of the charts and the interface. The latency chart's legend and readout stay calm with many targets, and Windows contrast themes, screen readers and touch screens are better served.
 
             ### Server details: the TCPing chart
 
-            - The legend names a target's loss where it counts, with the loss band on or off.
-              - A target that lost 1 % or more of its probes in the span, and at least two of them, shows its loss in red: 「CT 993 ms · 丢包 96.8%」.
+            - Where the loss band is off, the legend names only the loss that counts.
+              - A target shows its loss when it lost 1 % or more of its probes in the span, and at least two of them.
+              - Smaller losses stay in the readout and in the 延迟 view. With five or ten targets, the legend no longer runs to several lines on a phone.
               - A target that lost every probe shows 「丢包 100%」. It used to show its name alone.
-              - Smaller losses stay on the loss band, in the readout and in the 延迟 view. A selected target shows any loss.
-              - With 10 targets the legend stays on one line at 1440 px. On a phone it grows only by the targets in trouble.
-            - Selecting a target fits the latency axis to its line, for example 160–240 ms instead of 0–1250 ms when another target answers near 1 s. The other targets stay faded behind it.
-            - The readout keeps the legend's order while the pointer moves. It used to be sorted by value, so rows changed places at almost every probe. Its keys are now short lines.
+            - The readout keeps the legend's order while the pointer moves. It used to be sorted by value, so rows changed places at almost every probe.
             - The readout follows the pointer between probes. On the 1-hour span it used to drop out between them. In a stretch without samples, no dots light up any more.
             - Colours from the 4th target on stay apart for red-green colour-blind readers; the 4th used to look like the 1st's blue to them. The first three are unchanged.
             - With reduced motion asked for, the chart doesn't animate.
-
-            ### Server details: 资源
-
-            - The network chart draws upload below the zero line. Download and upload of similar size used to knot into one band, with their fills mixed into a third colour. The axis is labelled without signs.
 
             ### Windows contrast themes
 
