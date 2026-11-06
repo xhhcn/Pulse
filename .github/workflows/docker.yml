@@ -146,7 +146,7 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows a review of the server, the web app and the agent (now 1.3.68). It closes security holes, keeps the server honest when its disk fills or its clock steps, and smooths the resource charts.
+            v${{ steps.version.outputs.version }} follows a review of the server, the web app and the agent (now 1.3.68). It closes security holes, keeps the server honest when its disk fills or its clock steps, and adds a switch for averaged resource charts.
 
             ### Security
 
@@ -179,13 +179,13 @@ jobs:
 
             ### Design
 
-            - The resource charts average as Beszel's do, about 72 points a chart:
+            - A new switch, Averaged Charts (自定义设置 → 资源历史 → 按时段平均), shows while Resource History is on. It is off by default, and the charts then show every recorded minute, as before. Switched on, they show averages, about 72 points a chart:
               - 24 h: 20-minute averages;
               - 12 h: 10-minute averages;
               - 6 h: 5-minute averages;
               - 1 h: every minute.
 
-              The line under the tabs says which. A day used to be 1,440 minutes packed two to a pixel, and one minute's spike flattened the rest of the network chart.
+              The line under the tabs says which. A day then reads as a curve instead of 1,440 minutes packed two to a pixel, and one minute's spike no longer flattens the rest of the network chart.
 
             ### Performance
 
@@ -223,7 +223,7 @@ jobs:
             - Chromium, Firefox and WebKit:
               - the stream tickets on the admin page and a private dashboard;
               - the connect-and-drop stream;
-              - the resource chart averages;
+              - the averaged-charts switch: off, the charts draw every minute as v1.3.68 did; on, the averages;
               - the login messages;
               - the logo on /, /login and /admin;
               - a language switch;
