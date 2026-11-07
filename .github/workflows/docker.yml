@@ -146,50 +146,38 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} follows a design review of the charts and the interface. The latency chart's legend and readout stay calm with many targets, and Windows contrast themes, screen readers and touch screens are better served.
+            v${{ steps.version.outputs.version }} is a round of small style fixes from another side-by-side check of the design. The same element now looks the same everywhere, in both themes. Nothing new is added.
 
-            ### Server details: the TCPing chart
+            ### Dashboard
 
-            - Where the loss band is off, the legend names only the loss that counts.
-              - A target shows its loss when it lost 1 % or more of its probes in the span, and at least two of them.
-              - Smaller losses stay in the readout and in the 延迟 view. With five or ten targets, the legend no longer runs to several lines on a phone.
-              - A target that lost every probe shows 「丢包 100%」. It used to show its name alone.
-            - The readout keeps the legend's order while the pointer moves. It used to be sorted by value, so rows changed places at almost every probe.
-            - The readout follows the pointer between probes. On the 1-hour span it used to drop out between them. In a stretch without samples, no dots light up any more.
-            - Colours from the 4th target on stay apart for red-green colour-blind readers; the 4th used to look like the 1st's blue to them. The first three are unchanged.
-            - With reduced motion asked for, the chart doesn't animate.
+            - Dark theme: the summary chips and an opened server's tags use the muted text grey, as in the light theme. The tags were as bright as the values beside them, and the chips used a third grey.
+            - The 延迟 view's loss figures are 12 px at every width. They were 10.3 px on phones and 11.2 px at 1024–1279 px.
+            - An opened server has as much space under its chart as above its details: 16 px, or 12 px on phones.
+            - When a filter matches nothing, the table's message row is 148 px high. Cards and phones keep 96 px.
+            - With no servers yet, the empty state looks like the failed-load state: a 40 px icon with round line ends, and the title in the text colour.
+            - The view menu opens 4 px under its button, as the time range menu does.
+            - Small values made the same everywhere:
+              - the corners of tags, legend buttons and tabs;
+              - the filter's Ctrl K keys;
+              - the header row's letter spacing at 768–1023 px;
+              - the line height of the 资源 cards' titles;
+              - the dark navbar name.
 
-            ### Windows contrast themes
+            ### Admin
 
-            - Focus shows as an outline on every control; 26 of 49 used to show none.
-            - The usage bars, status dots, legend keys and readout keys keep their colours.
-            - The chosen tab, the pressed offline filter and the switches are outlined.
-            - The chart's text, grid and cursor take the theme's colours.
+            - The page header is laid out like the dashboard's: the description sits 8 px under the title, and the buttons line up with its bottom edge.
+            - The 设置 menu opens 4 px under its button. Its icons are in the text colour, as in the view menu.
+            - The server list's frame and the dialogs' frames use the full border colour.
+              - The list's frame used to be as faint as its row dividers.
+              - In dark, the dialogs' edge was hard to see.
+            - 自定义设置: the section headings (品牌, 显示, …) are 16 px, a step above the field labels.
+            - The delete question uses Chinese punctuation: 「您确定要删除“CloudSilk”吗？」.
+            - Dark: the addresses, and the name in the delete dialog, use the text colour.
+            - The notices' corners match the cards'.
 
-            ### Phones
+            ### Sign-in
 
-            - A tap just right of a server's name opens the row. An invisible copy-link button used to take it. The opened row shows the button, with a 24 px target.
-            - Tags in the details are 12 px instead of 10 px.
-
-            ### Sign-in and admin
-
-            - Sign-in errors stay until you type again. They used to vanish after 5 s, the setup-code note included. Screen readers announce them, and the field concerned is marked.
-            - Switches that are off are easier to see: a darker track and a shadowed knob.
-            - The 设置 menu has the view menu's size and hover.
-            - Dialogs:
-              - the close buttons have a 16 px cross;
-              - the privacy dialog's rows match the other dialogs;
-              - the edit dialog's switch rows match the settings dialog's.
-            - Smaller fixes:
-              - copy buttons are read out by their Chinese names in the Chinese interface;
-              - required marks are darker and not read out;
-              - the sign-in button's focus ring meets 3:1.
-
-            ### Also
-
-            - Screen readers hear how the table is sorted: 「CPU，降序」.
-            - Page buttons and unselected tabs react to the pointer. Menus, close buttons and copy buttons hover in the same warm accent.
-            - 延迟 view: an offline server's last figures are readable at 7:1 contrast, up from 2.6:1.
+            - The title uses the shared text colour.
 
             ### Compatibility
 
@@ -197,11 +185,7 @@ jobs:
 
             ### Verified
 
-            - Chromium, Firefox and WebKit:
-              - each change;
-              - the legend with 3, 5 and 10 targets, 360–1440 px;
-              - contrast-theme emulation;
-              - the regression suites.
+            - Chromium, Firefox and WebKit: each change measured (31 checks), and the regression suites.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
