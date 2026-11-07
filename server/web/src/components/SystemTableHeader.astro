@@ -56,7 +56,7 @@ import Icon from './Icon.astro';
       <button id="columns-btn" type="button" class="toolbar-control toolbar-icon-btn flex items-center justify-center text-[#1d1d20] dark:text-[#f5f5f5]" aria-haspopup="menu" aria-expanded="false" aria-controls="columns-dropdown" aria-label="View options" title="View options">
         <Icon name="settings-2" size={16} class="w-4 h-4 opacity-80" />
       </button>
-      <div id="columns-dropdown" class="view-menu absolute right-0 top-full mt-2 hidden z-10" role="menu" aria-labelledby="columns-btn">
+      <div id="columns-dropdown" class="view-menu absolute right-0 top-full mt-1 hidden z-10" role="menu" aria-labelledby="columns-btn">
         <div class="view-menu-grid">
           <div class="view-menu-section view-menu-layout">
             <div class="view-menu-label"><Icon name="layout-grid" size={14} class="w-3.5 h-3.5" /><span data-translate="layout">Layout</span></div>
@@ -109,10 +109,10 @@ import Icon from './Icon.astro';
     }
   }
   #system-filter-kbd kbd {
-    display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid #e2dfdc; border-radius: 4px;
-    background: #f5f3f1; color: #595959; font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid #dddad7; border-radius: 4px;
+    background: #f1f0ef; color: #595959; font: 500 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
-  html.dark #system-filter-kbd kbd { border-color: #333333; background: #262626; color: #ababab; }
+  html.dark #system-filter-kbd kbd { border-color: #2a2b2e; background: #26282b; color: #ababab; }
   /* 资源 | 延迟 (自定义设置 → 延迟视图): Beszel's tabs at the toolbar's height */
   .list-view-switch { display: none; }
   html.latency-view .list-view-switch { display: inline-flex; flex: none; align-items: center; height: 40px; padding: 4px; gap: 2px; border-radius: 10.8px; background: #f0f0f0; }

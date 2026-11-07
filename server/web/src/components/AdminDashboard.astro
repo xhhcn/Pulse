@@ -47,10 +47,10 @@ const customCodePlaceholder = [
 <div class="mx-auto max-w-[1568px]">
   <!-- System List -->
   <div class="glass-card mb-4 sm:mb-6 rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white px-3 py-5 sm:p-6">
-    <div class="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div class="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
       <div class="px-2 sm:px-1">
         <h1 id="system-list-title" class="text-[1.4rem] sm:text-2xl font-semibold tracking-tight leading-none sm:leading-none text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="systemList">Server List</h1>
-        <p class="mt-1.5 text-sm text-[#595959] dark:text-[#ababab] [text-wrap:pretty]" data-translate="systemListDesc">Drag to reorder; the dashboard shows the servers in this order.</p>
+        <p class="mt-2 text-sm text-[#595959] dark:text-[#ababab] [text-wrap:pretty]" data-translate="systemListDesc">Drag to reorder; the dashboard shows the servers in this order.</p>
       </div>
       <!-- Beszel's toolbar: outline buttons with labels (its "Add System"),
            the settings and the sign-out in one menu of labelled items, and
@@ -87,7 +87,7 @@ const customCodePlaceholder = [
     <!-- One list in a box, as the dashboard's table and Beszel's: rows with
          hairline dividers, scrolling with the page. -->
     <p id="reorder-status" class="sr-only" role="status" aria-live="polite"></p>
-    <div id="systems-list" class="glass-inner rounded-[10.8px] border border-[#dadada]/60 dark:border-[#2c2c2c]/60 divide-y divide-[#dadada]/60 dark:divide-[#2c2c2c]/60" data-draggable-list>
+    <div id="systems-list" class="glass-inner rounded-[10.8px] border border-[#dadada] dark:border-[#2c2c2c] divide-y divide-[#dadada]/60 dark:divide-[#2c2c2c]/60" data-draggable-list>
       <div class="flex items-center justify-center py-12">
         <div id="loading-systems-text" class="text-sm text-[#595959] dark:text-[#ababab]" data-translate="loadingSystems">Loading systems...</div>
       </div>
@@ -96,7 +96,7 @@ const customCodePlaceholder = [
 
   <!-- Add System Modal -->
   <div id="add-system-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="add-new-system-title" data-modal>
-    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="add-new-system-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="addNewSystem">Add New System</h2>
         <button id="close-add-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
@@ -175,7 +175,7 @@ const customCodePlaceholder = [
 
   <!-- Edit System Modal -->
   <div id="edit-system-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="edit-system-title" data-modal>
-    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="edit-system-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="editSystem">Edit System</h2>
         <button id="close-edit-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
@@ -265,7 +265,7 @@ const customCodePlaceholder = [
 
   <!-- Delete Confirmation Modal -->
   <div id="delete-confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="delete-system-title" data-modal>
-    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4">
         <div class="mb-3 flex items-center gap-3">
           <div class="rounded-full bg-red-500/10 p-2">
@@ -276,7 +276,7 @@ const customCodePlaceholder = [
           <h2 id="delete-system-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="deleteSystem">Delete System</h2>
         </div>
         <p class="text-sm text-[#595959] dark:text-[#ababab]">
-          <span data-translate="areYouSureYouWantToDelete">Are you sure you want to delete</span> <span class="font-medium text-[#1d1d20] dark:text-[#d4d4d4]" id="delete-system-name"></span>?
+          <span data-translate="deleteQuestionBefore">Are you sure you want to delete "</span><span class="font-medium text-[#1d1d20] dark:text-[#f5f5f5]" id="delete-system-name"></span><span data-translate="deleteQuestionAfter">"?</span>
         </p>
         <!-- Which one, when names repeat: its location and address -->
         <p id="delete-system-meta" class="mt-1.5 hidden flex-wrap items-center gap-x-1 text-xs text-[#595959] dark:text-[#ababab]"></p>
@@ -305,7 +305,7 @@ const customCodePlaceholder = [
 
   <!-- TCPing Config Modal -->
   <div id="tcping-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="tcping-config-title" data-modal>
-    <div class="mx-2 sm:mx-4 w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white shadow-lg overflow-hidden" data-modal-content>
+    <div class="mx-2 sm:mx-4 w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white shadow-lg overflow-hidden" data-modal-content>
       <!-- Header - Fixed -->
       <div class="flex items-center justify-between p-4 pb-0 sm:p-6 sm:pb-0 shrink-0">
         <h2 id="tcping-config-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="tcpingSettings">TCPing Settings</h2>
@@ -385,7 +385,7 @@ const customCodePlaceholder = [
 
   <!-- Change Password Modal -->
   <div id="change-password-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="change-password-title" data-modal>
-    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="change-password-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="changePassword">Change Password</h2>
         <button id="close-change-password-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
@@ -457,7 +457,7 @@ const customCodePlaceholder = [
 
   <!-- Navbar Config Modal -->
   <div id="navbar-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="navbar-config-title" data-modal>
-    <div class="mx-4 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 pb-0 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 pb-0 shadow-lg" data-modal-content>
       <div class="mb-5 flex items-center justify-between">
         <h2 id="navbar-config-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="customizationSettings">Customization Settings</h2>
         <button id="close-navbar-config-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
@@ -469,7 +469,7 @@ const customCodePlaceholder = [
         <!-- Four parts, as Beszel's settings pages: a heading each, a
              hairline between them; the display switches in one list. -->
         <section class="space-y-4" aria-labelledby="config-brand-heading">
-          <h3 id="config-brand-heading" class="text-sm font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionBrand">Brand</h3>
+          <h3 id="config-brand-heading" class="text-base font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionBrand">Brand</h3>
           <div>
             <label for="navbar-text-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="navbarText">Navbar Text</span></label>
             <input
@@ -498,7 +498,7 @@ const customCodePlaceholder = [
         </section>
 
         <section class="space-y-3 pt-5 border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60" aria-labelledby="config-display-heading">
-          <h3 id="config-display-heading" class="text-sm font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionDisplay">Display</h3>
+          <h3 id="config-display-heading" class="text-base font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionDisplay">Display</h3>
           <div class="rounded-[10.8px] border border-[#dadada]/60 dark:border-[#2c2c2c]/60 divide-y divide-[#dadada]/60 dark:divide-[#2c2c2c]/60">
           <div class="flex items-center justify-between gap-3 p-4">
             <div class="flex-1">
@@ -618,7 +618,7 @@ const customCodePlaceholder = [
         </section>
 
         <section class="space-y-4 pt-5 border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60" aria-labelledby="config-auth-heading">
-          <h3 id="config-auth-heading" class="text-sm font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionClientAuth">Client Authentication</h3>
+          <h3 id="config-auth-heading" class="text-base font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionClientAuth">Client Authentication</h3>
           <div>
             <label for="navbar-shared-secret-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="sharedSecret">Shared Secret</span></label>
             <div class="flex items-center gap-2">
@@ -641,7 +641,7 @@ const customCodePlaceholder = [
         </section>
 
         <section class="space-y-4 pt-5 border-t border-[#dadada]/60 dark:border-[#2c2c2c]/60" aria-labelledby="config-code-heading">
-          <h3 id="config-code-heading" class="text-sm font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionCustomCode">Custom Code</h3>
+          <h3 id="config-code-heading" class="text-base font-semibold text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="sectionCustomCode">Custom Code</h3>
           <div>
             <label for="navbar-custom-code-input" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]"><span data-translate="customCode">Custom CSS & JavaScript</span></label>
             <textarea
@@ -685,7 +685,7 @@ const customCodePlaceholder = [
 
   <!-- Regenerate Secret Confirmation Modal -->
   <div id="regenerate-secret-confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="regenerate-secret-title" data-modal>
-    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4">
         <h2 id="regenerate-secret-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="confirmRegenerateTitle">Regenerate Shared Secret?</h2>
       </div>
@@ -723,7 +723,7 @@ const customCodePlaceholder = [
 
   <!-- Privacy Config Modal -->
   <div id="privacy-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40" role="dialog" aria-modal="true" aria-labelledby="privacy-config-title" data-modal>
-    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
+    <div class="mx-4 w-full max-w-lg rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="privacy-config-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="privacySettings">Privacy Settings</h2>
         <button id="close-privacy-config-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
@@ -1471,7 +1471,7 @@ const customCodePlaceholder = [
     if (deleteModal) {
       pendingDeleteId = systemId;
       pendingDeleteName = systemName;
-      document.getElementById('delete-system-name').textContent = `"${systemName}"`;
+      document.getElementById('delete-system-name').textContent = systemName;
       const meta = document.getElementById('delete-system-meta');
       const cached = currentData.get(String(systemId));
       const system = cached && cached.original;
@@ -1756,7 +1756,7 @@ const customCodePlaceholder = [
                 <!-- IPv4 Row -->
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv4:</span>
-                  <span class="system-ipv4 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(system.ipv4 || '')}</span>
+                  <span class="system-ipv4 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs">${escapeHtml(system.ipv4 || '')}</span>
                   <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(system.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
@@ -1772,7 +1772,7 @@ const customCodePlaceholder = [
                 <!-- IPv6 Row -->
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv6:</span>
-                  <span class="system-ipv6 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs" title="${escapeHtmlAttr(system.ipv6 || '')}">${escapeHtml(system.ipv6 || '')}</span>
+                  <span class="system-ipv6 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs" title="${escapeHtmlAttr(system.ipv6 || '')}">${escapeHtml(system.ipv6 || '')}</span>
                   <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(system.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
@@ -2013,7 +2013,7 @@ const customCodePlaceholder = [
             const ipv4RowHTML = `
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv4:</span>
-                <span class="system-ipv4 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
+                <span class="system-ipv4 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
                 <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                   <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
@@ -2049,7 +2049,7 @@ const customCodePlaceholder = [
               <div class="ip-info-container hidden sm:flex lg:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv4:</span>
-                  <span class="system-ipv4 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
+                  <span class="system-ipv4 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
                   <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
@@ -2146,7 +2146,7 @@ const customCodePlaceholder = [
             const ipv6RowHTML = `
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv6:</span>
-                <span class="system-ipv6 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs" title="${escapeHtmlAttr(item.ipv6 || '')}">${escapeHtml(item.ipv6 || '')}</span>
+                <span class="system-ipv6 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs" title="${escapeHtmlAttr(item.ipv6 || '')}">${escapeHtml(item.ipv6 || '')}</span>
                 <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                   <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
@@ -2170,7 +2170,7 @@ const customCodePlaceholder = [
               <div class="ip-info-container hidden sm:flex lg:min-w-[22rem] flex-col gap-1 text-xs min-h-[48px] flex-shrink-0 justify-center">
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv6:</span>
-                  <span class="system-ipv6 text-[#1d1d20] dark:text-[#d4d4d4] font-mono text-xs" title="${escapeHtmlAttr(item.ipv6 || '')}">${escapeHtml(item.ipv6 || '')}</span>
+                  <span class="system-ipv6 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs" title="${escapeHtmlAttr(item.ipv6 || '')}">${escapeHtml(item.ipv6 || '')}</span>
                   <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
@@ -2958,7 +2958,7 @@ const customCodePlaceholder = [
     messageEl.setAttribute('role', type === 'error' ? 'alert' : 'status');
     // top right on phones, bottom right from 640 px (as upstream): at the
     // top it covered the navbar's language, theme and home buttons for 3 s
-    messageEl.className = `fixed top-4 right-4 sm:top-auto sm:bottom-4 z-50 flex max-w-[min(92vw,380px)] items-center gap-2.5 rounded-[10px] border px-4 py-3 text-sm font-medium shadow-lg ${
+    messageEl.className = `fixed top-4 right-4 sm:top-auto sm:bottom-4 z-50 flex max-w-[min(92vw,380px)] items-center gap-2.5 rounded-[10.8px] border px-4 py-3 text-sm font-medium shadow-lg ${
       type === 'error'
         ? 'border-[#dc2626] bg-[#dc2626] text-white'
         : 'pulse-toast border-[#e5e5e5] dark:border-[#2b2b2b] bg-white dark:bg-[#1a1a1a] text-[#1d1d20] dark:text-[#f5f5f5]'
@@ -5001,7 +5001,9 @@ const customCodePlaceholder = [
     'saving': { en: 'Saving...', zh: '保存中...' },
     'deleting': { en: 'Deleting...', zh: '删除中...' },
     'noSystems': { en: 'No servers found', zh: '未找到服务器' },
-    'areYouSureYouWantToDelete': { en: 'Are you sure you want to delete', zh: '您确定要删除' },
+    // around the server's name: 'Are you sure you want to delete "X"?' / 您确定要删除“X”吗？
+    'deleteQuestionBefore': { en: 'Are you sure you want to delete "', zh: '您确定要删除“' },
+    'deleteQuestionAfter': { en: '"?', zh: '”吗？' },
     'installClientTitle': { en: 'Install the client', zh: '安装客户端' },
     // The dialog says what is installed; the buttons only which system.
     'installCopyLinux': { en: 'Copy for Linux', zh: '复制 Linux 命令' },

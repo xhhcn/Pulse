@@ -130,7 +130,7 @@ html.dark .toolbar-btn[aria-expanded="true"] { background-color: rgba(40, 40, 40
    150 ms entrance (fade, from 95 % and 8 px above). Keyboard focus moves the
    highlight, as hover does. */
 .admin-menu {
-  position: absolute; right: 0; top: calc(100% + 8px); z-index: 40;
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 40;
   min-width: 200px; padding: 4px; border-radius: 10.8px;
   border: 1px solid #dadada; background-color: #ffffff;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
@@ -156,11 +156,10 @@ html.dark .admin-menu { border-color: #2c2c2c; background-color: #171717; }
   padding: 6px 10px; border-radius: 8.8px;
   font-size: 0.95rem; line-height: 1.5; color: #1d1d20; text-align: left; white-space: nowrap; cursor: pointer;
 }
-.admin-menu-item svg { width: 16px; height: 16px; flex: none; color: #595959; }
+.admin-menu-item svg { width: 16px; height: 16px; flex: none; }
 .admin-menu-item:hover,
 .admin-menu-item:focus-visible { background-color: rgba(243, 239, 236, 0.7); outline: none; }
 html.dark .admin-menu-item { color: #f5f5f5; }
-html.dark .admin-menu-item svg { color: #ababab; }
 html.dark .admin-menu-item:hover,
 html.dark .admin-menu-item:focus-visible { background-color: rgba(40, 40, 40, 0.7); }
 .admin-menu-item:disabled { opacity: 0.5; pointer-events: none; }

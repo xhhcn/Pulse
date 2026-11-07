@@ -7,7 +7,7 @@ import Icon from './Icon.astro';
      server is (name, location) through its health (CPU, memory, disk,
      network, Beszel's order) to the slower facts (uptime, OS); the rows
      (renderRow), the width tiers and COLUMN_TIERS follow the same order. -->
-<div id="system-table-header-row" class="grid items-center gap-1.5 border-b-2 border-[#404040]/50 dark:border-[#2c2c2c]/50 border-[#dadada]/50 dark:bg-[#1f2023] bg-[#f6f7f8] px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-medium tracking-wide text-[#595959] dark:text-[#ababab]" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(104px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(78px,0.9fr) minmax(85px,1fr) minmax(80px,1fr); visibility: hidden; opacity: 0; transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+<div id="system-table-header-row" class="grid items-center gap-1.5 border-b-2 border-[#404040]/50 dark:border-[#2c2c2c]/50 border-[#dadada]/50 dark:bg-[#1f2023] bg-[#f6f7f8] px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-[10px] sm:text-xs font-medium text-[#595959] dark:text-[#ababab]" style="grid-template-columns: minmax(min(var(--first-col-width, 100px), 160px), var(--first-col-width, 100px)) minmax(104px,1fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(130px,1.8fr) minmax(78px,0.9fr) minmax(85px,1fr) minmax(80px,1fr); visibility: hidden; opacity: 0; transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
   <div data-col="name" class="h-5 flex items-center gap-1">
     <button type="button" class="sort-header" data-sort="name">
       <Icon name="server" size={14} class="w-3.5 h-3.5 sm:w-[14px] sm:h-[14px]" />

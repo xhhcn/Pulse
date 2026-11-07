@@ -1606,7 +1606,7 @@ const apiBase = apiBaseProp ?? '';
                   const totalNetIn = item.total_net_in_bytes || 0;
                   const formattedIn = formatTotalTraffic(totalNetIn);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="in" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-[8.8px] bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#ababab]" data-traffic-tag="in" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>
                     </svg>
@@ -1618,7 +1618,7 @@ const apiBase = apiBaseProp ?? '';
                   const totalNetOut = item.total_net_out_bytes || 0;
                   const formattedOut = formatTotalTraffic(totalNetOut);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-traffic-tag="out" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-[8.8px] bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#ababab]" data-traffic-tag="out" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>
                     </svg>
@@ -1630,7 +1630,7 @@ const apiBase = apiBaseProp ?? '';
                   const netInSpeed = item.net_in_mb_s || 0;
                   const formattedSpeed = formatTrafficSpeed(netInSpeed);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="in" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-[8.8px] bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#ababab]" data-speed-tag="in" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="m7 13 5 5 5-5"/><path d="m7 6 5 5 5-5"/>
                     </svg>
@@ -1642,7 +1642,7 @@ const apiBase = apiBaseProp ?? '';
                   const netOutSpeed = item.net_out_mb_s || 0;
                   const formattedSpeed = formatTrafficSpeed(netOutSpeed);
                   return `
-                  <span class="inline-flex items-center gap-1 rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#f5f5f5]" data-speed-tag="out" data-system-id="${safeId}">
+                  <span class="inline-flex items-center gap-1 rounded-[8.8px] bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#ababab]" data-speed-tag="out" data-system-id="${safeId}">
                     <svg class="w-3 h-3" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="m17 11-5-5-5 5"/><path d="m17 18-5-5-5 5"/>
                     </svg>
@@ -1682,7 +1682,7 @@ const apiBase = apiBaseProp ?? '';
                   // Tailwind's JIT scanner only picks up class names
                   // that appear LITERALLY in the source and cannot
                   // compile in a runtime-assembled multi-stop gradient.
-                  // Layout classes (`rounded-md px-2 py-0.5 text-[10px]
+                  // Layout classes (`rounded-[8.8px] px-2 py-0.5 text-[10px]
                   // sm:text-xs font-medium`) match the regular-tag
                   // branch below, so a spr:/spy:/spb: badge is
                   // pixel-identical in height, padding, corner radius
@@ -1698,7 +1698,7 @@ const apiBase = apiBaseProp ?? '';
                   const label = tag.slice(4).trim();
                   const safeLabel = escapeHtml(label);
                   return `
-                  <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium text-white" style="background-image: ${gradient};" data-color-tag="${colorKey}" data-color-tag-label="${escapeHtmlAttr(label)}">
+                  <span class="inline-flex items-center rounded-[8.8px] px-2 py-0.5 text-xs font-medium text-white" style="background-image: ${gradient};" data-color-tag="${colorKey}" data-color-tag-label="${escapeHtmlAttr(label)}">
                     ${safeLabel}
                   </span>
                   `;
@@ -1706,7 +1706,7 @@ const apiBase = apiBaseProp ?? '';
                 
                 // Regular tag
                 return `
-                <span class="inline-flex items-center rounded-md bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#f5f5f5]">
+                <span class="inline-flex items-center rounded-[8.8px] bg-black/5 dark:bg-[#262626] px-2 py-0.5 text-xs font-medium text-[#595959] dark:text-[#ababab]">
                   ${safeTag}
                 </span>
               `;
@@ -1868,7 +1868,7 @@ const apiBase = apiBaseProp ?? '';
           </div>
         </div>
       ${showTCPing ? `<!-- TCPing Chart Section -->
-      <div class="px-3 sm:px-4 md:px-6 pb-2 sm:pb-3" data-tcping-chart-container="${safeId}" style="width: 100%;">
+      <div class="px-3 sm:px-4 md:px-6 pb-3 sm:pb-4" data-tcping-chart-container="${safeId}" style="width: 100%;">
         <div class="rounded-[12.8px] border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#151515] dark:bg-[#1a1a1a] bg-white p-3 sm:p-4">
           <div class="tcping-head flex items-start justify-between gap-3 sm:gap-4 mb-3">
             <div class="min-w-0">
@@ -1929,7 +1929,7 @@ const apiBase = apiBaseProp ?? '';
           <!-- 资源: the server's minute averages (built when the tab opens) -->
           <div data-chart-pane="resource" class="resource-pane" hidden></div>
       </div>` : (resourceHistoryShown() ? `<!-- 资源 only (no TCPing card for this server) -->
-      <div class="px-3 sm:px-4 md:px-6 pb-2 sm:pb-3" data-resource-only="${safeId}" style="width: 100%;">
+      <div class="px-3 sm:px-4 md:px-6 pb-3 sm:pb-4" data-resource-only="${safeId}" style="width: 100%;">
         <div class="rounded-[12.8px] border border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#151515] dark:bg-[#1a1a1a] bg-white p-3 sm:p-4">
           <div class="tcping-head flex items-start justify-between gap-3 sm:gap-4 mb-3">
             <div class="min-w-0">
@@ -2379,20 +2379,20 @@ const apiBase = apiBaseProp ?? '';
     
     if (body && filtered) {
       // A filter (the text or the status) that matches nothing is not an
-      // empty deployment: Beszel's one line in a 96 px row (its table's
-      // "No systems found.")
+      // empty deployment: Beszel's one line, "No systems found.", in its
+      // table's 148 px row (96 px in cards and phone rows; .systems-none)
       body.innerHTML = `<div class="systems-none" data-empty-key="noMatchingLine">${translations.noMatchingLine[getCurrentLanguage()]}</div>`;
     } else if (body) {
       const lang = getCurrentLanguage();
       const [titleKey, hintKey] = emptyMessageKeys[0];
       body.innerHTML = `
         <div class="flex flex-col items-center justify-center py-12 text-center">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-[#595959] dark:text-[#ababab] mb-3">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-[#595959] dark:text-[#ababab] mb-3">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
             <line x1="8" y1="21" x2="16" y2="21"/>
             <line x1="12" y1="17" x2="12" y2="21"/>
           </svg>
-          <p class="text-sm font-medium text-[#595959] dark:text-[#ababab]">${translations[titleKey][lang]}</p>
+          <p class="text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]">${translations[titleKey][lang]}</p>
           <p class="text-xs text-[#595959] dark:text-[#ababab] mt-1">${translations[hintKey][lang]}</p>
     </div>
   `;
@@ -3810,7 +3810,7 @@ const apiBase = apiBaseProp ?? '';
   // border); the selected one gets a light tint and the text colour, and
   // the pointer a tint on hover, so they read as controls. Every state has
   // the same box.
-  const TCPING_TAB_BASE = 'inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded-md cursor-pointer transition-colors';
+  const TCPING_TAB_BASE = 'inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded-[8.8px] cursor-pointer transition-colors';
   const TCPING_TAB_ACTIVE = 'bg-black/[0.06] dark:bg-white/10 text-[#151515] dark:text-[#f5f5f5]';
   const TCPING_TAB_INACTIVE = 'bg-transparent text-[#595959] dark:text-[#ababab] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]';
   // A skipped target is de-emphasised with an explicit muted grey rather than
@@ -6859,7 +6859,7 @@ const apiBase = apiBaseProp ?? '';
     const lang = getCurrentLanguage();
     const { total, offline, awaiting = 0 } = systemsSummary;
     const chip = 'inline-flex items-center gap-1.5 rounded-full px-2 py-1';
-    const quiet = `${chip} bg-black/5 dark:bg-white/[0.06] text-[#595959] dark:text-[#d4d4d4]`;
+    const quiet = `${chip} bg-black/5 dark:bg-white/[0.06] text-[#595959] dark:text-[#ababab]`;
     const dot = (c) => `<span class="status-dot h-1.5 w-1.5 rounded-full ${c}"></span>`;
     let html = `<span class="${quiet}">${total} ${translations.summaryTotal[lang]}</span>`
       + `<span class="${quiet}">${dot('bg-[#3db866]')}${total - offline - awaiting} ${translations.summaryOnline[lang]}</span>`;
@@ -8240,7 +8240,7 @@ const apiBase = apiBaseProp ?? '';
   .chart-tabs { display: none; }
   html.resource-history .chart-tabs { display: inline-flex; align-items: center; height: 32px; padding: 3px; gap: 2px; border-radius: 10.8px; background: #f0f0f0; }
   html.dark.resource-history .chart-tabs { background: rgb(38, 40, 43); }
-  .chart-tab { height: 26px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 500; line-height: 26px; color: #595959; background: transparent; cursor: pointer; }
+  .chart-tab { height: 26px; padding: 0 12px; border-radius: 8.8px; font-size: 13px; font-weight: 500; line-height: 26px; color: #595959; background: transparent; cursor: pointer; }
   /* Beszel's chosen tab: the page's ground (not white) */
   .chart-tab[aria-selected="true"] { background: rgb(250, 250, 249); color: #1d1d20; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); cursor: default; }
   html.dark .chart-tab { color: #ababab; }
@@ -8257,9 +8257,9 @@ const apiBase = apiBaseProp ?? '';
   .resource-card { min-width: 0; padding: 12px 14px 8px; border: 1px solid rgba(212, 212, 212, 0.5); border-radius: 12.8px; background: #ffffff; }
   html.dark .resource-card { border-color: rgba(44, 44, 44, 0.6); background: #1a1a1a; }
   html.glass-enabled .resource-card { background: transparent; }
-  .resource-card-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: #1d1d20; }
+  .resource-card-title { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: -0.01em; color: #1d1d20; }
   html.dark .resource-card-title { color: #f5f5f5; }
-  .resource-card-desc { margin-top: 2px; font-size: 12px; color: #595959; }
+  .resource-card-desc { margin-top: 2px; font-size: 12px; line-height: 16px; color: #595959; }
   html.dark .resource-card-desc { color: #ababab; }
   .resource-plot { position: relative; height: 160px; margin-top: 8px; }
   .res-keys { display: flex; flex-wrap: wrap; column-gap: 12px; }
@@ -8444,9 +8444,11 @@ const apiBase = apiBaseProp ?? '';
      put the targets on the line under the name (--lat-areas), each with its
      colour and name over its value; cards give each target a row of their
      grid (the colour where the icons are, the name, the value). */
-  /* No server matches the filter: Beszel's line in a 96 px row (across the
-     cards' grid as well) */
+  /* No server matches the filter: Beszel's line, in its table's 148 px row
+     (h-37); across the cards' grid and on phones 96 px, near the 88 px its
+     cards view gives it */
   #systems-body .systems-none { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; height: 96px; padding: 0 16px; font-size: 14px; line-height: 20px; text-align: center; color: #1d1d20; }
+  @media (min-width: 768px) { #monitor-root:not(.layout-grid) #systems-body .systems-none { height: 148px; } }
   html.dark #systems-body .systems-none { color: #f5f5f5; }
   .cell-latency { display: none; }
   /* 延迟's rows don't open: no pointer and no hover */
@@ -8465,7 +8467,7 @@ const apiBase = apiBaseProp ?? '';
   html.dark .lat-ms.lat-none { color: #ababab; }
   /* the loss in the 离线 chip's reds (red-700 / red-300): #fb2c36, the loss
      band's, was 3.8:1 on white as 12 px text */
-  .lat-loss { color: #b91c1c; font-size: 0.86em; }
+  .lat-loss { color: #b91c1c; font-size: 12px; }
   html.dark .lat-loss { color: #fca5a5; }
   .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #595959; }
   html.dark .system-row.is-offline :is(.lat-ms, .lat-loss) { color: #ababab; }
