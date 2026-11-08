@@ -2397,6 +2397,21 @@ func roundForStream(metrics []SystemMetric) {
 	}
 }
 
+// roundTCPingLatencies rounds a history answer's latencies to a microsecond,
+// as the stream does (roundForStream). The agents' 17-digit values were
+// about half of a day's compressed size (a day read 45 KB gzip, 25 KB
+// rounded), and no page shows more than two decimals. The results are the
+// request's own decoded copies, and the statistics are taken before, from
+// the stored values.
+func roundTCPingLatencies(results []TCPingResult) {
+	for i := range results {
+		if l := results[i].Latency; l != nil {
+			v := round(*l, 3)
+			results[i].Latency = &v
+		}
+	}
+}
+
 // roundSignificant rounds v to the given number of significant digits.
 func roundSignificant(v float64, digits int) float64 {
 	if v == 0 || math.IsNaN(v) || math.IsInf(v, 0) {
@@ -5030,7 +5045,9 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 			http.Error(w, "failed to get history", http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, TCPingHistoryResponse{Results: results, Stats: calculateTCPingStats(results)})
+		stats := calculateTCPingStats(results)
+		roundTCPingLatencies(results)
+		writeJSON(w, http.StatusOK, TCPingHistoryResponse{Results: results, Stats: stats})
 		return
 	}
 
@@ -5066,9 +5083,11 @@ func handleGetTCPingHistory(store *Store, w http.ResponseWriter, r *http.Request
 		if err != nil {
 			return tcpingHistoryLoad{err: err}
 		}
+		stats := calculateTCPingStats(results)
+		roundTCPingLatencies(results)
 		response := TCPingHistoryResponse{
 			Results: results,
-			Stats:   calculateTCPingStats(results),
+			Stats:   stats,
 		}
 		entry := buildTCPingCacheEntry(response)
 		if entry != nil {
