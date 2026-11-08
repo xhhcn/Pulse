@@ -7819,12 +7819,14 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .cell-disk > div { padding-right: 0; gap: 6px; }
     #monitor-root .system-row .progress-track { min-width: 56px; }
   }
-  /* Rows (cards in the card layout) out of the window skip style, layout and
-     paint on each live update: with every server on one page (page size 0,
-     the default) an update took about 127 ms on a desktop and 541 ms on a
-     slow phone, 49 and 216 ms with this. The placeholder is a row's content
-     height in each width tier (its 1 px rule is outside it; keep in step
-     with the tiers' padding); a row once drawn keeps its real height (auto).
+  /* Rows out of the window skip style, layout and paint on each live update:
+     with every server on one page (page size 0, the default) an update took
+     about 122 ms on a desktop and 593 ms on a slow phone, 58 and 224 ms with
+     this. The placeholder is a row's content height in each width tier (its
+     1 px rule is outside it; keep in step with the tiers' padding); a row
+     once drawn keeps its real height (auto). Not the card layout: Firefox
+     sized off-screen cards without their padding (205 px for 221) and never
+     kept a drawn card's height, so the page shrank and grew as it scrolled.
      Browsers without contain-intrinsic-height's auto are left as before. */
   @supports (contain-intrinsic-height: auto 1px) {
     #monitor-root:not(.layout-grid) #systems-body > .system-row { content-visibility: auto; contain-intrinsic-height: auto 106px; }
@@ -7832,7 +7834,6 @@ const apiBase = apiBaseProp ?? '';
     @media (min-width: 768px) { #monitor-root:not(.layout-grid) #systems-body > .system-row { contain-intrinsic-height: auto 44px; } }
     @media (min-width: 1024px) { #monitor-root:not(.layout-grid) #systems-body > .system-row { contain-intrinsic-height: auto 49px; } }
     @media (min-width: 1280px) { #monitor-root:not(.layout-grid) #systems-body > .system-row { contain-intrinsic-height: auto 55px; } }
-    #monitor-root.layout-grid #systems-body > .system-row > [data-system-id] { content-visibility: auto; contain-intrinsic-height: auto 203px; }
   }
   /* Live speeds and uptimes in even-width figures at every width, as the
      percentages beside them (below 1024 px they shifted sideways as their
