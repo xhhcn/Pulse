@@ -146,19 +146,26 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} brings back the 资源 cards. Nothing new is added.
+            v${{ steps.version.outputs.version }} polishes the 资源 pane and a few details found in another side-by-side check of the design. Nothing new is added.
 
             ### Dashboard
 
-            - 资源: each chart has its own card again from 640 px, as in v1.3.72. v1.3.73 drew the four charts straight on the chart card, and side by side they ran together.
-              - Phones keep one column with a hairline between the charts.
-            - Everything else in v1.3.73 stays:
-              - the 资源 charts' draw-in;
-              - the line under the tabs naming the average from the start;
-              - rows that come back at once;
-              - the hover dot at once;
-              - one hover colour;
-              - the TCPing dialog's phone margins.
+            - 资源: going back from 延迟 shows the four charts at once.
+              - Leaving the tab keeps them (their minute's read pauses) instead of reloading them, so the way back no longer shows empty cards and a second draw-in.
+              - The draw-in still plays the first time 资源 opens.
+            - 资源: with nothing recorded yet, or when the history can't be read, the message has 延迟's no-data form: the chart icon and a 12 px line, centred at the chart's height.
+            - An opened server's memory, swap and disk show two decimals on both sides, as 流量 does: 「3.10 GiB / 9.61 GiB」 instead of 「3.1 GiB / 9.61 GiB」, and 「1.00 GiB」 instead of 「1024 MiB」.
+            - The 延迟 readout shows latency to 0.1 ms from 10 ms (0.01 below), the rule the loss figure follows.
+            - Uptime in the Chinese interface spells its unit: 「113 天」, 「13 小时」. English is unchanged.
+            - With reduced motion, the usage bars and the 延迟 chart don't animate either.
+
+            ### Admin
+
+            - Switches: the track fades to its new colour with the knob.
+
+            ### Sign-in
+
+            - The button dims to 50 % while signing in, as other disabled controls do.
 
             ### Compatibility
 
@@ -166,7 +173,7 @@ jobs:
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: the 资源 cards measure the same as v1.3.72's; v1.3.73's checks and every suite that opens the 资源 pane pass.
+            - Chromium, Firefox and WebKit: each change measured, and the regression suites.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
