@@ -1465,6 +1465,24 @@ const apiBase = apiBaseProp ?? '';
     return String(text).replace(/[&<>"']/g, m => map[m]);
   }
 
+  // The server's uptime ("113d", "13h"): in Chinese with its unit spelled
+  // out, as 最后在线 (1 天前) and the time range (1 小时) are; English as sent.
+  function uptimeText(raw) {
+    const s = String(raw || '');
+    const m = getCurrentLanguage() === 'zh' && /^(\d+)([dh])$/.exec(s);
+    return m ? `${m[1]} ${m[2] === 'd' ? '天' : '小时'}` : (s || '-');
+  }
+  // The agent writes sizes without trailing zeros ("3.1 GiB / 9.61 GiB",
+  // "268 KiB / 1024 MiB"): the info bar shows them in its own format, as
+  // 流量 beside them and the admin list do, two decimals and the unit
+  // stepped at 1024 ("3.10 GiB / 9.61 GiB", "268.00 KiB / 1.00 GiB"). Text
+  // in any other form passes through as it came.
+  function sizeText(s) {
+    return String(s).replace(/(\d+(?:\.\d+)?)\s*(B|KiB|MiB|GiB|TiB|PiB)\b/g, (m, n, u) => {
+      const exp = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'].indexOf(u);
+      return formatTotalTraffic(Math.round(Number(n) * 1024 ** exp));
+    });
+  }
   // Format total traffic bytes to appropriate unit: steps of 1024, named so
   // (KiB … TiB), as memory and disk beside it and the admin page name them.
   function formatTotalTraffic(bytes) {
@@ -1760,7 +1778,7 @@ const apiBase = apiBaseProp ?? '';
         <div class="cell-memory h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress(item.memory || 0, false, isOffline, cardLabel('memory'))}</div>
         <div class="cell-disk h-5 flex items-center pr-2 sm:pr-3 min-w-0 w-full">${progress((item.disk || 0), (item.disk || 0) > 65, isOffline, cardLabel('disk'))}</div>
         <div class="cell-net text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center whitespace-nowrap">${cardLabel('net')}<span class="cell-value">${isOffline ? '-' : formatTrafficSpeed((item.net_in_mb_s || 0) + (item.net_out_mb_s || 0))}</span></div>
-        <div class="cell-uptime text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center">${cardLabel('uptime')}<span class="cell-value">${escapeHtml(item.time || '-')}</span></div>
+        <div class="cell-uptime text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center">${cardLabel('uptime')}<span class="cell-value" data-uptime="${escapeHtml(item.time || '')}">${escapeHtml(uptimeText(item.time))}</span></div>
         <div class="cell-os text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] h-5 flex items-center w-full min-w-0" title="${escapeHtmlAttr(osDetailText(item))}">${osCellHTML(item)}</div>
     </div>
       <!-- Expandable details: built the first time the row is opened
@@ -1811,19 +1829,19 @@ const apiBase = apiBaseProp ?? '';
             <div class="detail-item">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 12v-2m0 8v-2m4-4v-2m0 8v-2M2 11h1.5M20 18v-2m.5-5H22M4 18v-2m4-4v-2m0 8v-2"/><rect width="20" height="10" x="2" y="6" rx="2"/></g></svg>
               <div class="detail-label shrink-0" data-translate-detail="memoryInfo">Memory:</div>
-              <div class="detail-value" data-detail="memory_info">${escapeHtml(item.memory_info || '-')}</div>
+              <div class="detail-value" data-detail="memory_info">${escapeHtml(item.memory_info ? sizeText(item.memory_info) : '-')}</div>
             </div>
             <!-- Swap Info (none when the server has no swap, as Beszel) -->
             <div class="detail-item detail-swap"${noSwap(item.swap_info) ? ' hidden' : ''}>
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3L4 7l4 4M4 7h16m-4 14l4-4l-4-4m4 4H4"/></svg>
               <div class="detail-label shrink-0" data-translate-detail="swapPartition">Swap:</div>
-              <div class="detail-value" data-detail="swap_info">${escapeHtml(item.swap_info || '-')}</div>
+              <div class="detail-value" data-detail="swap_info">${escapeHtml(item.swap_info ? sizeText(item.swap_info) : '-')}</div>
             </div>
             <!-- Disk Info -->
             <div class="detail-item">
               <svg class="detail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 12H2m3.45-6.89L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11M6 16h.01M10 16h.01"/></svg>
               <div class="detail-label shrink-0" data-translate-detail="diskInformation">Disk:</div>
-              <div class="detail-value" data-detail="disk_info">${escapeHtml(item.disk_info || '-')}</div>
+              <div class="detail-value" data-detail="disk_info">${escapeHtml(item.disk_info ? sizeText(item.disk_info) : '-')}</div>
             </div>
             ${showTrafficInfo ? `
             <!-- Real-time Traffic -->
@@ -1899,9 +1917,7 @@ const apiBase = apiBaseProp ?? '';
             <!-- No data state -->
             <div class="absolute inset-0 flex items-center justify-center bg-[#151515] dark:bg-[#1a1a1a] bg-white rounded hidden" data-tcping-no-data="${safeId}" style="height: 200px; min-height: 200px;">
               <div class="flex flex-col items-center gap-2">
-                <svg class="w-8 h-8 text-[#595959] dark:text-[#ababab]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                </svg>
+                ${chartNoDataIcon('w-8 h-8 text-[#595959] dark:text-[#ababab]')}
                 <span class="text-xs text-[#595959] dark:text-[#ababab]" data-translate-detail="noData">No data</span>
     </div>
   </div>
@@ -2103,6 +2119,8 @@ const apiBase = apiBaseProp ?? '';
   function updateTranslations() {
     const lang = getCurrentLanguage();
     renderSystemsSummary();
+    // The uptimes' units (113d / 113 天)
+    document.querySelectorAll('#systems-body .cell-uptime .cell-value[data-uptime]').forEach((el) => { el.textContent = uptimeText(el.dataset.uptime); });
     // The 延迟 view's header titles
     if (listView === 'latency') ensureLatencyHeader();
     // The 资源 charts' series names
@@ -2622,7 +2640,9 @@ const apiBase = apiBaseProp ?? '';
       const timeCell = cell('uptime');
       if (timeCell) {
         // The value span, not the cell: the cell also holds the card label.
-        (timeCell.querySelector('.cell-value') || timeCell).textContent = item.time || '-';
+        const v = timeCell.querySelector('.cell-value') || timeCell;
+        v.dataset.uptime = item.time || '';
+        v.textContent = uptimeText(item.time);
       }
     }
     
@@ -2771,7 +2791,7 @@ const apiBase = apiBaseProp ?? '';
         
         // Update memory info if changed
         if (memoryInfoEl) {
-          const newMemoryInfo = String(item.memory_info || '-');
+          const newMemoryInfo = item.memory_info ? sizeText(item.memory_info) : '-';
           if (memoryInfoEl.textContent !== newMemoryInfo) {
             memoryInfoEl.textContent = newMemoryInfo;
           }
@@ -2779,7 +2799,7 @@ const apiBase = apiBaseProp ?? '';
         
         // Update swap info if changed
         if (swapInfoEl) {
-          const newSwapInfo = String(item.swap_info || '-');
+          const newSwapInfo = item.swap_info ? sizeText(item.swap_info) : '-';
           if (swapInfoEl.textContent !== newSwapInfo) {
             swapInfoEl.textContent = newSwapInfo;
           }
@@ -2789,7 +2809,7 @@ const apiBase = apiBaseProp ?? '';
         
         // Update disk info if changed
         if (diskInfoEl) {
-          const newDiskInfo = String(item.disk_info || '-');
+          const newDiskInfo = item.disk_info ? sizeText(item.disk_info) : '-';
           if (diskInfoEl.textContent !== newDiskInfo) {
             diskInfoEl.textContent = newDiskInfo;
           }
@@ -3701,6 +3721,11 @@ const apiBase = apiBaseProp ?? '';
   function hideTCPingTooltip() {
     if (tcpingTooltipEl) tcpingTooltipEl.style.opacity = '0';
   }
+  // A probe's latency in the readout: one decimal from 10 ms ("141.2 ms"),
+  // two below ("4.73 ms"), the magnitude rule the loss figure follows.
+  function latencyText(ms) {
+    return `${ms.toFixed(ms < 9.995 ? 2 : 1)} ms`;
+  }
   function tcpingTooltipExternal(context) {
     const { chart, tooltip } = context;
     if (!tcpingTooltipEl) {
@@ -3731,7 +3756,7 @@ const apiBase = apiBaseProp ?? '';
         if (!timedOut) rows.push({ color: dataset.borderColor, name: dataset.label || '', order, value: dataset.formatValue(value), muted: false });
         return;
       }
-      rows.push({ color: dataset.borderColor, name: dataset.label || '', order, value: timedOut ? translations.tcpingTimeout[lang] : `${value.toFixed(2)} ms`, muted: timedOut });
+      rows.push({ color: dataset.borderColor, name: dataset.label || '', order, value: timedOut ? translations.tcpingTimeout[lang] : latencyText(value), muted: timedOut });
     });
     // In the legend's order, as Beszel's monitor tooltip: each row keeps its
     // place while the pointer moves (sorted by value, they swapped places at
@@ -4837,7 +4862,7 @@ const apiBase = apiBaseProp ?? '';
                   if (value === null || value === undefined) {
                     return `${datasetLabel}: ${translations.tcpingTimeout[getCurrentLanguage()]}`;
                   }
-                  return `${datasetLabel}: ${value.toFixed(2)} ms`;
+                  return `${datasetLabel}: ${latencyText(value)}`;
                 };
                 
                 // Get all tooltip items for the current x position
@@ -5462,6 +5487,11 @@ const apiBase = apiBaseProp ?? '';
     dark: { cpu: '#3b82f6', mem: '#0d9488', disk: '#8b5cf6', in: '#16a34a', out: '#3b82f6' },
   };
   // (the network's line is its colours and unit, see openResourcePane)
+  // The chart icon of an empty chart: the 延迟 no-data overlay and the 资源
+  // pane's note (no minutes yet, or the read failed) show the same state alike.
+  function chartNoDataIcon(cls) {
+    return `<svg class="${cls}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>`;
+  }
   const RESOURCE_KINDS = [['cpu', 'resCpu', 'resCpuDesc'], ['mem', 'resMem', 'resMemDesc'], ['disk', 'resDisk', 'resDiskDesc'], ['net', 'resNet', null]];
   const resourcePanes = new Map(); // systemId -> { container, points, charts, timer }
   async function whenChartReady() {
@@ -5614,6 +5644,9 @@ const apiBase = apiBaseProp ?? '';
   function drawResourceCharts(systemId) {
     const entry = resourcePanes.get(systemId);
     if (!entry || !window.Chart) return;
+    // A pane kept behind the 延迟 tab is not redrawn while hidden (a theme,
+    // language or range change, a read that lands late): once, on its way back.
+    if (entry.paused) { entry.dirty = true; return; }
     const pane = entry.container.querySelector('[data-chart-pane="resource"]');
     if (!pane) return;
     entry.charts.forEach((ch) => { try { ch.destroy(); } catch (_) {} });
@@ -5622,7 +5655,7 @@ const apiBase = apiBaseProp ?? '';
     const note = pane.querySelector('[data-resource-note]');
     const grid = pane.querySelector('.resource-grid');
     const empty = !entry.points || entry.points.length === 0;
-    if (note) { note.hidden = !(empty || entry.failed); note.textContent = entry.failed ? translations.resUnavailable[lang] : translations.resEmpty[lang]; }
+    if (note) { note.hidden = !(empty || entry.failed); const t = note.querySelector('[data-resource-note-text]') || note; t.textContent = entry.failed ? translations.resUnavailable[lang] : translations.resEmpty[lang]; }
     if (grid) grid.hidden = empty;
     if (empty) return;
     const dark = document.documentElement.classList.contains('dark');
@@ -5674,7 +5707,7 @@ const apiBase = apiBaseProp ?? '';
     if (!pane.querySelector('.resource-grid')) {
       const key = (k, label) => `<span class="res-key-item"><span class="res-key" style="--res-key:${RESOURCE_COLORS.light[k]};--res-key-dark:${RESOURCE_COLORS.dark[k]}"></span><span data-translate-detail="${label}">${translations[label][lang]}</span></span>`;
       const desc = (kind, d) => (kind === 'net' ? `<div class="resource-card-desc res-keys">${key('in', 'resNetIn')}${key('out', 'resNetOut')}<span class="res-unit" data-res-unit></span></div>` : `<div class="resource-card-desc" data-translate-detail="${d}">${translations[d][lang]}</div>`);
-      pane.innerHTML = `<div class="resource-grid">${RESOURCE_KINDS.map(([kind, title, d]) => `<div class="resource-card" data-resource-kind="${kind}"><div class="resource-card-title" data-translate-detail="${title}">${translations[title][lang]}</div>${desc(kind, d)}<div class="resource-plot"><canvas></canvas></div></div>`).join('')}</div><p class="resource-note" data-resource-note hidden></p>`;
+      pane.innerHTML = `<div class="resource-grid">${RESOURCE_KINDS.map(([kind, title, d]) => `<div class="resource-card" data-resource-kind="${kind}"><div class="resource-card-title" data-translate-detail="${title}">${translations[title][lang]}</div>${desc(kind, d)}<div class="resource-plot"><canvas></canvas></div></div>`).join('')}</div><p class="resource-note" data-resource-note hidden>${chartNoDataIcon('res-note-icon')}<span class="res-note-text" data-resource-note-text></span></p>`;
     }
     const entry = { container, points: null, charts: [], timer: 0, failed: false, reveal: true };
     resourcePanes.set(systemId, entry);
@@ -5694,6 +5727,33 @@ const apiBase = apiBaseProp ?? '';
     entry.container.querySelectorAll('.resource-plot > canvas.tcping-new').forEach((cv) => cv.classList.remove('tcping-new'));
     resourcePanes.delete(systemId);
   }
+  // Back on 延迟 the 资源 charts are kept, as the 延迟 chart is while 资源 is
+  // shown: going back shows them at once instead of four empty cards and a
+  // second draw-in. Their minute's read stops meanwhile. A pane still waiting
+  // for its first read is stopped as before (the next visit opens it afresh).
+  function pauseResourcePane(systemId) {
+    const entry = resourcePanes.get(systemId);
+    if (!entry) return;
+    if (!entry.points) { stopResourcePane(systemId); return; }
+    clearInterval(entry.timer);
+    entry.timer = 0;
+    entry.paused = true;
+    // a draw-in cut short does not play again when the pane shows
+    entry.container.querySelectorAll('.resource-plot > canvas.tcping-new').forEach((cv) => cv.classList.remove('tcping-new'));
+  }
+  function resumeResourcePane(systemId) {
+    const entry = resourcePanes.get(systemId);
+    if (!entry) return;
+    entry.paused = false;
+    syncResourceDesc();
+    // redrawn in place if something changed while hidden, else sized to the
+    // pane it is shown in again (it was laid out hidden)
+    if (entry.dirty) { entry.dirty = false; drawResourceCharts(systemId); }
+    else entry.charts.forEach((ch) => { try { ch.resize(); } catch (_) {} });
+    // read again only when the charts are a minute old, then every minute
+    if (!entry.readAt || Date.now() - entry.readAt >= 60000) refreshResourcePane(systemId);
+    entry.timer = setInterval(() => { if (!document.hidden) refreshResourcePane(systemId); }, 60000);
+  }
   // 延迟 | 资源: the chosen pane, its line under the tabs; back on 延迟 the
   // TCPing chart takes its box again.
   // The tabs, the panes and the line under them for one pane
@@ -5710,9 +5770,11 @@ const apiBase = apiBaseProp ?? '';
     selectChartPane(container, which);
     if (which === 'resource') {
       hideTCPingTooltip();
-      openResourcePane(container, systemId);
+      const kept = resourcePanes.get(systemId);
+      if (kept && kept.paused && kept.container === container) resumeResourcePane(systemId);
+      else openResourcePane(container, systemId);
     } else {
-      stopResourcePane(systemId);
+      pauseResourcePane(systemId);
       const entry = tcpingCharts.get(`${systemId}_all`);
       if (entry && entry.chart) { try { entry.chart.resize(); } catch (_) {} }
     }
@@ -7678,7 +7740,8 @@ const apiBase = apiBaseProp ?? '';
       // again now if it is older than a minute (they waited for their next
       // tick, beside rows already fresh)
       const stale = (t) => !t || Date.now() - t > 60_000;
-      resourcePanes.forEach((entry, id) => { if (stale(entry.readAt)) refreshResourcePane(id); });
+      // (a pane kept behind the 延迟 tab reads again when it is shown)
+      resourcePanes.forEach((entry, id) => { if (!entry.paused && stale(entry.readAt)) refreshResourcePane(id); });
       if (listView === 'latency' && stale(latencySummaryReadAt)) refreshLatencySummary();
     } else if (!sseHiddenTimer && !ssePaused) {
       sseHiddenTimer = setTimeout(pauseSSEWhileHidden, SSE_HIDDEN_PAUSE_MS);
@@ -8291,8 +8354,13 @@ const apiBase = apiBaseProp ?? '';
   .res-unit:not(:empty)::before { content: '· '; }
   .res-key { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--res-key); }
   html.dark .res-key { background: var(--res-key-dark); }
-  .resource-note { padding: 40px 8px; text-align: center; font-size: 13px; line-height: 20px; color: #595959; }
+  /* no minutes yet, or the read failed: the 延迟 pane's no-data form (a
+     32 px chart icon over a 12 px muted line, centred in the 200 px its chart
+     takes), not a short band of its own */
+  .resource-note:not([hidden]) { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 200px; padding: 0 16px; text-align: center; font-size: 12px; line-height: 1.625; color: #595959; }
   html.dark .resource-note { color: #ababab; }
+  .res-note-icon { width: 32px; height: 32px; flex: none; }
+  .res-note-text { text-wrap: balance; }
   .tcping-range-btn {
     display: inline-flex; flex: none; align-items: center; gap: 6px;
     height: 32px; padding: 0 8px 0 10px;
@@ -8415,6 +8483,9 @@ const apiBase = apiBaseProp ?? '';
     /* Rows open and close without the slide (beats the inline transition
        handleRowToggle sets; its timers still tidy up afterwards). */
     .system-details, .system-details > * { transition: none !important; }
+    /* The usage bars step and the 延迟 chart shows without its 300 ms fade,
+       as the 资源 charts already do. */
+    .progress-track > div, [data-tcping-chart] { transition: none !important; }
   }
 
   /* An offline server: its last known values stay, muted (the bars turn

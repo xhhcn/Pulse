@@ -573,7 +573,7 @@
 
       submitInFlight = true;
       submitButton.disabled = true;
-      submitButton.classList.add('opacity-60', 'cursor-not-allowed');
+      submitButton.classList.add('opacity-50', 'cursor-not-allowed');
 
       try {
         if (isPasswordSet === false) {
@@ -635,7 +635,7 @@
       } finally {
         submitInFlight = false;
         submitButton.disabled = false;
-        submitButton.classList.remove('opacity-60', 'cursor-not-allowed');
+        submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
       }
     });
     form.removeEventListener('submit', holdSubmit);
