@@ -146,29 +146,19 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} finishes the 资源 charts and tidies a few details found in another side-by-side check of the design. Nothing new is added.
+            v${{ steps.version.outputs.version }} brings back the 资源 cards. Nothing new is added.
 
             ### Dashboard
 
-            - 资源: the four charts draw in from left to right when the tab opens, as the 延迟 chart does (its 400 ms sweep and 300 ms fade).
-              - Once per opening. The minute's refresh and a range, theme or language change redraw them in place.
-              - No draw-in with reduced motion.
-            - 资源: the charts sit straight on the chart card, as the 延迟 chart does. Each had a frame of its own, which made cards inside a card.
-              - The phones' layout at every width: a hairline between the rows, 24 px between the columns.
-              - The plots are 24 px wider (620 px at 1440).
-            - 资源 with 按时段平均 on: the line under the tabs names the average from the start. While the history loaded it read 「服务端记录的每分钟平均值」 and then changed to 「每 20 分钟」.
-            - Rows that come back after a filter edit, the 离线 chip or the status menu show at once, as on the first load. They faded and scaled in one by one, 50 ms apart.
-            - The 延迟 chart's hover dot shows at once at 4 px. It grew over about a third of a second, and the chart redrew every probe on each frame while it did. The 资源 charts' dot is 4 px too.
-            - Dark: the copy buttons and the legend reach the text colour on hover, as the other controls do. They stopped at two lighter greys.
-
-            ### Admin
-
-            - TCPing 设置 on phones has the other dialogs' 16 px margins and 24 px padding. It had 8 px and 16 px.
-            - Dark: the dialogs' close buttons and the address copy buttons reach the text colour on hover.
-
-            ### Sign-in
-
-            - Dark: the back link reaches the text colour on hover.
+            - 资源: each chart has its own card again from 640 px, as in v1.3.72. v1.3.73 drew the four charts straight on the chart card, and side by side they ran together.
+              - Phones keep one column with a hairline between the charts.
+            - Everything else in v1.3.73 stays:
+              - the 资源 charts' draw-in;
+              - the line under the tabs naming the average from the start;
+              - rows that come back at once;
+              - the hover dot at once;
+              - one hover colour;
+              - the TCPing dialog's phone margins.
 
             ### Compatibility
 
@@ -176,7 +166,7 @@ jobs:
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: each change measured (26 checks), and the regression suites.
+            - Chromium, Firefox and WebKit: the 资源 cards measure the same as v1.3.72's; v1.3.73's checks and every suite that opens the 资源 pane pass.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
