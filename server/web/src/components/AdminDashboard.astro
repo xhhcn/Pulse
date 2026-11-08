@@ -99,7 +99,7 @@ const customCodePlaceholder = [
     <div class="mx-4 w-full max-w-lg rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="add-new-system-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="addNewSystem">Add New System</h2>
-        <button id="close-add-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+        <button id="close-add-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#f5f5f5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
           <Icon name="x" size={16} />
         </button>
       </div>
@@ -178,7 +178,7 @@ const customCodePlaceholder = [
     <div class="mx-4 w-full max-w-lg rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="edit-system-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="editSystem">Edit System</h2>
-        <button id="close-edit-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+        <button id="close-edit-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#f5f5f5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
           <Icon name="x" size={16} />
         </button>
       </div>
@@ -305,17 +305,17 @@ const customCodePlaceholder = [
 
   <!-- TCPing Config Modal -->
   <div id="tcping-config-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="tcping-config-title" data-modal>
-    <div class="mx-2 sm:mx-4 w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white shadow-lg overflow-hidden" data-modal-content>
+    <div class="mx-4 w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white shadow-lg overflow-hidden" data-modal-content>
       <!-- Header - Fixed -->
-      <div class="flex items-center justify-between p-4 pb-0 sm:p-6 sm:pb-0 shrink-0">
+      <div class="flex items-center justify-between p-6 pb-0 shrink-0">
         <h2 id="tcping-config-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="tcpingSettings">TCPing Settings</h2>
-        <button id="close-tcping-config-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+        <button id="close-tcping-config-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#f5f5f5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
           <Icon name="x" size={16} />
         </button>
       </div>
 
       <!-- Scrollable Content -->
-      <div class="dialog-scroll flex-1 overflow-y-auto overflow-x-hidden p-4 pt-4 sm:p-6 sm:pt-4 pb-0 sm:pb-0">
+      <div class="dialog-scroll flex-1 overflow-y-auto overflow-x-hidden p-6 pt-4 pb-0">
         <form id="tcping-config-form" class="space-y-4">
           <div>
             <label for="tcping-interval" class="mb-1.5 block text-sm font-medium text-[#1d1d20] dark:text-[#f5f5f5]">
@@ -363,7 +363,7 @@ const customCodePlaceholder = [
                phone three targets already push it below the fold); the bar
                carries the scroll area's bottom padding, as in the settings
                dialog. -->
-          <div class="modal-actions sticky bottom-0 z-10 -mx-4 sm:-mx-6 flex gap-3 border-t border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white px-4 sm:px-6 pt-4 pb-4 sm:pb-6">
+          <div class="modal-actions sticky bottom-0 z-10 -mx-6 flex gap-3 border-t border-[#404040]/50 dark:border-[#2c2c2c]/60 border-[#d4d4d4]/50 bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white px-6 pt-4 pb-6">
             <button
               type="button"
               id="cancel-tcping-config-btn"
@@ -388,7 +388,7 @@ const customCodePlaceholder = [
     <div class="mx-4 w-full max-w-lg rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="change-password-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="changePassword">Change Password</h2>
-        <button id="close-change-password-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+        <button id="close-change-password-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#f5f5f5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
           <Icon name="x" size={16} />
         </button>
       </div>
@@ -460,7 +460,7 @@ const customCodePlaceholder = [
     <div class="mx-4 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 pb-0 shadow-lg" data-modal-content>
       <div class="mb-5 flex items-center justify-between">
         <h2 id="navbar-config-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="customizationSettings">Customization Settings</h2>
-        <button id="close-navbar-config-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+        <button id="close-navbar-config-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#f5f5f5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
           <Icon name="x" size={16} />
         </button>
       </div>
@@ -726,7 +726,7 @@ const customCodePlaceholder = [
     <div class="mx-4 w-full max-w-lg rounded-xl border border-[#dadada] dark:border-[#2c2c2c] bg-[#1c1c1c] dark:bg-[#1a1a1a] bg-white p-6 shadow-lg" data-modal-content>
       <div class="mb-4 flex items-center justify-between">
         <h2 id="privacy-config-title" class="text-lg font-semibold leading-none tracking-tight text-[#1d1d20] dark:text-[#f5f5f5]" data-translate="privacySettings">Privacy Settings</h2>
-        <button id="close-privacy-config-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
+        <button id="close-privacy-config-modal-btn" class="rounded-lg p-1.5 text-[#595959] dark:text-[#ababab] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#f5f5f5]" title="Close" aria-label="Close" data-title-en="Close" data-title-zh="关闭">
           <Icon name="x" size={16} />
         </button>
       </div>
@@ -1757,7 +1757,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv4:</span>
                   <span class="system-ipv4 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs">${escapeHtml(system.ipv4 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(system.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#f5f5f5] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(system.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -1773,7 +1773,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv6:</span>
                   <span class="system-ipv6 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs" title="${escapeHtmlAttr(system.ipv6 || '')}">${escapeHtml(system.ipv6 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(system.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#f5f5f5] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(system.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -2014,7 +2014,7 @@ const customCodePlaceholder = [
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv4:</span>
                 <span class="system-ipv4 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
-                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
+                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#f5f5f5] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                   <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -2050,7 +2050,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv4:</span>
                   <span class="system-ipv4 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs">${escapeHtml(item.ipv4 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#f5f5f5] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv4 || '')}" title="${adminT('copyIpv4')}" data-title-en="Copy IPv4" data-title-zh="复制 IPv4">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -2147,7 +2147,7 @@ const customCodePlaceholder = [
               <div class="flex items-center gap-1.5 min-h-[22px]">
                 <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv6:</span>
                 <span class="system-ipv6 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs" title="${escapeHtmlAttr(item.ipv6 || '')}">${escapeHtml(item.ipv6 || '')}</span>
-                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
+                <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#f5f5f5] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                   <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
@@ -2171,7 +2171,7 @@ const customCodePlaceholder = [
                 <div class="flex items-center gap-1.5 min-h-[22px]">
                   <span class="text-[#595959] dark:text-[#ababab] shrink-0">IPv6:</span>
                   <span class="system-ipv6 text-[#1d1d20] dark:text-[#f5f5f5] font-mono text-xs" title="${escapeHtmlAttr(item.ipv6 || '')}">${escapeHtml(item.ipv6 || '')}</span>
-                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#d4d4d4] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
+                  <button class="copy-ip-btn shrink-0 rounded p-1 text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#f5f5f5] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 transition-colors" data-ip="${escapeHtmlAttr(item.ipv6 || '')}" title="${adminT('copyIpv6')}" data-title-en="Copy IPv6" data-title-zh="复制 IPv6">
                     <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
                       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>

@@ -1750,7 +1750,7 @@ const apiBase = apiBaseProp ?? '';
         <div class="cell-name flex items-center gap-1 min-h-[20px]">
           <span class="status-dot h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${statusDotColor(item)} shrink-0"></span>
           <span class="row-name text-[10px] sm:text-xs font-medium text-[#1d1d20] dark:text-[#f5f5f5] whitespace-nowrap" title="${safeNameAttr}">${safeName}</span>${isOffline ? statusChip(item) : ''}
-          <button class="copy-btn text-[#595959] dark:text-[#ababab] hover:text-[#151515] dark:hover:text-[#d4d4d4] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" tabindex="-1" aria-hidden="true" data-link-id="${safeId}" title="${translations.copyServerLink[getCurrentLanguage()]}" data-translate-title="copyServerLink">
+          <button class="copy-btn text-[#595959] dark:text-[#ababab] hover:text-[#1d1d20] dark:hover:text-[#f5f5f5] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0" tabindex="-1" aria-hidden="true" data-link-id="${safeId}" title="${translations.copyServerLink[getCurrentLanguage()]}" data-translate-title="copyServerLink">
             <svg class="copy-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
             <svg class="check-icon w-2.5 h-2.5 sm:w-3 sm:h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
@@ -3811,8 +3811,8 @@ const apiBase = apiBaseProp ?? '';
   // the pointer a tint on hover, so they read as controls. Every state has
   // the same box.
   const TCPING_TAB_BASE = 'inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded-[8.8px] cursor-pointer transition-colors';
-  const TCPING_TAB_ACTIVE = 'bg-black/[0.06] dark:bg-white/10 text-[#151515] dark:text-[#f5f5f5]';
-  const TCPING_TAB_INACTIVE = 'bg-transparent text-[#595959] dark:text-[#ababab] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#e5e5e5]';
+  const TCPING_TAB_ACTIVE = 'bg-black/[0.06] dark:bg-white/10 text-[#1d1d20] dark:text-[#f5f5f5]';
+  const TCPING_TAB_INACTIVE = 'bg-transparent text-[#595959] dark:text-[#ababab] hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70 hover:text-[#1d1d20] dark:hover:text-[#f5f5f5]';
   // A skipped target is de-emphasised with an explicit muted grey rather than
   // `opacity-50`. Blending the normal colours to 50% measures 2.38:1 in light
   // mode (#525252 over the card's #ffffff) and 2.73:1 in dark (#a3a3a3 over
@@ -4763,9 +4763,10 @@ const apiBase = apiBaseProp ?? '';
         // A new chart is drawn once and revealed from left to right by the
         // tcping-reveal CSS animation (global styles below). Chart.js's own
         // entrance animation would redraw all 3 × 1440 points on every frame
-        // for a second, and merely setting it up costs tens of ms. It is
-        // switched back on right after the build, so the tooltip glides
-        // between points as before; updates use chart.update('none').
+        // for a second, and merely setting it up costs tens of ms. It stays
+        // off: the hover dots show at once at 4 px (as the 资源 charts' and
+        // Beszel's), and the readout glides by its own CSS transition;
+        // updates use chart.update('none').
         animation: false,
         plugins: {
           lossLane: lossLaneOn ? {} : false,
@@ -5016,9 +5017,9 @@ const apiBase = apiBaseProp ?? '';
       }
     });
     presize = null;
-    // Animation back on after the build (the hover dot grows, the readout
-    // glides), except for a visitor who asked for reduced motion.
-    chart.options.animation = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : ChartClass.defaults.animation;
+    // (Chart.js animation was switched back on here so the hover dot grew
+    // from 0 to 4 px; each hover then redrew all the probes on every frame
+    // for 400 ms. It stays off.)
     // The page's first chart runs Chart.js cold (not yet optimised by the JS
     // engine) and takes about three times as long as later ones.
     const buildMs = performance.now() - builtAt;
@@ -5570,7 +5571,7 @@ const apiBase = apiBaseProp ?? '';
     // half of a line at 0 % (a disk at 0.03 % looked empty) or 100 %. The
     // right edge lets the newest minute's dot show whole; the left stays at
     // the edge (minutes before the span's start would reach into the axis).
-    const ds = (label, data, color, alpha, formatValue) => ({ label, data, borderColor: color, backgroundColor: `${color}${alpha}`, fill: 'origin', borderWidth: 1, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 3, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, clip: { left: 0, top: 4, right: 3, bottom: 4 }, formatValue });
+    const ds = (label, data, color, alpha, formatValue) => ({ label, data, borderColor: color, backgroundColor: `${color}${alpha}`, fill: 'origin', borderWidth: 1, pointRadius: (c) => (c.raw && c.raw.lone ? 2 : 0), pointBackgroundColor: color, pointBorderWidth: 0, pointHoverRadius: 4, pointHoverBorderWidth: 0, pointHitRadius: 4, tension: 0.2, spanGaps: false, clip: { left: 0, top: 4, right: 3, bottom: 4 }, formatValue });
     const [unit, factor] = kind === 'net' ? trafficUnit(points) : ['', 1];
     const speed = (v) => formatTrafficSpeed(v / factor);
     // the tooltip's names (one line each): "CPU 使用率", or for averaged
@@ -5631,6 +5632,17 @@ const apiBase = apiBaseProp ?? '';
     pane.querySelectorAll('.resource-card').forEach((card) => {
       try { entry.charts.push(new window.Chart(card.querySelector('canvas'), resourceChartConfig(card.dataset.resourceKind, points, dark, step))); } catch (_) {}
     });
+    // The first charts of an opened pane draw in as the 延迟 chart does
+    // (tcping-reveal, all four together); the minute's refresh and a range,
+    // theme or language change redraw them in place.
+    if (entry.reveal && entry.charts.length) {
+      entry.reveal = false;
+      pane.querySelectorAll('.resource-plot > canvas').forEach((cv) => {
+        cv.classList.add('tcping-new');
+        cv.addEventListener('animationend', tcpingRevealDone);
+        cv.addEventListener('animationcancel', tcpingRevealDone);
+      });
+    }
     // the widest value axis for all four, so their plots (and times) line up
     const axis = Math.max(0, ...entry.charts.map((ch) => (ch.scales.y ? ch.scales.y.width : 0)));
     entry.charts.forEach((ch) => {
@@ -5654,13 +5666,17 @@ const apiBase = apiBaseProp ?? '';
     const pane = container && container.querySelector('[data-chart-pane="resource"]');
     if (!pane) return;
     stopResourcePane(systemId);
+    // the line under the tabs names the average from the start (it depends
+    // on the switch and the span, not on the data): while the history loads
+    // it said 每分钟 and then changed to 每 20 分钟
+    syncResourceDesc();
     const lang = getCurrentLanguage();
     if (!pane.querySelector('.resource-grid')) {
       const key = (k, label) => `<span class="res-key-item"><span class="res-key" style="--res-key:${RESOURCE_COLORS.light[k]};--res-key-dark:${RESOURCE_COLORS.dark[k]}"></span><span data-translate-detail="${label}">${translations[label][lang]}</span></span>`;
       const desc = (kind, d) => (kind === 'net' ? `<div class="resource-card-desc res-keys">${key('in', 'resNetIn')}${key('out', 'resNetOut')}<span class="res-unit" data-res-unit></span></div>` : `<div class="resource-card-desc" data-translate-detail="${d}">${translations[d][lang]}</div>`);
       pane.innerHTML = `<div class="resource-grid">${RESOURCE_KINDS.map(([kind, title, d]) => `<div class="resource-card" data-resource-kind="${kind}"><div class="resource-card-title" data-translate-detail="${title}">${translations[title][lang]}</div>${desc(kind, d)}<div class="resource-plot"><canvas></canvas></div></div>`).join('')}</div><p class="resource-note" data-resource-note hidden></p>`;
     }
-    const entry = { container, points: null, charts: [], timer: 0, failed: false };
+    const entry = { container, points: null, charts: [], timer: 0, failed: false, reveal: true };
     resourcePanes.set(systemId, entry);
     if (!(await whenChartReady()) || resourcePanes.get(systemId) !== entry) return;
     ensureTCPingRangeButton(container);
@@ -5673,6 +5689,9 @@ const apiBase = apiBaseProp ?? '';
     if (!entry) return;
     clearInterval(entry.timer);
     entry.charts.forEach((ch) => { try { ch.destroy(); } catch (_) {} });
+    // a draw-in cut short (the pane left or the row closed meanwhile) leaves
+    // nothing behind: the next opening starts its own
+    entry.container.querySelectorAll('.resource-plot > canvas.tcping-new').forEach((cv) => cv.classList.remove('tcping-new'));
     resourcePanes.delete(systemId);
   }
   // 延迟 | 资源: the chosen pane, its line under the tabs; back on 延迟 the
@@ -6678,7 +6697,7 @@ const apiBase = apiBaseProp ?? '';
     
     // Add new rows
     if (rowsToAdd.length > 0) {
-      rowsToAdd.forEach(({ item, index }, addIndex) => {
+      rowsToAdd.forEach(({ item, index }) => {
         // Find insertion point
         let insertBefore = null;
         for (let i = index + 1; i < items.length; i++) {
@@ -6696,10 +6715,9 @@ const apiBase = apiBaseProp ?? '';
         tempDiv.innerHTML = rowHTML;
         const systemRowElement = tempDiv.firstElementChild;
         if (systemRowElement) {
-          // Add entrance animation for new rows
-          systemRowElement.classList.add('animate-scale-in');
-          systemRowElement.style.animationDelay = `${addIndex * 50}ms`;
-          
+          // Rows that come back (a shorter filter, the offline chip, the
+          // status menu) or a new server show at once, as the first data's
+          // rows do: no entrance, no cascade.
           // Find the system-row to insert before
           let insertBeforeSystemRow = null;
           if (insertBefore) {
@@ -6710,12 +6728,6 @@ const apiBase = apiBaseProp ?? '';
           } else {
             body.appendChild(systemRowElement);
           }
-          
-          // Clean up animation class after animation completes
-          setTimeout(() => {
-            systemRowElement.classList.remove('animate-scale-in');
-            systemRowElement.style.animationDelay = '';
-          }, 300 + addIndex * 50);
         }
       });
       
@@ -8248,15 +8260,23 @@ const apiBase = apiBaseProp ?? '';
   .chart-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #837e79; }
   html.dark .chart-tab:focus-visible { box-shadow: 0 0 0 2px #1a1a1a, 0 0 0 4px #cacbce; }
   html.resource-history [data-tcping-chart-container] .chart-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  /* the 资源 pane: four small charts, two a row from 640 px */
-  .resource-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  /* the 资源 pane: four small charts, two a row from 640 px, drawn straight
+     on the chart card as the 延迟 chart is (a frame each made cards inside a
+     card): a hairline between the rows, 24 px between the columns (the
+     details' side inset) */
+  .resource-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
   /* no minutes yet, or the read failed: the note alone (display: grid
      outranked the hidden attribute and left four empty cards above it) */
   .resource-grid[hidden] { display: none; }
-  @media (min-width: 640px) { .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  .resource-card { min-width: 0; padding: 12px 14px 8px; border: 1px solid rgba(212, 212, 212, 0.5); border-radius: 12.8px; background: #ffffff; }
-  html.dark .resource-card { border-color: rgba(44, 44, 44, 0.6); background: #1a1a1a; }
-  html.glass-enabled .resource-card { background: transparent; }
+  .resource-card { min-width: 0; padding: 14px 0 6px; }
+  .resource-card + .resource-card { border-top: 1px solid rgba(212, 212, 212, 0.5); }
+  html.dark .resource-card + .resource-card { border-top-color: rgba(44, 44, 44, 0.6); }
+  .resource-card:first-child { padding-top: 4px; }
+  @media (min-width: 640px) {
+    .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+    /* the first row's second chart: no rule above it, as the first */
+    .resource-card:nth-child(2) { border-top: 0; padding-top: 4px; }
+  }
   .resource-card-title { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: -0.01em; color: #1d1d20; }
   html.dark .resource-card-title { color: #f5f5f5; }
   .resource-card-desc { margin-top: 2px; font-size: 12px; line-height: 16px; color: #595959; }
@@ -8267,15 +8287,6 @@ const apiBase = apiBaseProp ?? '';
   .res-unit:not(:empty)::before { content: '· '; }
   .res-key { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--res-key); }
   html.dark .res-key { background: var(--res-key-dark); }
-  /* phones: the charts span the card, one under another between hairlines
-     (a frame in a frame in the opened row left them 216 px wide) */
-  @media (max-width: 639.98px) {
-    .resource-grid { gap: 0; }
-    html .resource-card, html.dark .resource-card { padding: 14px 0 6px; border: 0; border-radius: 0; background: transparent; }
-    html .resource-card + .resource-card { border-top: 1px solid rgba(212, 212, 212, 0.5); }
-    html.dark .resource-card + .resource-card { border-top: 1px solid rgba(44, 44, 44, 0.6); }
-    html .resource-card:first-child, html.dark .resource-card:first-child { padding-top: 4px; }
-  }
   .resource-note { padding: 40px 8px; text-align: center; font-size: 13px; line-height: 20px; color: #595959; }
   html.dark .resource-note { color: #ababab; }
   .tcping-range-btn {
@@ -8370,8 +8381,9 @@ const apiBase = apiBaseProp ?? '';
   /* A new TCPing chart draws in from left to right, oldest to newest:
      Chart.js renders it once and a soft-edged mask sweeps across the canvas
      in 400 ms, instead of Chart.js redrawing all 3 × 1440 points on every
-     frame of its own entrance. Pulse's one flourish on a chart; Beszel's
-     charts fade in (150 ms) and draw without animating. */
+     frame of its own entrance. Pulse's one flourish on a chart, shared by
+     the 资源 pane's four charts when it opens; Beszel's charts fade in
+     (150 ms) and draw without animating. */
   @keyframes tcping-reveal {
     from {
       -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 33.4%, transparent 40%, transparent 100%);
@@ -8389,8 +8401,13 @@ const apiBase = apiBaseProp ?? '';
     }
   }
   [data-tcping-chart].tcping-new:not(.opacity-0) { animation: tcping-reveal 400ms cubic-bezier(0.16, 1, 0.3, 1); }
+  /* the 资源 charts: the same sweep, and the 延迟 canvas's 300 ms fade
+     (its transition-opacity duration-300 as it leaves opacity-0) */
+  @keyframes resource-fade-in { from { opacity: 0; } }
+  .resource-plot > canvas.tcping-new { animation: tcping-reveal 400ms cubic-bezier(0.16, 1, 0.3, 1), resource-fade-in 300ms cubic-bezier(0.4, 0, 0.2, 1); }
   @media (prefers-reduced-motion: reduce) {
-    [data-tcping-chart].tcping-new:not(.opacity-0) { animation: none; }
+    [data-tcping-chart].tcping-new:not(.opacity-0),
+    .resource-plot > canvas.tcping-new { animation: none; }
     /* Rows open and close without the slide (beats the inline transition
        handleRowToggle sets; its timers still tidy up afterwards). */
     .system-details, .system-details > * { transition: none !important; }
