@@ -146,30 +146,32 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} polishes the 资源 pane and a few details found in another side-by-side check of the design. Nothing new is added.
+            v${{ steps.version.outputs.version }} fixes two keyboard details, makes long server lists lighter and halves what opening a server downloads. Nothing new is added.
 
             ### Dashboard
 
-            - 资源: going back from 延迟 shows the four charts at once.
-              - Leaving the tab keeps them (their minute's read pauses) instead of reloading them, so the way back no longer shows empty cards and a second draw-in.
-              - The draw-in still plays the first time 资源 opens.
-            - 资源: with nothing recorded yet, or when the history can't be read, the message has 延迟's no-data form: the chart icon and a 12 px line, centred at the chart's height.
-            - An opened server's memory, swap and disk show two decimals on both sides, as 流量 does: 「3.10 GiB / 9.61 GiB」 instead of 「3.1 GiB / 9.61 GiB」, and 「1.00 GiB」 instead of 「1024 MiB」.
-            - The 延迟 readout shows latency to 0.1 ms from 10 ms (0.01 below), the rule the loss figure follows.
-            - Uptime in the Chinese interface spells its unit: 「113 天」, 「13 小时」. English is unchanged.
-            - With reduced motion, the usage bars and the 延迟 chart don't animate either.
+            - Time range menu: Tab moves on from its button. The menu closed with the focus inside, and the view jumped to the page top.
+            - Page turns: after a click on 下一页, Space scrolls the new page instead of turning another one (the button kept the focus out of sight). A turn from the keys keeps the view on the button.
+            - Rows out of the window skip rendering on each live update. With every server on one page (the default) an update takes about 58 ms instead of 122 ms on a desktop, and 224 ms instead of 593 ms on a slow phone. The page looks and scrolls the same.
+            - Typing in the filter no longer rebuilds an open server's 资源 charts.
+            - A row closed while its chart was reading new probes no longer keeps that server's day of probes in memory.
 
-            ### Admin
+            ### Admin and sign-in
 
-            - Switches: the track fades to its new colour with the knob.
+            - Required-field stars and the delete warning use the same red as the other red text (enough contrast on every ground).
 
-            ### Sign-in
+            ### Server
 
-            - The button dims to 50 % while signing in, as other disabled controls do.
+            - TCPing history answers carry latencies to a microsecond instead of the agents' 17 digits: opening a server downloads about 45 % less (a day of probes, about 59 KB → 33 KB compressed).
+
+            ### Under the hood
+
+            - Code left from the removed statistics block (it still averaged every probe on each chart update), 13 unused styles and an unused sign-in message box are gone.
+            - The translations table loads first, so no early call can stop the page.
 
             ### Compatibility
 
-            - No server or agent code changes; agents stay at 1.3.68. Pulse-Hotaru is not affected.
+            - No agent changes; agents stay at 1.3.68. Pulse-Hotaru's backend gets the same history change.
 
             ### Verified
 
