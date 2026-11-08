@@ -8260,22 +8260,26 @@ const apiBase = apiBaseProp ?? '';
   .chart-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #837e79; }
   html.dark .chart-tab:focus-visible { box-shadow: 0 0 0 2px #1a1a1a, 0 0 0 4px #cacbce; }
   html.resource-history [data-tcping-chart-container] .chart-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  /* the 资源 pane: four small charts, two a row from 640 px, drawn straight
-     on the chart card as the 延迟 chart is (a frame each made cards inside a
-     card): a hairline between the rows, 24 px between the columns (the
-     details' side inset) */
-  .resource-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+  /* the 资源 pane: four small charts, two a row from 640 px, each in its
+     own card, as Beszel draws every chart: side by side, the frame keeps a
+     title with its plot and apart from its neighbour (v1.3.73 dropped the
+     frames and the four charts ran into the card and each other). */
+  .resource-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
   /* no minutes yet, or the read failed: the note alone (display: grid
      outranked the hidden attribute and left four empty cards above it) */
   .resource-grid[hidden] { display: none; }
-  .resource-card { min-width: 0; padding: 14px 0 6px; }
-  .resource-card + .resource-card { border-top: 1px solid rgba(212, 212, 212, 0.5); }
-  html.dark .resource-card + .resource-card { border-top-color: rgba(44, 44, 44, 0.6); }
-  .resource-card:first-child { padding-top: 4px; }
-  @media (min-width: 640px) {
-    .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
-    /* the first row's second chart: no rule above it, as the first */
-    .resource-card:nth-child(2) { border-top: 0; padding-top: 4px; }
+  @media (min-width: 640px) { .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .resource-card { min-width: 0; padding: 12px 14px 8px; border: 1px solid rgba(212, 212, 212, 0.5); border-radius: 12.8px; background: #ffffff; }
+  html.dark .resource-card { border-color: rgba(44, 44, 44, 0.6); background: #1a1a1a; }
+  html.glass-enabled .resource-card { background: transparent; }
+  /* phones: the charts span the card, one under another between hairlines
+     (a frame in a frame in the opened row left them 216 px wide) */
+  @media (max-width: 639.98px) {
+    .resource-grid { gap: 0; }
+    html .resource-card, html.dark .resource-card { padding: 14px 0 6px; border: 0; border-radius: 0; background: transparent; }
+    html .resource-card + .resource-card { border-top: 1px solid rgba(212, 212, 212, 0.5); }
+    html.dark .resource-card + .resource-card { border-top: 1px solid rgba(44, 44, 44, 0.6); }
+    html .resource-card:first-child, html.dark .resource-card:first-child { padding-top: 4px; }
   }
   .resource-card-title { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: -0.01em; color: #1d1d20; }
   html.dark .resource-card-title { color: #f5f5f5; }
