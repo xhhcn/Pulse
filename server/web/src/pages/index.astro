@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import '../styles/win98.css';
 import interFontUrl from '../assets/fonts/InterVariable.woff2?url';
 import NavBar from '../components/NavBar.astro';
 import SystemTable from '../components/SystemTable.astro';
@@ -109,6 +110,17 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
     <!-- Initialize language and theme before page render to prevent FOUC -->
     <script is:inline>
       (function() {
+        // Restore the Windows 98 theme before the first paint (NavBar's
+        // toggle stores it as localStorage "preferred-ui"). Win98 is a
+        // light theme through and through: forcing the theme variable to
+        // light here makes every downstream step (html/body classes, the
+        // colour scheme, the theme-colour meta) take the light branch with
+        // no race against this script's own body-painting retry.
+        var win98UI = false;
+        try {
+          win98UI = localStorage.getItem('preferred-ui') === 'win98';
+        } catch (_) {}
+        if (win98UI) document.documentElement.classList.add('win98');
         // Get system language (convert to 'zh' or 'en')
         function getSystemLanguage() {
           const sysLang = navigator.language || (navigator.languages && navigator.languages[0]) || 'en';
@@ -132,9 +144,10 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
         const lang = storedLang || getSystemLanguage();
         document.documentElement.lang = lang;
         
-        // Get theme preference (use system theme as default)
+        // Get theme preference (use system theme as default; the Win98
+        // theme forces light while it is on)
         const storedTheme = localStorage.getItem('preferred-theme');
-        const theme = (storedTheme === 'dark' || storedTheme === 'light') ? storedTheme : getSystemTheme();
+        const theme = win98UI ? 'light' : ((storedTheme === 'dark' || storedTheme === 'light') ? storedTheme : getSystemTheme());
         // 'light', 'dark' or 'system' (no stored choice): the theme button's icon.
         document.documentElement.dataset.themePref = (storedTheme === 'dark' || storedTheme === 'light') ? storedTheme : 'system';
         
@@ -339,6 +352,34 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
   </head>
   <body class="min-h-screen overflow-x-hidden flex flex-col bg-[#fafafa] dark:bg-[#171717] text-[#151515] dark:text-[#f5f5f5]">
     <div id="auth-check" class="hidden min-h-screen flex flex-col">
+      <!--
+        Windows 98 window chrome (.w98-chrome elements ship display:none and
+        only the html.win98 theme shows them; see styles/win98.css). The
+        title bar mirrors the navbar's site name, the status bar mirrors the
+        live server counts, and the taskbar carries the start menu — the
+        sync script is at the bottom of this page.
+      -->
+      <div class="w98-chrome w98-titlebar" aria-hidden="true">
+        <span class="w98-t-ico">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <rect x="1" y="2" width="14" height="4" fill="#c0c0c0" stroke="#000" stroke-width="1"/>
+            <rect x="3" y="3.5" width="2" height="1" fill="#00ff00"/>
+            <rect x="1" y="7" width="14" height="4" fill="#c0c0c0" stroke="#000" stroke-width="1"/>
+            <rect x="3" y="8.5" width="2" height="1" fill="#00ff00"/>
+            <rect x="1" y="12" width="14" height="3" fill="#c0c0c0" stroke="#000" stroke-width="1"/>
+          </svg>
+        </span>
+        <span class="w98-t-text" id="w98-title-text">Pulse Monitor</span>
+        <button type="button" class="w98-tbtn" tabindex="-1" aria-label="Minimize"><span style="transform:translateY(3px)">_</span></button>
+        <button type="button" class="w98-tbtn" tabindex="-1" aria-label="Maximize"><span style="transform:translateY(-1px)">□</span></button>
+        <button type="button" class="w98-tbtn" tabindex="-1" aria-label="Close"><span>✕</span></button>
+      </div>
+      <div class="w98-chrome w98-menubar" aria-hidden="true">
+        <span>文件(F)</span>
+        <span>查看(V)</span>
+        <span>选项(O)</span>
+        <span>帮助(H)</span>
+      </div>
       <div class="px-4">
         <NavBar />
       </div>
@@ -347,6 +388,52 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
       </main>
       <div id="page-footer" class="px-4">
         <Footer />
+      </div>
+      <div class="w98-chrome w98-statusbar" aria-hidden="true">
+        <span class="grow">就绪 Ready</span>
+        <span id="w98-sb-servers">Total: — servers</span>
+        <span>Net Traffic: 实时 SSE</span>
+        <span>Status: Dynamic Monitoring <span class="w98-dot"></span></span>
+      </div>
+      <!-- Taskbar + start menu, Win98 style -->
+      <div class="w98-chrome w98-taskbar" aria-hidden="false">
+        <button type="button" class="w98-start" id="w98-start-btn" aria-expanded="false" aria-controls="w98-startmenu">
+          <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+            <path fill="#ff0000" d="M1 2l6-1v6H1z"/>
+            <path fill="#00ff00" d="M8 1l7 1v5H8z"/>
+            <path fill="#0000ff" d="M1 8h6v6l-6-1z"/>
+            <path fill="#ffff00" d="M8 8h7v5l-7 1z"/>
+          </svg>
+          开始
+        </button>
+        <button type="button" class="w98-taskbtn" tabindex="-1">
+          🖥 <span id="w98-task-title">Pulse Monitor</span>
+        </button>
+        <span class="w98-tray">
+          <span id="w98-clock" style="font-variant-numeric: tabular-nums;">--:--</span>
+        </span>
+      </div>
+      <div class="w98-startmenu w98-chrome" id="w98-startmenu" role="menu" aria-label="开始菜单">
+        <div class="w98-sm-side"><b>Windows 98</b></div>
+        <div class="w98-sm-items">
+          <a class="w98-sm-item" role="menuitem" href="/">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+            主页 Home
+          </a>
+          <a class="w98-sm-item" role="menuitem" href="/admin">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+            管理后台 Admin
+          </a>
+          <div class="w98-sm-sep"></div>
+          <button type="button" class="w98-sm-item" role="menuitem" id="w98-sm-refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            刷新数据 Refresh
+          </button>
+          <button type="button" class="w98-sm-item" role="menuitem" id="w98-sm-classic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            退出 Win98 主题 Exit Theme
+          </button>
+        </div>
       </div>
     </div>
     <!--
@@ -492,5 +579,77 @@ const apiBase = import.meta.env.PUBLIC_API_BASE ?? '';
       // Privacy config check failed, allow access (fail open)
       revealAuthContent();
     }
+  })();
+
+  // ---- Windows 98 chrome sync (styles/win98.css, html.win98) ----
+  // The title bar mirrors the site name (document.title already follows the
+  // navbar config), the status bar mirrors the live summary chips, the tray
+  // keeps a clock, and the start button opens the menu.
+  (function () {
+    const titleText = document.getElementById('w98-title-text');
+    const taskTitle = document.getElementById('w98-task-title');
+    const sbServers = document.getElementById('w98-sb-servers');
+    const summary = document.getElementById('systems-summary');
+    const startBtn = document.getElementById('w98-start-btn');
+    const startMenu = document.getElementById('w98-startmenu');
+
+    const syncTitle = () => {
+      const t = (document.title || 'Pulse Monitor').trim();
+      if (titleText) titleText.textContent = `${t} - [All Servers]`;
+      if (taskTitle) taskTitle.textContent = t;
+    };
+    syncTitle();
+    window.addEventListener('navbarconfigready', syncTitle);
+
+    const syncServers = () => {
+      if (!sbServers) return;
+      // The header holds two invisible placeholder chips ("000 servers") so
+      // nothing moves when the real counts arrive; mirror only real data,
+      // one chip per status-bar segment ("1 台服务器 · 1 在线").
+      const invisible = !summary || summary.classList.contains('invisible');
+      const chips = summary
+        ? Array.from(summary.children).map((c) => c.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean)
+        : [];
+      sbServers.textContent = !invisible && chips.length ? `Total: ${chips.join(' · ')}` : 'Total: — servers';
+    };
+    syncServers();
+    setInterval(syncServers, 3000);
+
+    const clock = document.getElementById('w98-clock');
+    const tick = () => {
+      if (!clock) return;
+      const d = new Date();
+      clock.textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    };
+    tick();
+    setInterval(tick, 15000);
+
+    if (startBtn && startMenu) {
+      startBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = startMenu.classList.toggle('is-open');
+        startBtn.classList.toggle('is-open', open);
+        startBtn.setAttribute('aria-expanded', String(open));
+      });
+      document.addEventListener('click', (e) => {
+        if (!startMenu.contains(e.target) && e.target !== startBtn) {
+          startMenu.classList.remove('is-open');
+          startBtn.classList.remove('is-open');
+          startBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+    const refresh = document.getElementById('w98-sm-refresh');
+    if (refresh) refresh.addEventListener('click', () => window.location.reload());
+    const classic = document.getElementById('w98-sm-classic');
+    if (classic) classic.addEventListener('click', () => {
+      const btn = document.getElementById('win98-btn');
+      if (btn) btn.click();
+      else {
+        document.documentElement.classList.remove('win98');
+        try { localStorage.removeItem('preferred-ui'); } catch (_) {}
+      }
+      startMenu?.classList.remove('is-open');
+    });
   })();
 </script>

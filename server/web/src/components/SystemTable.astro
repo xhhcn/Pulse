@@ -2210,16 +2210,23 @@ const apiBase = apiBaseProp ?? '';
     return systemColors.get(name);
   }
   const forcedColors = () => !!(forcedColorsQuery && forcedColorsQuery.matches);
+  // The Windows 98 theme paints the panel around the canvas gray (#c0c0c0):
+  // the muted light-mode colours read as washed out on it, so the canvas
+  // text, grid and cursor take full-strength black / gray / navy there.
+  const win98Active = () => document.documentElement.classList.contains('win98');
   function axisLabelColor(isDarkMode) {
     if (forcedColors()) return systemColor('CanvasText');
+    if (win98Active()) return '#000000';
     return isDarkMode ? '#a7aaae' : '#5c5957';
   }
   function gridLineColor(isDarkMode) {
     if (forcedColors()) return systemColor('GrayText');
+    if (win98Active()) return 'rgba(128, 128, 128, 0.35)';
     return isDarkMode ? 'rgba(42, 43, 45, 0.5)' : 'rgba(221, 218, 215, 0.5)';
   }
   function cursorLineColor(isDarkMode) {
     if (forcedColors()) return systemColor('Highlight');
+    if (win98Active()) return '#000080';
     return isDarkMode ? '#2a2b2d' : '#dddad7';
   }
   if (forcedColorsQuery && forcedColorsQuery.addEventListener) {

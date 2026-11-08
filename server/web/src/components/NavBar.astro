@@ -63,6 +63,22 @@ const { isAdmin = false, bare = false } = Astro.props;
         class="theme-icon theme-icon-system w-[1.35rem] h-[1.35rem]"
       />
     </button>
+    <button
+      id="win98-btn"
+      class="inline-flex h-10 w-10 items-center justify-center rounded-[10.8px] text-[#1d1d20] dark:text-[#f5f5f5] transition-colors hover:bg-[#f3efec]/70 dark:hover:bg-[#282828]/70"
+      aria-label="Windows 98 theme"
+      aria-pressed="false"
+      title="Windows 98 theme"
+      data-translate-title="win98Theme"
+    >
+      <svg viewBox="0 0 16 16" class="w-[1.2rem] h-[1.2rem]" aria-hidden="true">
+        <rect x="1" y="2" width="14" height="4" fill="currentColor" opacity="0.85"/>
+        <rect x="3" y="3.5" width="2" height="1" fill="#00c000"/>
+        <rect x="1" y="7" width="14" height="4" fill="currentColor" opacity="0.85"/>
+        <rect x="3" y="8.5" width="2" height="1" fill="#00c000"/>
+        <rect x="1" y="12" width="14" height="3" fill="currentColor" opacity="0.85"/>
+      </svg>
+    </button>
     {bare ? null : isAdmin ? (
       <a
         id="navbar-admin-home-link"
@@ -242,6 +258,47 @@ const { isAdmin = false, bare = false } = Astro.props;
       const order = ['light', 'dark', 'system'];
       setThemePreference(order[(order.indexOf(getThemePreference()) + 1) % order.length]);
       updateThemeButton();
+    }
+
+    // ---- Windows 98 theme toggle (styles/win98.css, html.win98) ----
+    // The choice persists as localStorage("preferred-ui"); the page head
+    // re-applies the class before the first paint, so there is no flash.
+    // Win98 is a light theme through and through: while it is on, the
+    // dark-mode classes are stripped so charts, cards and the palette
+    // inside details panels all take their light branch (win98.css paints
+    // the chrome); turning it off restores the stored theme.
+    function getWin98() {
+      try { return localStorage.getItem('preferred-ui') === 'win98'; } catch (_) { return false; }
+    }
+    function applyThemeClasses(theme) {
+      const html = document.documentElement;
+      const body = document.body;
+      html.classList.toggle('dark', theme === 'dark');
+      html.classList.toggle('light', theme !== 'dark');
+      body.classList.toggle('dark', theme === 'dark');
+      body.classList.toggle('light', theme !== 'dark');
+      html.style.colorScheme = theme;
+    }
+    function applyWin98(on) {
+      document.documentElement.classList.toggle('win98', on);
+      const btn = document.getElementById('win98-btn');
+      if (btn) btn.setAttribute('aria-pressed', String(on));
+      if (on) {
+        applyThemeClasses('light');
+      } else {
+        const preference = getThemePreference();
+        applyThemeClasses(preference === 'system' ? getSystemTheme() : preference);
+      }
+      // Chart tooltips and the palette follow the themechange event.
+      window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: 'light' } }));
+    }
+    function toggleWin98() {
+      const on = !getWin98();
+      try {
+        if (on) localStorage.setItem('preferred-ui', 'win98');
+        else localStorage.removeItem('preferred-ui');
+      } catch (_) {}
+      applyWin98(on);
     }
 
     // Keep the "home" / "admin" navigation link's tooltip + aria-label
@@ -665,6 +722,14 @@ const { isAdmin = false, bare = false } = Astro.props;
         themeBtn.addEventListener('click', toggleTheme);
       }
 
+      // Windows 98 theme: apply the stored choice and wire the toggle.
+      applyWin98(getWin98());
+      const win98Btn = document.getElementById('win98-btn');
+      if (win98Btn) {
+        win98Btn.addEventListener('click', toggleWin98);
+        win98Btn.setAttribute('aria-pressed', String(getWin98()));
+      }
+
       // Initialize tooltip / aria-label text for both buttons on mount
       // so tooltips reflect the actual next action from the very first
       // hover (before the user has toggled anything). Also react to
@@ -681,10 +746,11 @@ const { isAdmin = false, bare = false } = Astro.props;
       });
 
       // With "follow the system" chosen, a change of the system's theme
-      // (a schedule, or the user switching it) reaches the open page.
+      // (a schedule, or the user switching it) reaches the open page —
+      // but not while the Win98 theme holds the page light.
       if (window.matchMedia) {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-          if (getThemePreference() !== 'system') return;
+          if (getThemePreference() !== 'system' || getWin98()) return;
           applyTheme(getSystemTheme());
           updateThemeButton();
         });

@@ -1,0 +1,462 @@
+/* ======================================================================
+   Windows 98 theme (html.win98) — a full-retro skin for the dashboard.
+   Scoped under html.win98 so the default theme is untouched; the toggle
+   lives in the navbar (#win98-btn) and the choice persists in
+   localStorage("preferred-ui"). Imported by pages that opt in (index).
+   ====================================================================== */
+
+html.win98 {
+  --w98-face: #c0c0c0;
+  --w98-hilite: #ffffff;
+  --w98-light: #dfdfdf;
+  --w98-shadow: #808080;
+  --w98-dark: #0a0a0a;
+  --w98-navy: #000080;
+  --w98-teal: #008080;
+  --w98-green: #008000;
+  color-scheme: light;
+  font-size: 13px;
+}
+
+/* ---------- base ---------- */
+html.win98 body {
+  background: var(--w98-teal) !important;
+  color: #000;
+  font-family: Tahoma, 'MS Sans Serif', 'Segoe UI', 'Microsoft YaHei', sans-serif !important;
+  font-size: 13px;
+  -webkit-font-smoothing: auto;
+  padding-bottom: 44px; /* room for the taskbar */
+}
+/* Chrome (title bar / status bar / taskbar) ships hidden; only the
+   Win98 theme shows it. */
+.w98-chrome { display: none !important; }
+html.win98 .w98-chrome { display: flex !important; }
+html.win98 .w98-chrome.w98-block { display: block !important; }
+
+/* ---------- 98 bevels (shared) ---------- */
+html.win98 .w98-raised,
+html.win98 .glass-nav,
+html.win98 #monitor-root {
+  background: var(--w98-face) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light) !important;
+}
+html.win98 .w98-sunken,
+html.win98 .glass-inner {
+  background: #fff !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow:
+    inset -1px -1px var(--w98-hilite), inset 1px 1px var(--w98-dark),
+    inset -2px -2px var(--w98-light), inset 2px 2px var(--w98-shadow) !important;
+}
+html.win98 .w98-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border: 0; background: var(--w98-face);
+  color: #000; font: inherit; cursor: pointer; white-space: nowrap;
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light);
+}
+html.win98 .w98-btn:active,
+html.win98 .w98-btn[aria-pressed='true'],
+html.win98 .w98-btn.is-active {
+  box-shadow:
+    inset 1px 1px var(--w98-shadow), inset -1px -1px var(--w98-hilite),
+    inset 2px 2px var(--w98-dark), inset -2px -2px var(--w98-light);
+}
+html.win98 .w98-btn:focus-visible { outline: 1px dotted #000; outline-offset: -4px; }
+
+/* Keep the page column above the fixed taskbar: min-h-screen alone would
+   put the status bar underneath it. */
+html.win98 #auth-check {
+  min-height: calc(100vh - 44px);
+}
+
+/* ---------- window chrome: title bar / menu bar ---------- */
+html.win98 .w98-titlebar {
+  position: sticky; top: 0; z-index: 50;
+  align-items: center; gap: 6px; height: 24px; padding: 0 3px 0 5px;
+  background: linear-gradient(90deg, var(--w98-navy), #1084d0);
+  color: #fff; font-weight: bold; font-size: 12px;
+}
+html.win98 .w98-titlebar .w98-tbtn {
+  width: 18px; height: 16px; padding: 0; margin-left: 2px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--w98-face); border: 0; color: #000;
+  font: bold 10px/1 Tahoma, sans-serif; cursor: pointer;
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light);
+}
+html.win98 .w98-titlebar .w98-tbtn:active {
+  box-shadow: inset 1px 1px var(--w98-shadow), inset -1px -1px var(--w98-hilite);
+}
+html.win98 .w98-titlebar .w98-t-ico { display: inline-flex; }
+html.win98 .w98-titlebar .w98-t-ico svg { width: 13px; height: 13px; }
+html.win98 .w98-titlebar .w98-t-text {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+html.win98 .w98-menubar {
+  gap: 2px; padding: 2px 6px;
+  background: var(--w98-face);
+  border-bottom: 1px solid var(--w98-shadow);
+  box-shadow: 0 1px 0 var(--w98-hilite);
+  font-size: 12px;
+}
+html.win98 .w98-menubar span { padding: 2px 9px; cursor: default; }
+html.win98 .w98-menubar span:hover { background: var(--w98-navy); color: #fff; }
+
+/* ---------- navbar strip under the title bar ---------- */
+html.win98 .glass-nav {
+  margin-top: 8px;
+  height: 36px !important;
+  padding: 0 6px !important;
+  max-width: 1180px !important;
+}
+html.win98 .glass-nav a,
+html.win98 .glass-nav button { border-radius: 0 !important; color: #000; }
+html.win98 .glass-nav button:hover,
+html.win98 .glass-nav a:hover { background: var(--w98-light) !important; }
+html.win98 .glass-nav #navbar-text { color: #000 !important; font-size: 13px; }
+html.win98 .glass-nav button:focus-visible,
+html.win98 .glass-nav a:focus-visible {
+  outline: 1px dotted #000 !important; outline-offset: -3px; box-shadow: none !important;
+}
+/* The theme-toggle button shows its state: pressed while Win98 is on. */
+html.win98 #win98-btn[aria-pressed='true'] {
+  box-shadow:
+    inset 1px 1px var(--w98-shadow), inset -1px -1px var(--w98-hilite);
+  background: var(--w98-light) !important;
+}
+
+/* ---------- main card / window body ---------- */
+html.win98 #monitor-root {
+  max-width: 1180px !important;
+  margin-top: 8px !important;
+  padding: 8px !important;
+}
+
+/* header above the list ("所有服务器 All Servers") */
+html.win98 #all-systems-title {
+  color: var(--w98-navy) !important;
+  font-size: 15px !important;
+  font-weight: bold;
+}
+html.win98 #all-systems-desc { color: #404040 !important; font-size: 11px; }
+html.win98 #all-systems-desc-lost { color: #800000 !important; }
+/* live summary chips -> one green badge, as the reference shot */
+html.win98 #systems-summary { gap: 0 !important; }
+html.win98 #systems-summary > span {
+  border-radius: 0 !important;
+  background: var(--w98-green) !important;
+  color: #fff !important;
+  font-size: 11px; padding: 1px 6px; margin-left: 6px;
+}
+html.win98 #systems-summary > span .h-1\.5 { background: #fff !important; }
+
+/* toolbar: view switch + filter + view menu */
+html.win98 .toolbar-control {
+  height: 24px !important;
+  border-radius: 0 !important;
+  border: 0 !important;
+  background: #fff !important;
+  color: #000 !important;
+  font-size: 12px;
+  box-shadow:
+    inset -1px -1px var(--w98-hilite), inset 1px 1px var(--w98-shadow),
+    inset -2px -2px var(--w98-light), inset 2px 2px var(--w98-dark) !important;
+}
+html.win98 .toolbar-control::placeholder { color: #808080 !important; }
+html.win98 .toolbar-control:focus-visible { box-shadow: inset 1px 1px var(--w98-navy), inset -1px -1px var(--w98-navy) !important; }
+html.win98 #system-filter-kbd { display: none !important; }
+html.win98 .toolbar-icon-btn,
+html.win98 .toolbar-btn {
+  height: 24px !important; border-radius: 0 !important; border: 0 !important;
+  background: var(--w98-face) !important; color: #000 !important;
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light) !important;
+}
+html.win98 .toolbar-icon-btn:hover,
+html.win98 .toolbar-btn:hover,
+html.win98 .toolbar-icon-btn[aria-expanded='true'] { background: var(--w98-light) !important; }
+
+/* 资源 | 延迟 switch, Win98 style */
+html.win98 #list-view-switch,
+html.win98 .chart-tabs {
+  gap: 2px; padding: 0; border: 0; background: transparent;
+}
+html.win98 .list-view-tab,
+html.win98 .chart-tab {
+  border-radius: 0 !important; border: 0 !important;
+  background: var(--w98-face) !important; color: #000 !important;
+  font-size: 11px; padding: 3px 10px;
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light) !important;
+}
+html.win98 .list-view-tab[aria-selected='true'],
+html.win98 .chart-tab[aria-selected='true'] {
+  background: var(--w98-light) !important; font-weight: bold;
+  box-shadow:
+    inset 1px 1px var(--w98-shadow), inset -1px -1px var(--w98-hilite),
+    inset 2px 2px var(--w98-dark), inset -2px -2px var(--w98-light) !important;
+}
+
+/* view menu (columns/status/sort dropdown) */
+html.win98 .view-menu {
+  border-radius: 0 !important; border: 0 !important;
+  background: var(--w98-face) !important; color: #000;
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light),
+    2px 2px 0 rgba(0, 0, 0, 0.35) !important;
+}
+html.win98 .view-menu-item {
+  border-radius: 0 !important; color: #000 !important; font-size: 12px;
+}
+html.win98 .view-menu-item:hover,
+html.win98 .view-menu-item:focus-visible { background: var(--w98-navy) !important; color: #fff !important; }
+html.win98 .view-menu-item svg { color: inherit !important; }
+html.win98 .view-menu-label { color: #404040; }
+
+/* ---------- table ---------- */
+html.win98 #system-table-header-row {
+  background: var(--w98-face) !important;
+  color: #000 !important;
+  border: 0 !important;
+  border-bottom: 2px solid !important;
+  border-color: var(--w98-hilite) var(--w98-shadow) var(--w98-shadow) var(--w98-hilite) !important;
+}
+html.win98 #system-table-header-row .sort-header {
+  color: #000 !important; font-weight: normal; gap: 3px;
+}
+html.win98 #system-table-header-row .sort-header:hover { text-decoration: underline; }
+html.win98 #system-table-header-row .sort-header:focus-visible { outline: 1px dotted #000; box-shadow: none; }
+html.win98 #system-table-header-row .sort-header-arrow { border-color: transparent; }
+
+/* rows: white ground, black text; hover #f0f0f0; expanded -> navy */
+html.win98 #systems-body > .system-row > [data-system-id] {
+  background: #fff !important;
+  color: #000;
+}
+html.win98 #systems-body > .system-row > [data-system-id]:hover {
+  background: #f0f0f0 !important;
+}
+html.win98 #systems-body > .system-row > [data-system-id][aria-expanded='true'] {
+  background: var(--w98-navy) !important;
+  color: #fff;
+}
+html.win98 #systems-body .system-row .row-name,
+html.win98 #systems-body .system-row .cell-location,
+html.win98 #systems-body .system-row .cell-net,
+html.win98 #systems-body .system-row .cell-uptime,
+html.win98 #systems-body .system-row .cell-os {
+  color: inherit !important;
+}
+html.win98 #systems-body .system-row .copy-btn { color: inherit !important; }
+
+/* status dot: square LED */
+html.win98 .status-dot {
+  border-radius: 0 !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+/* progress bars: sunken white track + segmented fill (the fill keeps its
+   green/amber/red Tailwind colour class; the stripes come from an overlay) */
+html.win98 #monitor-root .progress-track {
+  height: 13px !important;
+  border-radius: 0 !important;
+  background: #fff !important;
+  border: 1px solid;
+  border-color: var(--w98-shadow) var(--w98-hilite) var(--w98-hilite) var(--w98-shadow);
+  box-shadow: none !important;
+}
+html.win98 #monitor-root .progress-track > div {
+  background-image:
+    repeating-linear-gradient(90deg,
+      rgba(255, 255, 255, 0) 0 7px,
+      rgba(223, 223, 223, 0.9) 7px 9px) !important;
+}
+/* Row cells carry their own Tailwind text colours; in Win98 rows follow the
+   row's ground (black, white once selected navy). The status dot has no
+   text; the offline chip keeps its own white-on-colour look via its label. */
+html.win98 #systems-body .system-row > [data-system-id] span:not(.status-dot):not(.status-chip) {
+  color: inherit !important;
+}
+
+/* ---------- details (expanded panel) ---------- */
+html.win98 .system-details {
+  background: var(--w98-face) !important;
+  border-color: var(--w98-shadow) !important;
+  color: #000;
+}
+/* The info rows' muted greys (#595959) wash out on the gray panel; every
+   piece of detail text prints black (the #monitor-root rules in
+   SystemTable's own stylesheet carry an id, so these need one too). */
+html.win98 #monitor-root .detail-label,
+html.win98 #monitor-root .detail-value,
+html.win98 #monitor-root .detail-icon {
+  color: #000 !important;
+}
+html.win98 #monitor-root .resource-card-title,
+html.win98 #monitor-root .resource-card-desc,
+html.win98 #monitor-root [data-pane-desc] {
+  color: #000 !important;
+}
+/* The chart's legend doubles as the target tab strip (Beszel's); its muted
+   #595959 washes out on the gray card. The key squares keep their series
+   colour (they paint their own background). */
+html.win98 #monitor-root [data-chart-tabs] button {
+  color: #000 !important;
+}
+/* Resource history cards keep their light ground even when the visitor's
+   theme preference is dark (html.dark is stripped while Win98 is on, these
+   only pin it against the card stylesheet's own dark rules). */
+html.win98 #monitor-root .resource-card {
+  background: var(--w98-face) !important;
+  border: 1px solid var(--w98-shadow) !important;
+  border-radius: 0 !important;
+}
+/* the TCPing chart card inside the details */
+html.win98 [data-tcping-chart-container] > div {
+  border-radius: 0 !important;
+  background: var(--w98-face) !important;
+  border: 0 !important;
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light) !important;
+}
+
+/* ---------- pagination ---------- */
+html.win98 #systems-pagination { color: #000; font-size: 12px; }
+html.win98 #systems-pagination .pagination-btn {
+  border-radius: 0 !important; border: 0 !important; color: #000 !important;
+  background: var(--w98-face) !important; height: 22px; width: 26px;
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light) !important;
+}
+html.win98 #systems-pagination .pagination-btn:disabled { opacity: 0.5; }
+
+/* ---------- footer strip ---------- */
+html.win98 #page-footer { color: #dfdfdf; font-size: 11px; }
+html.win98 #page-footer a { color: #fff; }
+
+/* ---------- window chrome: status bar ---------- */
+html.win98 .w98-statusbar {
+  gap: 3px; padding: 3px 0;
+  max-width: 1180px; margin: 4px auto 10px;
+  font-size: 11px; color: #000;
+}
+html.win98 .w98-statusbar > span {
+  padding: 2px 8px; background: var(--w98-face); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  box-shadow: inset -1px -1px var(--w98-hilite), inset 1px 1px var(--w98-shadow);
+}
+html.win98 .w98-statusbar .grow { flex: 1 1 auto; }
+html.win98 .w98-statusbar .w98-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: #00d000; box-shadow: 0 0 3px #00d000;
+  vertical-align: middle; margin-right: 4px;
+}
+
+/* ---------- taskbar ---------- */
+html.win98 .w98-taskbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  align-items: stretch; gap: 4px; height: 34px; padding: 3px 3px 0;
+  background: var(--w98-face);
+  box-shadow: inset 0 1px var(--w98-hilite), inset 0 2px var(--w98-light);
+}
+html.win98 .w98-start {
+  display: inline-flex; align-items: center; gap: 5px; padding: 0 10px 0 6px;
+  border: 0; background: var(--w98-face); color: #000;
+  font: bold 12px Tahoma, sans-serif; cursor: pointer;
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light);
+}
+html.win98 .w98-start:active,
+html.win98 .w98-start.is-open {
+  box-shadow: inset 1px 1px var(--w98-shadow), inset -1px -1px var(--w98-hilite);
+}
+html.win98 .w98-taskbtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-width: 160px; max-width: 240px; padding: 0 8px;
+  border: 0; background: var(--w98-face); color: #000;
+  font: 12px Tahoma, sans-serif; overflow: hidden; white-space: nowrap;
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light);
+  font-weight: bold;
+}
+html.win98 .w98-tray {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+  padding: 0 10px; font-size: 12px;
+  box-shadow: inset -1px -1px var(--w98-hilite), inset 1px 1px var(--w98-shadow);
+}
+
+/* start menu */
+html.win98 .w98-startmenu {
+  position: fixed; left: 2px; bottom: 36px; z-index: 70;
+  display: none; width: 220px; padding: 3px;
+  background: var(--w98-face); color: #000;
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light);
+}
+/* .w98-chrome's display:flex !important must not pin the menu open: the
+   is-open class owns it (index.astro toggles it). */
+html.win98 .w98-chrome.w98-startmenu { display: none !important; }
+html.win98 .w98-chrome.w98-startmenu.is-open { display: flex !important; }
+html.win98 .w98-startmenu.is-open { display: flex; }
+html.win98 .w98-sm-side {
+  width: 26px; flex: none;
+  background: linear-gradient(180deg, var(--w98-navy), #1084d0);
+  color: #fff; display: flex; align-items: flex-end; justify-content: center;
+  padding: 8px 0; font: bold 13px Tahoma, sans-serif; letter-spacing: 1px;
+}
+html.win98 .w98-sm-side b { writing-mode: vertical-rl; transform: rotate(180deg); }
+html.win98 .w98-sm-items { flex: 1; padding: 3px 0; }
+html.win98 .w98-sm-item {
+  display: flex; align-items: center; gap: 9px; padding: 6px 10px;
+  cursor: default; color: #000; text-decoration: none; font-size: 12px;
+}
+html.win98 .w98-sm-item:hover { background: var(--w98-navy); color: #fff; }
+html.win98 .w98-sm-item svg { width: 15px; height: 15px; flex: none; }
+html.win98 .w98-sm-sep {
+  height: 0; margin: 3px 6px;
+  border-top: 1px solid var(--w98-shadow);
+  border-bottom: 1px solid var(--w98-hilite);
+}
+
+/* ---------- scrollbars ---------- */
+html.win98 ::-webkit-scrollbar { width: 16px; height: 16px; }
+html.win98 ::-webkit-scrollbar-track {
+  background: repeating-conic-gradient(#fff 0 25%, var(--w98-light) 0 50%) 0 0 / 2px 2px;
+}
+html.win98 ::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: var(--w98-face);
+  box-shadow:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-hilite),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light);
+}
+html.win98 * { scrollbar-color: var(--w98-shadow) var(--w98-light); }
+
+/* ---------- misc ---------- */
+html.win98 .pulse-tooltip {
+  border-radius: 0; background: #ffffe1; color: #000;
+  border: 1px solid #000; box-shadow: 2px 2px 0 rgba(0,0,0,0.35);
+  font-size: 12px;
+}
+html.win98 .glass-card,
+html.win98 .glass-inner { backdrop-filter: none !important; }
+/* Stop the rounded dividers between rows; the white rows need no lines. */
+html.win98 #systems-body { --tw-divide-opacity: 0 !important; }
+/* Win98 has no rounded corners anywhere. */
+html.win98 #monitor-root [class*='rounded-'] { border-radius: 0 !important; }
