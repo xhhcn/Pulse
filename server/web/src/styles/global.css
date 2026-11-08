@@ -231,14 +231,6 @@ html.dark .pulse-tooltip {
   #theme-btn .theme-icon-in { animation: none; }
 }
 
-.icon-btn {
-  @apply rounded-lg p-2 text-[#a3a3a3] transition-colors hover:bg-[#282828] hover:text-[#e5e5e5];
-}
-
-.panel {
-  @apply rounded-2xl border border-gray-700 bg-[#1c1c1c] shadow-lg shadow-black/40;
-}
-
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -310,12 +302,9 @@ html.light * {
    paragraphs in modals) than they help in dashboards. */
 [data-tabular-nums],
 [data-tabular-nums] *,
-.system-row .text-right,
 .system-row span.font-medium:not(.row-name),
 .system-total-net-in,
 .system-total-net-out,
-[data-tcping-avg],
-[data-tcping-loss],
 [data-traffic-tag] .traffic-value,
 [data-speed-tag] .speed-value,
 [data-detail-speed] span,
@@ -386,16 +375,6 @@ html.light :focus-visible {
   outline: none;
 }
 
-/* Hide scrollbar but keep scrolling functionality */
-.scrollbar-hide {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;  /* Chrome, Safari and Opera */
-}
-
 /* ========================================
    Page & Element Transition Animations
    ======================================== */
@@ -414,51 +393,6 @@ html.light :focus-visible {
 
 .animate-page-in {
   animation: page-fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* Skeleton loading pulse animation */
-@keyframes skeleton-pulse {
-  0%, 100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-.animate-skeleton {
-  animation: skeleton-pulse 1.5s ease-in-out infinite;
-}
-
-/* Shimmer loading effect */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.animate-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.05) 50%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-}
-
-.light .animate-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.04) 50%,
-    rgba(0, 0, 0, 0) 100%
-  );
-  background-size: 200% 100%;
 }
 
 /* Modal animations, Beszel's dialog (tw-animate-css): the overlay fades in
@@ -521,53 +455,6 @@ html.light :focus-visible {
   animation: modal-content-out 0.2s ease forwards;
 }
 
-/* Card/Panel hover lift effect */
-.hover-lift {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.hover-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px -8px rgba(0, 0, 0, 0.3);
-}
-
-/* Row expand/collapse animation */
-@keyframes row-expand {
-  from {
-    opacity: 0;
-    max-height: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-  }
-  to {
-    opacity: 1;
-    max-height: 500px;
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-  }
-}
-
-@keyframes row-collapse {
-  from {
-    opacity: 1;
-    max-height: 500px;
-  }
-  to {
-    opacity: 0;
-    max-height: 0;
-  }
-}
-
-.animate-row-expand {
-  animation: row-expand 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  overflow: hidden;
-}
-
-.animate-row-collapse {
-  animation: row-collapse 0.2s ease-out forwards;
-  overflow: hidden;
-}
-
 /* Subtle scale-in for new elements */
 @keyframes scale-in {
   from {
@@ -598,46 +485,9 @@ html.light :focus-visible {
   animation: spin-smooth 0.8s linear infinite;
 }
 
-/* Progress bar fill animation */
-@keyframes progress-fill {
-  from {
-    width: 0%;
-  }
-}
-
-.animate-progress {
-  animation: progress-fill 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* Fade transition for data updates */
-.data-update-transition {
-  transition: opacity 0.15s ease, color 0.15s ease;
-}
-
-/* Table row highlight on update */
-@keyframes row-highlight {
-  0% {
-    background-color: rgba(52, 211, 153, 0.1);
-  }
-  100% {
-    background-color: transparent;
-  }
-}
-
-.animate-row-update {
-  animation: row-highlight 0.8s ease-out;
-}
-
 /* Login card entrance: the dialogs' motion (Beszel's dialog), once. */
 .animate-login-card {
   animation: modal-content-in 0.2s ease forwards;
-}
-
-/* Fix for modals inside animated containers - move to body level */
-.modal-portal {
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 9999 !important;
 }
 
 /* ========================================
@@ -1103,11 +953,9 @@ html.glass-enabled.dark :is(.pulse-tooltip, .pulse-tooltip-arrow, .tcping-toolti
    spinner keeps turning: it tells that something is in progress. Dialogs
    close on a timer, not on animationend, so skipping the exit is safe. */
 @media (prefers-reduced-motion: reduce) {
-  .animate-page-in, .animate-scale-in, .animate-progress,
-  .animate-row-update, .animate-row-expand, .animate-row-collapse,
+  .animate-page-in, .animate-scale-in,
   .animate-login-card,
-  .modal-backdrop-enter, .modal-content-enter, .modal-backdrop-exit, .modal-content-exit,
-  .animate-skeleton, .animate-shimmer {
+  .modal-backdrop-enter, .modal-content-enter, .modal-backdrop-exit, .modal-content-exit {
     animation: none !important;
   }
   .animate-page-in, .animate-scale-in, .animate-login-card,

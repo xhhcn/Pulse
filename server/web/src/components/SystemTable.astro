@@ -76,6 +76,110 @@ const apiBase = apiBaseProp ?? '';
   import chartJsUrl from '../../vendor/chart.js/chart.umd.js?url';
   import chartJsAdapterUrl from '../../vendor/chartjs-adapter-date-fns/chartjs-adapter-date-fns.bundle.min.js?url';
 
+  // Every word the dashboard shows, in both languages: first in the script,
+  // because functions called while it loads reach for it (a const further
+  // down was a ReferenceError there that stopped the whole page).
+  const translations = {
+    'noSystemsFound': { en: 'No servers found', zh: '未找到服务器' },
+    'systemsWillAppear': { en: 'Servers will appear here once their clients start reporting', zh: '客户端开始上报后，服务器将显示在这里' },
+    'copyServerLink': { en: 'Copy a link to this server', zh: '复制这台服务器的链接' },
+    'linkCopied': { en: 'Link copied', zh: '已复制链接' },
+    // Empty state of a filter that matches nothing (the services exist).
+    'noMatchingLine': { en: 'No matching servers.', zh: '没有匹配的服务器。' },
+    'locationInfo': { en: 'Location:', zh: '位置:' },
+    'lastSeenInfo': { en: 'Last seen:', zh: '最后在线:' },
+    'lastSeen': { en: 'Last seen', zh: '最后在线' },
+    'justNow': { en: 'just now', zh: '刚刚' },
+    'minutesAgo': { en: '{n} min ago', zh: '{n} 分钟前' },
+    'hoursAgo': { en: '{n} h ago', zh: '{n} 小时前' },
+    'daysAgo': { en: '{n} d ago', zh: '{n} 天前' },
+    'osInfo': { en: 'OS:', zh: '系统:' },
+    'cpuInformation': { en: 'CPU:', zh: 'CPU:' },
+    'memoryInfo': { en: 'Memory:', zh: '内存:' },
+    'swapPartition': { en: 'Swap:', zh: '交换:' },
+    'diskInformation': { en: 'Disk:', zh: '磁盘:' },
+    // As VPS users read them (and other probes, Nezha among them, put them):
+    // 网速 the rate, 流量 the amount. The totals are the interfaces' counters,
+    // which start again when the server boots.
+    'realtimeTraffic': { en: 'Speed:', zh: '网速:' },
+    'totalTraffic': { en: 'Traffic:', zh: '流量:' },
+    'totalTrafficHint': { en: 'Since the server last booted', zh: '开机以来的总流量' },
+    'tcpingLatency': { en: 'TCPing Latency', zh: 'TCPing 延迟' },
+    'tcpingRange': { en: 'Time range', zh: '时间范围' },
+    'tabLatency': { en: 'Latency', zh: '延迟' },
+    'tabResources': { en: 'Resources', zh: '资源' },
+    'resourceDesc': { en: 'Minute averages kept by the server', zh: '服务端记录的每分钟平均值' },
+    'resourceDesc5': { en: '5-minute averages of the server\'s records', zh: '服务端记录的每 5 分钟平均值' },
+    'resourceDesc10': { en: '10-minute averages of the server\'s records', zh: '服务端记录的每 10 分钟平均值' },
+    'resourceDesc20': { en: '20-minute averages of the server\'s records', zh: '服务端记录的每 20 分钟平均值' },
+    'resCpu': { en: 'CPU', zh: 'CPU' },
+    'resCpuDesc': { en: 'Average usage', zh: '平均使用率' },
+    'resMem': { en: 'Memory', zh: '内存' },
+    'resMemDesc': { en: 'Share in use', zh: '使用率' },
+    'resDisk': { en: 'Disk', zh: '磁盘' },
+    'resDiskDesc': { en: 'Share in use', zh: '使用率' },
+    'resNet': { en: 'Network', zh: '网络' },
+    'resNetIn': { en: '↓ In', zh: '↓ 下载' },
+    'resNetOut': { en: '↑ Out', zh: '↑ 上传' },
+    // what each resource tooltip calls its value (a word that fills the line,
+    // not a bare "CPU" far from its number)
+    'resCpuTip': { en: 'CPU usage', zh: 'CPU 使用率' },
+    'resMemTip': { en: 'Memory usage', zh: '内存使用率' },
+    'resDiskTip': { en: 'Disk usage', zh: '磁盘使用率' },
+    // averaged (按时段平均): the same, said to be averages
+    'resCpuTipAvg': { en: 'Avg CPU usage', zh: 'CPU 平均使用率' },
+    'resMemTipAvg': { en: 'Avg memory usage', zh: '内存平均使用率' },
+    'resDiskTipAvg': { en: 'Avg disk usage', zh: '磁盘平均使用率' },
+    'resNetInAvg': { en: '↓ Avg download', zh: '↓ 平均下载速度' },
+    'resNetOutAvg': { en: '↑ Avg upload', zh: '↑ 平均上传速度' },
+    'resEmpty': { en: 'Nothing recorded yet: the server keeps a sample of each server every minute; check back in a minute or two.', zh: '还没有记录：服务端每分钟记录一次，过一两分钟再看。' },
+    'latHeadTitle': { en: '{name}: average latency and loss over the last hour', zh: '{name}：近 1 小时平均延迟与丢包' },
+    'resUnavailable': { en: 'The resource history could not be loaded; trying again in a minute.', zh: '资源历史暂时读取不到，一分钟后再试。' },
+    'tcpingTabLoss': { en: '{pct} lost', zh: '丢包 {pct}' },
+    // after the sorted column's name, for screen readers only
+    'sortStateAsc': { en: ', ascending', zh: '，升序' },
+    'sortStateDesc': { en: ', descending', zh: '，降序' },
+    'loadFailed': { en: "Couldn't load the server list", zh: '无法加载服务器列表' },
+    'loadRetrying': { en: 'Retrying automatically…', zh: '正在自动重试…' },
+    'tcpingChartDesc': { en: 'TCP handshake time of every probe', zh: '每次探测的 TCP 握手时间' },
+    'avgLatency': { en: 'Avg:', zh: '平均:' },
+    'avgLatencyAll': { en: 'Avg (all):', zh: '全部平均:' },
+    'tcpingLastProbe': { en: 'Last probe {time}', zh: '最后探测 {time}' },
+    'packetLoss': { en: 'Loss:', zh: '丢包:' },
+    'loading': { en: 'Loading...', zh: '加载中...' },
+    'noData': { en: 'No data', zh: '暂无数据' },
+    // The agent reported this target as "skipped": the node has no route of
+    // the target's address family (typically an IPv6 target on a v4-only
+    // node). This is NOT packet loss, and NOT "no samples yet".
+    'tcpingUnreachable': {
+      en: 'This node cannot reach this target (no IPv4/IPv6 route)',
+      zh: '此节点无法访问该目标（无对应的 IPv4/IPv6 路由）'
+    },
+    // Summary value for a skipped target — never "0.00 ms" / "0.00%", which
+    // would read as "perfect link" / "total loss" respectively.
+    'notApplicable': { en: 'N/A', zh: '不适用' },
+    // Tooltip line of a target whose probe failed at the hovered time.
+    'tcpingTimeout': { en: 'Timeout', zh: '超时' },
+    'tcpingLossLane': { en: 'Loss', zh: '丢包' },
+    // Offline row chip and the summary beside the title.
+    'offlineChip': { en: 'Offline', zh: '离线' },
+    'awaitingChip': { en: 'Pending', zh: '等待接入' },
+    'summaryTotal': { en: 'servers', zh: '台服务器' },
+    'summaryOnline': { en: 'online', zh: '在线' },
+    'summaryOffline': { en: 'offline', zh: '离线' },
+    'summaryAwaiting': { en: 'pending', zh: '等待接入' },
+    'summaryShowOffline': { en: 'Show only the offline servers', zh: '只看离线的服务器' },
+    'summaryShowAll': { en: 'Show all servers', zh: '显示全部服务器' },
+    'paginationLabel': { en: 'Pages', zh: '分页' },
+    'paginationRange': { en: '{from}–{to} of {total}', zh: '第 {from}–{to} 台，共 {total} 台' },
+    'paginationPage': { en: 'Page {page} of {pages}', zh: '第 {page} / {pages} 页' },
+    'firstPage': { en: 'First page', zh: '第一页' },
+    'prevPage': { en: 'Previous page', zh: '上一页' },
+    'nextPage': { en: 'Next page', zh: '下一页' },
+    'lastPage': { en: 'Last page', zh: '最后一页' },
+    'connectionLost': { en: 'Connection lost, reconnecting…', zh: '连接中断，正在重连…' },
+  };
+
   // Import utility functions (inline for Astro compatibility)
   const getApiBase = (root) => {
     if (root?.dataset.apiBase && root.dataset.apiBase.trim() !== '') {
@@ -603,7 +707,7 @@ const apiBase = apiBaseProp ?? '';
   // user perceives as "the dashboard keeps fading in". It only softens the
   // loading preview's exit, not a refresh signal, so it runs exactly once
   // per page session.
-  let staggerAnimationPlayed = false;
+  let firstListFadePlayed = false;
 
   // The view settings last for the visit: every load starts from the site's
   // defaults — the order the admin set (sort field null), 全部 and an empty
@@ -624,6 +728,9 @@ const apiBase = apiBaseProp ?? '';
   let listView = 'resources';
   let latencySummary = null;
   let latencyTimer = 0;
+  // the TCPing config (targets), preloaded on page load; read by the 延迟
+  // view's columns, which the layout code builds while the script loads
+  let cachedTCPingConfig = null;
   // Layout (the table — on phones its compact rows — or Beszel's cards, at
   // every width as in Beszel) and the fields shown; the name stays.
   const HIDEABLE_COLS = ['uptime', 'location', 'cpu', 'memory', 'disk', 'net', 'os'];
@@ -1105,17 +1212,18 @@ const apiBase = apiBaseProp ?? '';
   // some 1400 px up), so the view goes back to where the list begins: the
   // filter row above it, as when the page opened. Only when the list's top
   // is out of sight; smooth unless the visitor asks for less motion. (Beszel
-  // leaves the view where it was.)
+  // leaves the view where it was.) True when it scrolled.
   function revealListTop() {
     const anchor = document.getElementById('system-filter-input');
     const list = document.getElementById('systems-body');
-    if (!anchor || !list || list.getBoundingClientRect().top >= 0) return;
+    if (!anchor || !list || list.getBoundingClientRect().top >= 0) return false;
     const top = Math.max(0, anchor.getBoundingClientRect().top + window.scrollY - 16);
     const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     window.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
+    return true;
   }
   document.querySelectorAll('#systems-pagination .pagination-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
       const size = effectivePageSize();
       if (!size) return;
       const last = Math.max(0, Math.ceil(pagedRows().length / size) - 1);
@@ -1124,7 +1232,11 @@ const apiBase = apiBaseProp ?? '';
       pageIndex = Math.min(Math.max(0, to), last);
       pageAnchor = pageIndex * size;
       applyPagination();
-      if (pageIndex !== before) revealListTop();
+      // A pointer's turn shows the new page from its top and lets go of the
+      // button, now out of sight: Space scrolls again instead of turning a
+      // page nobody saw. A turn from the keys (detail 0) leaves the view on
+      // the button, as Beszel does, so the keys can go on from it.
+      if (pageIndex !== before && e.detail !== 0 && revealListTop()) btn.blur();
     });
   });
   window.addEventListener('navbarconfigready', () => applyPagination());
@@ -1982,106 +2094,6 @@ const apiBase = apiBaseProp ?? '';
     return details;
   }
 
-  const translations = {
-    'noSystemsFound': { en: 'No servers found', zh: '未找到服务器' },
-    'systemsWillAppear': { en: 'Servers will appear here once their clients start reporting', zh: '客户端开始上报后，服务器将显示在这里' },
-    'copyServerLink': { en: 'Copy a link to this server', zh: '复制这台服务器的链接' },
-    'linkCopied': { en: 'Link copied', zh: '已复制链接' },
-    // Empty state of a filter that matches nothing (the services exist).
-    'noMatchingLine': { en: 'No matching servers.', zh: '没有匹配的服务器。' },
-    'locationInfo': { en: 'Location:', zh: '位置:' },
-    'lastSeenInfo': { en: 'Last seen:', zh: '最后在线:' },
-    'lastSeen': { en: 'Last seen', zh: '最后在线' },
-    'justNow': { en: 'just now', zh: '刚刚' },
-    'minutesAgo': { en: '{n} min ago', zh: '{n} 分钟前' },
-    'hoursAgo': { en: '{n} h ago', zh: '{n} 小时前' },
-    'daysAgo': { en: '{n} d ago', zh: '{n} 天前' },
-    'osInfo': { en: 'OS:', zh: '系统:' },
-    'cpuInformation': { en: 'CPU:', zh: 'CPU:' },
-    'memoryInfo': { en: 'Memory:', zh: '内存:' },
-    'swapPartition': { en: 'Swap:', zh: '交换:' },
-    'diskInformation': { en: 'Disk:', zh: '磁盘:' },
-    // As VPS users read them (and other probes, Nezha among them, put them):
-    // 网速 the rate, 流量 the amount. The totals are the interfaces' counters,
-    // which start again when the server boots.
-    'realtimeTraffic': { en: 'Speed:', zh: '网速:' },
-    'totalTraffic': { en: 'Traffic:', zh: '流量:' },
-    'totalTrafficHint': { en: 'Since the server last booted', zh: '开机以来的总流量' },
-    'tcpingLatency': { en: 'TCPing Latency', zh: 'TCPing 延迟' },
-    'tcpingRange': { en: 'Time range', zh: '时间范围' },
-    'tabLatency': { en: 'Latency', zh: '延迟' },
-    'tabResources': { en: 'Resources', zh: '资源' },
-    'resourceDesc': { en: 'Minute averages kept by the server', zh: '服务端记录的每分钟平均值' },
-    'resourceDesc5': { en: '5-minute averages of the server\'s records', zh: '服务端记录的每 5 分钟平均值' },
-    'resourceDesc10': { en: '10-minute averages of the server\'s records', zh: '服务端记录的每 10 分钟平均值' },
-    'resourceDesc20': { en: '20-minute averages of the server\'s records', zh: '服务端记录的每 20 分钟平均值' },
-    'resCpu': { en: 'CPU', zh: 'CPU' },
-    'resCpuDesc': { en: 'Average usage', zh: '平均使用率' },
-    'resMem': { en: 'Memory', zh: '内存' },
-    'resMemDesc': { en: 'Share in use', zh: '使用率' },
-    'resDisk': { en: 'Disk', zh: '磁盘' },
-    'resDiskDesc': { en: 'Share in use', zh: '使用率' },
-    'resNet': { en: 'Network', zh: '网络' },
-    'resNetIn': { en: '↓ In', zh: '↓ 下载' },
-    'resNetOut': { en: '↑ Out', zh: '↑ 上传' },
-    // what each resource tooltip calls its value (a word that fills the line,
-    // not a bare "CPU" far from its number)
-    'resCpuTip': { en: 'CPU usage', zh: 'CPU 使用率' },
-    'resMemTip': { en: 'Memory usage', zh: '内存使用率' },
-    'resDiskTip': { en: 'Disk usage', zh: '磁盘使用率' },
-    // averaged (按时段平均): the same, said to be averages
-    'resCpuTipAvg': { en: 'Avg CPU usage', zh: 'CPU 平均使用率' },
-    'resMemTipAvg': { en: 'Avg memory usage', zh: '内存平均使用率' },
-    'resDiskTipAvg': { en: 'Avg disk usage', zh: '磁盘平均使用率' },
-    'resNetInAvg': { en: '↓ Avg download', zh: '↓ 平均下载速度' },
-    'resNetOutAvg': { en: '↑ Avg upload', zh: '↑ 平均上传速度' },
-    'resEmpty': { en: 'Nothing recorded yet: the server keeps a sample of each server every minute; check back in a minute or two.', zh: '还没有记录：服务端每分钟记录一次，过一两分钟再看。' },
-    'latHeadTitle': { en: '{name}: average latency and loss over the last hour', zh: '{name}：近 1 小时平均延迟与丢包' },
-    'resUnavailable': { en: 'The resource history could not be loaded; trying again in a minute.', zh: '资源历史暂时读取不到，一分钟后再试。' },
-    'tcpingTabLoss': { en: '{pct} lost', zh: '丢包 {pct}' },
-    // after the sorted column's name, for screen readers only
-    'sortStateAsc': { en: ', ascending', zh: '，升序' },
-    'sortStateDesc': { en: ', descending', zh: '，降序' },
-    'loadFailed': { en: "Couldn't load the server list", zh: '无法加载服务器列表' },
-    'loadRetrying': { en: 'Retrying automatically…', zh: '正在自动重试…' },
-    'tcpingChartDesc': { en: 'TCP handshake time of every probe', zh: '每次探测的 TCP 握手时间' },
-    'avgLatency': { en: 'Avg:', zh: '平均:' },
-    'avgLatencyAll': { en: 'Avg (all):', zh: '全部平均:' },
-    'tcpingLastProbe': { en: 'Last probe {time}', zh: '最后探测 {time}' },
-    'packetLoss': { en: 'Loss:', zh: '丢包:' },
-    'loading': { en: 'Loading...', zh: '加载中...' },
-    'noData': { en: 'No data', zh: '暂无数据' },
-    // The agent reported this target as "skipped": the node has no route of
-    // the target's address family (typically an IPv6 target on a v4-only
-    // node). This is NOT packet loss, and NOT "no samples yet".
-    'tcpingUnreachable': {
-      en: 'This node cannot reach this target (no IPv4/IPv6 route)',
-      zh: '此节点无法访问该目标（无对应的 IPv4/IPv6 路由）'
-    },
-    // Summary value for a skipped target — never "0.00 ms" / "0.00%", which
-    // would read as "perfect link" / "total loss" respectively.
-    'notApplicable': { en: 'N/A', zh: '不适用' },
-    // Tooltip line of a target whose probe failed at the hovered time.
-    'tcpingTimeout': { en: 'Timeout', zh: '超时' },
-    'tcpingLossLane': { en: 'Loss', zh: '丢包' },
-    // Offline row chip and the summary beside the title.
-    'offlineChip': { en: 'Offline', zh: '离线' },
-    'awaitingChip': { en: 'Pending', zh: '等待接入' },
-    'summaryTotal': { en: 'servers', zh: '台服务器' },
-    'summaryOnline': { en: 'online', zh: '在线' },
-    'summaryOffline': { en: 'offline', zh: '离线' },
-    'summaryAwaiting': { en: 'pending', zh: '等待接入' },
-    'summaryShowOffline': { en: 'Show only the offline servers', zh: '只看离线的服务器' },
-    'summaryShowAll': { en: 'Show all servers', zh: '显示全部服务器' },
-    'paginationLabel': { en: 'Pages', zh: '分页' },
-    'paginationRange': { en: '{from}–{to} of {total}', zh: '第 {from}–{to} 台，共 {total} 台' },
-    'paginationPage': { en: 'Page {page} of {pages}', zh: '第 {page} / {pages} 页' },
-    'firstPage': { en: 'First page', zh: '第一页' },
-    'prevPage': { en: 'Previous page', zh: '上一页' },
-    'nextPage': { en: 'Next page', zh: '下一页' },
-    'lastPage': { en: 'Last page', zh: '最后一页' },
-    'connectionLost': { en: 'Connection lost, reconnecting…', zh: '连接中断，正在重连…' },
-  };
 
   // [title, hint] of the empty table: no services at all / none match the filter.
   const emptyMessageKeys = [['noSystemsFound', 'systemsWillAppear']];
@@ -2123,8 +2135,11 @@ const apiBase = apiBaseProp ?? '';
     document.querySelectorAll('#systems-body .cell-uptime .cell-value[data-uptime]').forEach((el) => { el.textContent = uptimeText(el.dataset.uptime); });
     // The 延迟 view's header titles
     if (listView === 'latency') ensureLatencyHeader();
-    // The 资源 charts' series names
-    resourcePanes.forEach((_, id) => drawResourceCharts(id));
+    // The 资源 charts' series names, when the language changed: this pass
+    // also runs after every render that adds rows (each filter keystroke
+    // that brings rows back), where rebuilding the four charts cost 60 ms,
+    // 240 ms on a slow phone.
+    resourcePanes.forEach((entry, id) => { if (entry.lang !== lang) drawResourceCharts(id); });
     // The time range picker's label (an open menu closes), the legend's words
     closeTCPingRangeMenu();
     syncTCPingRangeButtons();
@@ -2965,7 +2980,7 @@ const apiBase = apiBaseProp ?? '';
   // so `/api/tcping/history` returns no rows for it and the server-side
   // `stats` already exclude it. The frontend therefore must NOT read the
   // resulting absence as packet loss or as "no data yet": it is a third,
-  // distinct state that gets its own notice and an N/A summary.
+  // distinct state that gets its own notice (and a muted legend entry).
   const tcpingSkippedTargets = new Map(); // systemId -> Set<targetAddress>
 
   // Record (or clear) the skipped-target set for one system from a raw
@@ -3018,8 +3033,8 @@ const apiBase = apiBaseProp ?? '';
     return targets.every(t => t && skipped.has(t.address));
   }
 
-  // Global cache for TCPing config (preloaded on page load)
-  let cachedTCPingConfig = null;
+  // (cachedTCPingConfig, the TCPing config preloaded on page load, is
+  // declared with the list's early state above: the layout code reads it.)
   let tcpingConfigLoading = null; // Promise to prevent duplicate fetches
 
   // Cleanup function to destroy tcping chart for a system
@@ -4124,9 +4139,8 @@ const apiBase = apiBaseProp ?? '';
       // class toggles against elements that already exist, costs no layout,
       // and is idempotent — so it is safe to run on every exit path, and it
       // is the single place that decides whether the chart or the notice is
-      // visible. It runs LAST on purpose: the impl may have just written 0 ms
-      // / 0.00% or "-" into the summary, and for a skipped target that has to
-      // be replaced with N/A.
+      // visible. It runs LAST on purpose: the impl's own exits may have just
+      // shown the chart or "No data" over a target the node cannot reach.
       try { applyTCPingUnreachableState(systemId); } catch (_) {}
     }
   }
@@ -4197,6 +4211,10 @@ const apiBase = apiBaseProp ?? '';
     if ((loadingState && loadingState.cancelled) || !container.isConnected) {
       return;
     }
+    // A minute's read that lands after its row closed (the chart torn down
+    // meanwhile) keeps nothing: it held that server's whole day of probes
+    // until the row was opened and closed again.
+    if (incremental && existingChartData && tcpingCharts.get(chartKey) !== existingChartData) return;
     if (apiResponse && !apiResponse.__error && Array.isArray(apiResponse.results)) {
       tcpingRawHistory.set(systemId, apiResponse.results);
     }
@@ -4215,13 +4233,10 @@ const apiBase = apiBaseProp ?? '';
 
     // Extract results and pre-calculated stats from API response
     // Backward compatible: if apiResponse is array (old format), use it directly
-    // If apiResponse is object with results (new format), extract results and stats
+    // If apiResponse is object with results (new format), extract results
     const allHistoryRaw = Array.isArray(apiResponse)
       ? apiResponse
       : (apiResponse && !apiResponse.__error ? (apiResponse.results || []) : []);
-    const preCalculatedStats = (!Array.isArray(apiResponse) && apiResponse && !apiResponse.__error && apiResponse.stats)
-      ? apiResponse.stats
-      : null;
     
     // Group history data by target address
     const historyByTarget = new Map();
@@ -4342,15 +4357,6 @@ const apiBase = apiBaseProp ?? '';
         targetIndex: index // Store index for color lookup
       });
     });
-    
-    // Calculate statistics for all targets (use pre-calculated stats if available from backend)
-    if (preCalculatedStats && !selectedTarget && tcpingRangeHours() === 24) {
-      // Use pre-calculated statistics from backend (much faster!)
-      updateTCPingStats(systemId, preCalculatedStats.avg_latency, preCalculatedStats.packet_loss_rate);
-    } else {
-      // Calculate statistics on frontend (for selected target or if backend stats unavailable)
-      calculateAndUpdateStats(systemId, selectedTarget);
-    }
     
     // Check if there's no data - show "No data" state instead of empty chart.
     //
@@ -4535,14 +4541,7 @@ const apiBase = apiBaseProp ?? '';
             chart.update('none');
             updateTCPingTabAverages(systemId);
             updateTCPingLastProbe(systemId);
-            
-            // Update statistics after incremental update
-            // Use pre-calculated stats if available and no target is selected
-            if (preCalculatedStats && !selectedTarget && tcpingRangeHours() === 24) {
-              updateTCPingStats(systemId, preCalculatedStats.avg_latency, preCalculatedStats.packet_loss_rate);
-            } else {
-              calculateAndUpdateStats(systemId, selectedTarget);
-            }
+
           }
         } catch (err) {
           // Chart update failed silently
@@ -5069,15 +5068,6 @@ const apiBase = apiBaseProp ?? '';
     tcpingLastReadAt.set(systemId, Date.now());
     updateTCPingTabAverages(systemId);
     updateTCPingLastProbe(systemId);
-
-    // The summary for a selected target, or for a span shorter than the
-    // server's day statistics, is computed from the chart's datasets, which
-    // did not exist yet when the stats were calculated above on a first
-    // load: recompute it now that the chart is registered.
-    const activeNow = tcpingActiveTargets.get(systemId);
-    if ((activeNow && activeNow.target) || tcpingRangeHours() !== 24) {
-      calculateAndUpdateStats(systemId, activeNow ? activeNow.target : null);
-    }
     ensureTCPingRangeButton(container);
     
     // Hide loading state and show chart (for full reload or new chart creation)
@@ -5110,73 +5100,6 @@ const apiBase = apiBaseProp ?? '';
     }
   }
   
-  // Update TCPing statistics display
-  function updateTCPingStats(systemId, avgLatency, packetLossRate) {
-    const statsContainer = document.querySelector(`[data-tcping-stats="${cssEscape(String(systemId))}"]`);
-    if (!statsContainer) return;
-
-    // Whose average: every target's together until one is selected.
-    const avgLabel = statsContainer.querySelector('[data-translate-detail="avgLatency"], [data-translate-detail="avgLatencyAll"]');
-    if (avgLabel) {
-      const active = tcpingActiveTargets.get(systemId);
-      const key = active && active.target ? 'avgLatency' : 'avgLatencyAll';
-      if (avgLabel.getAttribute('data-translate-detail') !== key) {
-        avgLabel.setAttribute('data-translate-detail', key);
-        avgLabel.textContent = translations[key][getCurrentLanguage()];
-      }
-    }
-    
-    const avgElement = statsContainer.querySelector(`[data-tcping-avg="${cssEscape(String(systemId))}"]`);
-    const lossElement = statsContainer.querySelector(`[data-tcping-loss="${cssEscape(String(systemId))}"]`);
-    
-    if (avgElement) {
-      avgElement.removeAttribute('data-translate-detail');
-      if (avgLatency > 0) {
-        avgElement.textContent = `${avgLatency.toFixed(2)} ms`;
-      } else {
-        avgElement.textContent = '-';
-      }
-    }
-
-    if (lossElement) {
-      lossElement.removeAttribute('data-translate-detail');
-      // Only show loss percentage if there's actual data (avgLatency > 0)
-      // When avgLatency is 0, it means no data, so show '-' instead of '0.00%'
-      if (avgLatency > 0) {
-        lossElement.textContent = `${packetLossRate.toFixed(2)}%`;
-      } else {
-        lossElement.textContent = '-';
-      }
-    }
-  }
-
-  // Summary for a skipped target: "N/A" / "不适用" for BOTH avg and loss.
-  //
-  // We deliberately do not reuse the "-" (no data) rendering: "-" means "we
-  // expect numbers here, they just haven't arrived", whereas a skipped target
-  // will never produce numbers. Marking the two spans with
-  // data-translate-detail="notApplicable" (instead of writing a literal
-  // string) is what makes them follow a later language switch for free — the
-  // existing updateTranslations() sweep picks them up. updateTCPingStats
-  // strips the attribute again when real numbers come back, so a recovered
-  // target cannot get its value overwritten by the next translation pass.
-  function setTCPingStatsNotApplicable(systemId) {
-    const statsContainer = document.querySelector(`[data-tcping-stats="${cssEscape(String(systemId))}"]`);
-    if (!statsContainer) return;
-
-    const label = translations.notApplicable[getCurrentLanguage()] || translations.notApplicable.en;
-    const avgElement = statsContainer.querySelector(`[data-tcping-avg="${cssEscape(String(systemId))}"]`);
-    const lossElement = statsContainer.querySelector(`[data-tcping-loss="${cssEscape(String(systemId))}"]`);
-
-    if (avgElement) {
-      avgElement.setAttribute('data-translate-detail', 'notApplicable');
-      avgElement.textContent = label;
-    }
-    if (lossElement) {
-      lossElement.setAttribute('data-translate-detail', 'notApplicable');
-      lossElement.textContent = label;
-    }
-  }
 
   // Reconcile the chart area with the current skipped state for this system.
   //
@@ -5227,7 +5150,6 @@ const apiBase = apiBaseProp ?? '';
           canvas.style.display = 'block';
         }
       }
-      setTCPingStatsNotApplicable(systemId);
     } else {
       if (noticeElement && !noticeElement.classList.contains('hidden')) {
         noticeElement.classList.add('hidden');
@@ -5251,13 +5173,6 @@ const apiBase = apiBaseProp ?? '';
             noDataElement.style.display = 'flex';
           }
         }
-      }
-      // Leaving a skipped target for one that merely has no samples: real
-      // numbers would replace the N/A summary, but with nothing to count it
-      // stuck. Fall back to the no-data rendering ("-").
-      const statsContainer = document.querySelector(`[data-tcping-stats="${cssEscape(String(systemId))}"]`);
-      if (statsContainer && statsContainer.querySelector('[data-translate-detail="notApplicable"]')) {
-        updateTCPingStats(systemId, 0, 0);
       }
     }
 
@@ -5294,13 +5209,8 @@ const apiBase = apiBaseProp ?? '';
     
     chart.update('none');
 
-    // Recalculate statistics based on selected target
-    calculateAndUpdateStats(systemId, selectedTarget);
-
-    // …then let the skipped state have the last word: for a target the node
-    // cannot reach, calculateAndUpdateStats above just wrote 0 ms / "-" from
-    // an empty dataset, which has to become N/A, and the chart has to be
-    // covered by the "unreachable" notice.
+    // The skipped state has the last word: a target the node cannot reach
+    // is covered by the "unreachable" notice.
     applyTCPingUnreachableState(systemId);
   }
 
@@ -5428,8 +5338,6 @@ const apiBase = apiBaseProp ?? '';
       chart.options.scales.x.min = bounds.min;
       chart.options.scales.x.max = bounds.max;
       try { chart.update('none'); } catch (_) {}
-      const active = tcpingActiveTargets.get(systemId);
-      calculateAndUpdateStats(systemId, active ? active.target : null);
       updateTCPingTabAverages(systemId);
     });
     resourcePanes.forEach((_, id) => drawResourceCharts(id));
@@ -5468,7 +5376,9 @@ const apiBase = apiBaseProp ?? '';
       e.preventDefault();
       items[e.key === 'Home' ? 0 : items.length - 1].focus();
     } else if (e.key === 'Tab') {
-      closeTCPingRangeMenu();
+      // back on the button first, so Tab goes on from there (the menu hangs
+      // off <body>: closed with the focus inside, Tab left from the page top)
+      closeTCPingRangeMenu(true);
     }
   }, true);
   window.addEventListener('resize', () => closeTCPingRangeMenu());
@@ -5647,11 +5557,15 @@ const apiBase = apiBaseProp ?? '';
     // A pane kept behind the 延迟 tab is not redrawn while hidden (a theme,
     // language or range change, a read that lands late): once, on its way back.
     if (entry.paused) { entry.dirty = true; return; }
+    // still waiting for its first read: nothing to draw yet (a translation
+    // pass meanwhile showed the "nothing recorded" note before the minutes)
+    if (!entry.points && !entry.failed) return;
     const pane = entry.container.querySelector('[data-chart-pane="resource"]');
     if (!pane) return;
     entry.charts.forEach((ch) => { try { ch.destroy(); } catch (_) {} });
     entry.charts = [];
     const lang = getCurrentLanguage();
+    entry.lang = lang;
     const note = pane.querySelector('[data-resource-note]');
     const grid = pane.querySelector('.resource-grid');
     const empty = !entry.points || entry.points.length === 0;
@@ -5807,8 +5721,9 @@ const apiBase = apiBaseProp ?? '';
   // listView and latencySummary, is declared with the sort's: the layout
   // code runs before this point.)
   function latencyViewShown() { return document.documentElement.classList.contains('latency-view'); }
-  const latencyTargets = () => (cachedTCPingConfig && Array.isArray(cachedTCPingConfig.targets) ? cachedTCPingConfig.targets : []);
-  const latencySignature = () => latencyTargets().map((t) => `${t.address}\u0000${t.name || ''}`).join('\u0001');
+  // (declarations, not consts: the layout code calls them while the script loads)
+  function latencyTargets() { return cachedTCPingConfig && Array.isArray(cachedTCPingConfig.targets) ? cachedTCPingConfig.targets : []; }
+  function latencySignature() { return latencyTargets().map((t) => `${t.address}\u0000${t.name || ''}`).join('\u0001'); }
   let latencyHeaderSig = null;
   function latencyStat(id, addr) {
     const byTarget = latencySummary && latencySummary.servers ? latencySummary.servers[String(id)] : null;
@@ -6085,48 +6000,6 @@ const apiBase = apiBaseProp ?? '';
     }
   }
 
-  function calculateAndUpdateStats(systemId, selectedTarget) {
-    const chartKey = `${systemId}_all`;
-    const chartData = tcpingCharts.get(chartKey);
-    if (!chartData || !chartData.chart) return;
-    
-    const chart = chartData.chart;
-    const PACKET_LOSS_THRESHOLD_MS = 1000;
-    
-    let totalCount = 0;
-    let successCount = 0;
-    let totalLatency = 0;
-    // The span the chart shows (the time range picker)
-    const from = tcpingSpanStart(chart);
-    
-    chart.data.datasets.forEach(dataset => {
-      // If selectedTarget is specified, only count data from that target
-      if (selectedTarget && dataset.targetAddress !== selectedTarget) {
-        return;
-      }
-      
-      dataset.data.forEach(point => {
-        if (point && point.x < from) return;
-        if (point && point.x && point.y !== null && point.y !== undefined) {
-          totalCount++;
-          if (point.y <= PACKET_LOSS_THRESHOLD_MS) {
-            successCount++;
-            totalLatency += point.y;
-          }
-        } else if (point && point.x) {
-          // Null value (packet loss)
-          totalCount++;
-        }
-      });
-    });
-    
-    const avgLatency = successCount > 0 ? (totalLatency / successCount) : 0;
-    const packetLossCount = totalCount - successCount;
-    const packetLossRate = totalCount > 0 ? (packetLossCount / totalCount * 100) : 0;
-    
-    updateTCPingStats(systemId, avgLatency, packetLossRate);
-  }
-  
   // Setup row click handlers for expand/collapse
   const setupRowClickHandlers = (container) => {
     if (!container || container.dataset.rowClickSetup) return;
@@ -6601,13 +6474,13 @@ const apiBase = apiBaseProp ?? '';
       // STEP 1 of renderDataInternal), so nothing moves: the rows show
       // together, as Beszel's table does, without a cascade.
       //
-      // Gated by `staggerAnimationPlayed` so a transient empty payload
+      // Gated by `firstListFadePlayed` so a transient empty payload
       // mid-session does NOT replay the animation: that scenario was
       // visible to the user as the whole list flickering in from the
       // top every few seconds.
       const systemRows = body.querySelectorAll('.system-row');
-      if (!staggerAnimationPlayed) {
-        staggerAnimationPlayed = true;
+      if (!firstListFadePlayed) {
+        firstListFadePlayed = true;
         // No fade with reduced motion.
         const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (!calm) systemRows.forEach((row) => {
@@ -6990,7 +6863,7 @@ const apiBase = apiBaseProp ?? '';
           if (loadingIndicator) {
             loadingIndicator.innerHTML = `
               <div class="text-center">
-                <p class="text-sm text-red-500 dark:text-red-400">Failed to render data</p>
+                <p class="text-sm text-red-700 dark:text-red-400">Failed to render data</p>
                 <p class="text-xs text-[#595959] dark:text-[#ababab] mt-1">${escapeHtml(err.message)}</p>
               </div>
             `;
@@ -7945,6 +7818,21 @@ const apiBase = apiBaseProp ?? '';
     #monitor-root .cell-memory > div,
     #monitor-root .cell-disk > div { padding-right: 0; gap: 6px; }
     #monitor-root .system-row .progress-track { min-width: 56px; }
+  }
+  /* Rows (cards in the card layout) out of the window skip style, layout and
+     paint on each live update: with every server on one page (page size 0,
+     the default) an update took about 127 ms on a desktop and 541 ms on a
+     slow phone, 49 and 216 ms with this. The placeholder is a row's content
+     height in each width tier (its 1 px rule is outside it; keep in step
+     with the tiers' padding); a row once drawn keeps its real height (auto).
+     Browsers without contain-intrinsic-height's auto are left as before. */
+  @supports (contain-intrinsic-height: auto 1px) {
+    #monitor-root:not(.layout-grid) #systems-body > .system-row { content-visibility: auto; contain-intrinsic-height: auto 106px; }
+    @media (min-width: 640px) { #monitor-root:not(.layout-grid) #systems-body > .system-row { contain-intrinsic-height: auto 102.5px; } }
+    @media (min-width: 768px) { #monitor-root:not(.layout-grid) #systems-body > .system-row { contain-intrinsic-height: auto 44px; } }
+    @media (min-width: 1024px) { #monitor-root:not(.layout-grid) #systems-body > .system-row { contain-intrinsic-height: auto 49px; } }
+    @media (min-width: 1280px) { #monitor-root:not(.layout-grid) #systems-body > .system-row { contain-intrinsic-height: auto 55px; } }
+    #monitor-root.layout-grid #systems-body > .system-row > [data-system-id] { content-visibility: auto; contain-intrinsic-height: auto 203px; }
   }
   /* Live speeds and uptimes in even-width figures at every width, as the
      percentages beside them (below 1024 px they shifted sideways as their

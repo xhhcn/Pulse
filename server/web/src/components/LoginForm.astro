@@ -25,11 +25,6 @@
         <p class="text-sm text-red-700 dark:text-red-400" id="login-error-text"></p>
       </div>
 
-      <!-- Success message (for password setup) -->
-      <div id="login-success" class="hidden mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/50 animate-scale-in">
-        <p class="text-sm text-emerald-500" id="login-success-text"></p>
-      </div>
-
       <!-- Login Form -->
       <!-- method="post": a submit before the script is ready (slow link,
            script blocked) reloads this page instead of putting the
@@ -429,13 +424,6 @@
       field.setAttribute('aria-invalid', 'true');
       field.setAttribute('aria-describedby', 'login-error-text');
     }
-  }
-
-  function showSuccess(message) {
-    const successDiv = document.getElementById('login-success');
-    const successText = document.getElementById('login-success-text');
-    successText.textContent = message;
-    successDiv.classList.remove('hidden');
   }
 
   // Theme management - just apply stored theme, no toggle button
