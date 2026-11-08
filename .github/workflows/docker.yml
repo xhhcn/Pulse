@@ -146,38 +146,29 @@ jobs:
           body: |
             ## Release v${{ steps.version.outputs.version }}
 
-            v${{ steps.version.outputs.version }} is a round of small style fixes from another side-by-side check of the design. The same element now looks the same everywhere, in both themes. Nothing new is added.
+            v${{ steps.version.outputs.version }} finishes the 资源 charts and tidies a few details found in another side-by-side check of the design. Nothing new is added.
 
             ### Dashboard
 
-            - Dark theme: the summary chips and an opened server's tags use the muted text grey, as in the light theme. The tags were as bright as the values beside them, and the chips used a third grey.
-            - The 延迟 view's loss figures are 12 px at every width. They were 10.3 px on phones and 11.2 px at 1024–1279 px.
-            - An opened server has as much space under its chart as above its details: 16 px, or 12 px on phones.
-            - When a filter matches nothing, the table's message row is 148 px high. Cards and phones keep 96 px.
-            - With no servers yet, the empty state looks like the failed-load state: a 40 px icon with round line ends, and the title in the text colour.
-            - The view menu opens 4 px under its button, as the time range menu does.
-            - Small values made the same everywhere:
-              - the corners of tags, legend buttons and tabs;
-              - the filter's Ctrl K keys;
-              - the header row's letter spacing at 768–1023 px;
-              - the line height of the 资源 cards' titles;
-              - the dark navbar name.
+            - 资源: the four charts draw in from left to right when the tab opens, as the 延迟 chart does (its 400 ms sweep and 300 ms fade).
+              - Once per opening. The minute's refresh and a range, theme or language change redraw them in place.
+              - No draw-in with reduced motion.
+            - 资源: the charts sit straight on the chart card, as the 延迟 chart does. Each had a frame of its own, which made cards inside a card.
+              - The phones' layout at every width: a hairline between the rows, 24 px between the columns.
+              - The plots are 24 px wider (620 px at 1440).
+            - 资源 with 按时段平均 on: the line under the tabs names the average from the start. While the history loaded it read 「服务端记录的每分钟平均值」 and then changed to 「每 20 分钟」.
+            - Rows that come back after a filter edit, the 离线 chip or the status menu show at once, as on the first load. They faded and scaled in one by one, 50 ms apart.
+            - The 延迟 chart's hover dot shows at once at 4 px. It grew over about a third of a second, and the chart redrew every probe on each frame while it did. The 资源 charts' dot is 4 px too.
+            - Dark: the copy buttons and the legend reach the text colour on hover, as the other controls do. They stopped at two lighter greys.
 
             ### Admin
 
-            - The page header is laid out like the dashboard's: the description sits 8 px under the title, and the buttons line up with its bottom edge.
-            - The 设置 menu opens 4 px under its button. Its icons are in the text colour, as in the view menu.
-            - The server list's frame and the dialogs' frames use the full border colour.
-              - The list's frame used to be as faint as its row dividers.
-              - In dark, the dialogs' edge was hard to see.
-            - 自定义设置: the section headings (品牌, 显示, …) are 16 px, a step above the field labels.
-            - The delete question uses Chinese punctuation: 「您确定要删除“CloudSilk”吗？」.
-            - Dark: the addresses, and the name in the delete dialog, use the text colour.
-            - The notices' corners match the cards'.
+            - TCPing 设置 on phones has the other dialogs' 16 px margins and 24 px padding. It had 8 px and 16 px.
+            - Dark: the dialogs' close buttons and the address copy buttons reach the text colour on hover.
 
             ### Sign-in
 
-            - The title uses the shared text colour.
+            - Dark: the back link reaches the text colour on hover.
 
             ### Compatibility
 
@@ -185,7 +176,7 @@ jobs:
 
             ### Verified
 
-            - Chromium, Firefox and WebKit: each change measured (31 checks), and the regression suites.
+            - Chromium, Firefox and WebKit: each change measured (26 checks), and the regression suites.
 
             ### 📦 Docker Images
             - `xhh1128/pulse:${{ steps.version.outputs.version }}`
